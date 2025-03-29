@@ -1,4 +1,4 @@
-module Main exposing (..)
+module Main exposing (main)
 
 import Browser
 import Dict exposing (Dict)
@@ -11,11 +11,6 @@ import Time
 type alias Account =
     { name : String
     }
-
-
-type Direction
-    = Debit
-    | Credit
 
 
 type alias Transaction =
@@ -81,39 +76,10 @@ allAccounts =
         |> Dict.fromList
 
 
-book : List Transaction
-book =
-    [ { date = Time.millisToPosix 0
-      , descr = "Opening balance"
-      , from = openingBalance
-      , to = checkingAccount
-      , amount = 100000 -- 1000€
-      }
-    , { date = Time.millisToPosix 1
-      , descr = "Groceries"
-      , from = checkingAccount
-      , to = spar
-      , amount = 999 -- 9.99€
-      }
-    , { date = Time.millisToPosix 1
-      , descr = "Book purchase"
-      , from = checkingAccount
-      , to = amazon
-      , amount = 5499
-      }
-    , { date = Time.millisToPosix 2
-      , descr = "Salary"
-      , from = employerABC
-      , to = checkingAccount
-      , amount = 100000 -- 1000€
-      }
-    ]
-
-
-balance : List Transaction -> Account -> Int
+balance : Dict Int Transaction -> Account -> Int
 balance txs account =
-    List.foldl
-        (\{ from, to, amount } total ->
+    Dict.foldl
+        (\_ { from, to, amount } total ->
             if to == account then
                 total + amount
 
@@ -127,24 +93,18 @@ balance txs account =
         txs
 
 
+type Dialog
+    = EditDialog Transaction
+
+
 type alias Model =
-    { selectedAccountName : String
+    { book : Dict Int Transaction
+    , dialog : Maybe Dialog
     }
 
 
 type Msg
-    = AccountSelected String
-
-
-
--- amountFmt : Int -> String
--- amountFmt amount =
---     let
---         str =
---             String.fromFloat
---                 (toFloat amount / 100)
---     in
---     str ++ " " ++ "€"
+    = TransactionClicked Int
 
 
 amountFmt : Int -> String
@@ -171,47 +131,30 @@ amountFmt amount =
 view : Model -> Html Msg
 view model =
     let
-        found =
-            Dict.get model.selectedAccountName allAccounts
-
         accountPadLen =
             60
 
         amountPadLen =
-            10
+            12
     in
     H.div []
-        [ H.pre [] [ H.text <| Debug.toString model ]
-        , H.h2 []
-            [ H.text "Select an account to compute the balance" ]
-        , H.select
-            [ HE.onInput AccountSelected
-            ]
-            (H.option [] [ H.text "none" ]
-                :: List.map
-                    (\o -> H.option [] [ H.text o.name ])
-                    allAccounts_
-            )
-        , H.div [ HA.style "margin-top" "10px" ]
-            [ case found of
-                Just account ->
-                    H.span []
-                        [ H.text "Balance:\u{00A0}"
-                        , H.text <| amountFmt <| balance book account
-                        ]
-
-                Nothing ->
-                    H.text ""
+        [ H.pre []
+            [ H.text <|
+                Debug.toString
+                    { dialog = model.dialog }
             ]
         , H.div [ HA.style "margin-top" "10px" ]
             [ H.h3 [] [ H.text "All balances" ]
-            , H.ul [ HA.style "font-family" "monospace" ]
+            , H.ul [ HA.class "entries" ]
                 (List.map
                     (\o ->
-                        H.li [ HA.style "list-style-type" "none" ]
+                        H.li [ HA.class "entry" ]
                             [ H.text <| String.padRight accountPadLen '.' o.name
                             , H.text ":\u{00A0}"
-                            , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt <| balance book o
+                            , H.text <|
+                                String.padLeft amountPadLen '\u{00A0}' <|
+                                    amountFmt <|
+                                        balance model.book o
                             ]
                     )
                     allAccounts_
@@ -219,32 +162,85 @@ view model =
             ]
         , H.div [ HA.style "margin-top" "10px" ]
             [ H.h3 [] [ H.text "Transactions" ]
-            , H.ul [ HA.style "font-family" "monospace" ]
+            , H.ul [ HA.class "entries" ]
                 (List.map
-                    (\o ->
-                        H.li [ HA.style "list-style-type" "none" ]
+                    (\( transactionId, o ) ->
+                        H.li
+                            [ HA.class "entry tx"
+                            , HE.onClick (TransactionClicked transactionId)
+                            ]
                             [ H.text <| String.padRight accountPadLen '.' o.descr
                             , H.text ":\u{00A0}"
                             , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
                             ]
                     )
-                    book
+                    (Dict.toList model.book)
                 )
             ]
+        , H.node "dialog"
+            (List.filterMap identity
+                [ model.dialog |> Maybe.map (\_ -> HA.attribute "open" "")
+                ]
+            )
+            [ H.text "wat" ]
         ]
 
 
 init : Model
 init =
-    { selectedAccountName = ""
+    let
+        book : Dict Int Transaction
+        book =
+            Dict.fromList <|
+                [ ( 1
+                  , { date = Time.millisToPosix 0
+                    , descr = "Opening balance"
+                    , from = openingBalance
+                    , to = checkingAccount
+                    , amount = 100000 -- 1000€
+                    }
+                  )
+                , ( 2
+                  , { date = Time.millisToPosix 1
+                    , descr = "Groceries"
+                    , from = checkingAccount
+                    , to = spar
+                    , amount = 999 -- 9.99€
+                    }
+                  )
+                , ( 3
+                  , { date = Time.millisToPosix 1
+                    , descr = "Book purchase"
+                    , from = checkingAccount
+                    , to = amazon
+                    , amount = 5499
+                    }
+                  )
+                , ( 4
+                  , { date = Time.millisToPosix 2
+                    , descr = "Salary"
+                    , from = employerABC
+                    , to = checkingAccount
+                    , amount = 100000 -- 1000€
+                    }
+                  )
+                ]
+    in
+    { dialog = Nothing
+    , book = book
     }
 
 
 update : Msg -> Model -> Model
 update msg model =
     case msg of
-        AccountSelected str ->
-            { model | selectedAccountName = str }
+        TransactionClicked transactionId ->
+            case Dict.get transactionId model.book of
+                Just tx ->
+                    { model | dialog = Just <| EditDialog tx }
+
+                Nothing ->
+                    model
 
 
 main : Program () Model Msg

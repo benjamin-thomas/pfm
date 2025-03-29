@@ -1,6 +1,18 @@
-/* A dark theme by default */
-
 * {
     background-color: #000;
     color: #DDD;
+}
+
+.entries {
+    display: inline-block;
+    font-family: monospace;
+}
+
+.entry {
+    list-style-type: none;
+}
+
+.tx:hover {
+    background-color: #222;
+    cursor: pointer;
 }
