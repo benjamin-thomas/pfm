@@ -1,0 +1,3 @@
+#!/bin/bash
+
+elm-live ./src/Main.elm --start-page=index2.html --hot -- --debug --output=dist/main.js
