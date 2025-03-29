@@ -1,4 +1,4 @@
-module Main exposing (main)
+port module Main exposing (main)
 
 import Browser
 import Dict exposing (Dict)
@@ -6,6 +6,9 @@ import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Time
+
+
+port escapePressed : (() -> msg) -> Sub msg
 
 
 type alias Account =
@@ -93,8 +96,15 @@ balance txs account =
         txs
 
 
+type alias MkEditDialog =
+    { transactionId : Int
+    , descr : String
+    , amount : String
+    }
+
+
 type Dialog
-    = EditDialog Transaction
+    = EditDialog MkEditDialog
 
 
 type alias Model =
@@ -103,8 +113,16 @@ type alias Model =
     }
 
 
+type MkEditDialogChanged
+    = DescrChanged String
+    | AmountChanged String
+    | EditDialogSave
+
+
 type Msg
     = TransactionClicked Int
+    | EscapedPressed
+    | EditDialogChanged MkEditDialogChanged
 
 
 amountFmt : Int -> String
@@ -177,17 +195,50 @@ view model =
                     (Dict.toList model.book)
                 )
             ]
-        , H.node "dialog"
-            (List.filterMap identity
-                [ model.dialog |> Maybe.map (\_ -> HA.attribute "open" "")
-                ]
-            )
-            [ H.text "wat" ]
+        , case model.dialog of
+            Nothing ->
+                H.text ""
+
+            Just (EditDialog data) ->
+                H.node "dialog"
+                    [ HA.attribute "open" ""
+                    ]
+                    [ viewEditDialog data ]
         ]
 
 
-init : Model
-init =
+viewEditDialog : MkEditDialog -> Html Msg
+viewEditDialog data =
+    let
+        field msg text value =
+            H.div []
+                [ H.label []
+                    [ H.text text
+                    , H.input
+                        [ HA.value value
+                        , HE.onInput (EditDialogChanged << msg)
+                        ]
+                        []
+                    ]
+                ]
+    in
+    H.div []
+        [ H.h3 [] [ H.text "Edit transaction" ]
+        , field DescrChanged "Description" data.descr
+        , field AmountChanged "Amount" data.amount
+        , H.button
+            [ HE.onClick EscapedPressed
+            ]
+            [ H.text "Cancel" ]
+        , H.button
+            [ HE.onClick (EditDialogChanged EditDialogSave)
+            ]
+            [ H.text "Save" ]
+        ]
+
+
+init : flags -> ( Model, Cmd Msg )
+init _ =
     let
         book : Dict Int Transaction
         book =
@@ -226,27 +277,91 @@ init =
                   )
                 ]
     in
-    { dialog = Nothing
-    , book = book
-    }
+    ( { dialog = Nothing
+      , book = book
+      }
+    , Cmd.none
+    )
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         TransactionClicked transactionId ->
-            case Dict.get transactionId model.book of
+            ( case Dict.get transactionId model.book of
                 Just tx ->
-                    { model | dialog = Just <| EditDialog tx }
+                    { model
+                        | dialog =
+                            Just <|
+                                EditDialog
+                                    { transactionId = transactionId
+                                    , descr = tx.descr
+                                    , amount = String.fromInt tx.amount
+                                    }
+                    }
 
                 Nothing ->
                     model
+            , Cmd.none
+            )
+
+        EscapedPressed ->
+            ( { model | dialog = Nothing }
+            , Cmd.none
+            )
+
+        EditDialogChanged subMsg ->
+            case model.dialog of
+                Just (EditDialog data) ->
+                    case subMsg of
+                        DescrChanged str ->
+                            ( { model | dialog = Just <| EditDialog { data | descr = str } }
+                            , Cmd.none
+                            )
+
+                        AmountChanged str ->
+                            ( { model | dialog = Just <| EditDialog { data | amount = str } }
+                            , Cmd.none
+                            )
+
+                        EditDialogSave ->
+                            let
+                                newBook =
+                                    Dict.update data.transactionId
+                                        (Maybe.andThen
+                                            (\old ->
+                                                Just
+                                                    { old
+                                                        | descr = data.descr
+                                                        , amount = Maybe.withDefault old.amount (String.toInt data.amount)
+                                                    }
+                                            )
+                                        )
+                                        model.book
+                            in
+                            ( { model
+                                | dialog = Nothing
+                                , book = newBook
+                              }
+                            , Cmd.none
+                            )
+
+                _ ->
+                    ( model
+                    , Cmd.none
+                    )
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    escapePressed (\() -> EscapedPressed)
 
 
 main : Program () Model Msg
 main =
-    Browser.sandbox
+    Browser.element
         { init = init
         , view = view
         , update = update
+        , subscriptions = subscriptions
         }

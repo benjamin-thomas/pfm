@@ -15,6 +15,12 @@
         const app = Elm.Main.init({
             node: document.getElementById("app"),
         });
+
+        document.addEventListener("keyup", (event) => {
+            if (event.key === "Escape") {
+                app.ports.escapePressed.send(null);
+            }
+        });
     </script>
 </body>
 
