@@ -1,0 +1,3 @@
+#!/bin/bash
+
+echo ./main.css | entr touch ./src/Main.elm
