@@ -304,20 +304,37 @@ view model =
                         [ H.text "Add" ]
                     ]
                 ]
-            , H.ul [ HA.class "entries" ]
-                (List.map
+            , H.ul
+                [ HA.class "entries"
+                , HA.style "padding-left" "10px"
+                ]
+                (let
+                    transactions : List ( Int, Transaction )
+                    transactions =
+                        List.sortBy
+                            (\( _, tx ) -> -(Time.posixToMillis tx.date))
+                            (Dict.toList model.book)
+                 in
+                 List.map
                     (\( transactionId, o ) ->
-                        H.li
-                            [ HA.class "entry tx"
-                            , HE.onClick (TransactionClicked transactionId)
-                            ]
-                            [ H.text <| String.padRight accountPadLen '.' o.descr
-                            , H.text ":\u{00A0}"
-                            , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
-                            , H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]"
+                        H.span []
+                            [ H.li
+                                [ HA.class "entry tx"
+                                , HE.onClick (TransactionClicked transactionId)
+                                ]
+                                [ H.span
+                                    [ HA.style "display" "inline-block"
+                                    , HA.style "width" "30px"
+                                    ]
+                                    [ H.text <| String.fromInt transactionId ]
+                                , H.text <| String.padRight accountPadLen '.' o.descr
+                                , H.text ":\u{00A0}"
+                                , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
+                                , H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]"
+                                ]
                             ]
                     )
-                    (Dict.toList model.book)
+                    transactions
                 )
             ]
         , case model.dialog of
@@ -581,7 +598,7 @@ update msg model =
                             let
                                 newTransaction : Transaction
                                 newTransaction =
-                                    { date = Time.millisToPosix 0
+                                    { date = Time.millisToPosix 0 -- FIXME: now!
                                     , descr = data.descr
                                     , from = openingBalance
                                     , to = checkingAccount
