@@ -650,6 +650,9 @@ update msg model =
                 Just (EditDialog _) ->
                     update (EditDialogChanged EditDialogSave) model
 
+                Just (CreateDialog _) ->
+                    update (CreateDialogChanged CreateDialogSave) model
+
                 _ ->
                     ( model
                     , Cmd.none
