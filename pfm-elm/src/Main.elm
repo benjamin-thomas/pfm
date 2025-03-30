@@ -7,6 +7,7 @@ import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
 import Set
+import Task
 import Time
 
 
@@ -167,7 +168,9 @@ type Dialog
 
 
 type alias Model =
-    { book : Dict Int Transaction
+    { now : Time.Posix
+    , zone : Time.Zone
+    , book : Dict Int Transaction
     , dialog : Maybe Dialog
     }
 
@@ -191,6 +194,8 @@ type Msg
     | AddTransactionClicked
     | EscapedPressed
     | EnterPressed
+    | GotTime Time.Posix
+    | GotZone Time.Zone
 
 
 amountFmt : Int -> String
@@ -330,7 +335,10 @@ view model =
                                 , H.text <| String.padRight accountPadLen '.' o.descr
                                 , H.text ":\u{00A0}"
                                 , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
-                                , H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]"
+                                , H.span
+                                    [ HA.title <| Iso8601.fromTime o.date
+                                    ]
+                                    [ H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]" ]
                                 ]
                             ]
                     )
@@ -501,8 +509,10 @@ init _ =
     in
     ( { dialog = Nothing
       , book = book
+      , now = Time.millisToPosix 0
+      , zone = Time.utc
       }
-    , Cmd.none
+    , Task.perform GotZone Time.here
     )
 
 
@@ -598,7 +608,7 @@ update msg model =
                             let
                                 newTransaction : Transaction
                                 newTransaction =
-                                    { date = Time.millisToPosix 0 -- FIXME: now!
+                                    { date = model.now
                                     , descr = data.descr
                                     , from = openingBalance
                                     , to = checkingAccount
@@ -645,12 +655,23 @@ update msg model =
                     , Cmd.none
                     )
 
+        GotTime now ->
+            ( { model | now = now }
+            , Cmd.none
+            )
+
+        GotZone zone ->
+            ( { model | zone = zone }
+            , Cmd.none
+            )
+
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ escapePressed (\() -> EscapedPressed)
         , enterPressed (\() -> EnterPressed)
+        , Time.every 1000 GotTime
         ]
 
 

@@ -1,3 +1,7 @@
+html {
+    zoom: 1.4;
+}
+
 * {
     background-color: #000;
     color: #DDD;
@@ -20,6 +24,7 @@
 dialog {
     position: fixed;
     top: 50%;
-    left:50%; /* shift right to always see the balances */
+    left: 50%;
+    /* shift right to always see the balances */
     transform: translateY(-50%);
 }
