@@ -6,7 +6,7 @@ import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
-import Set exposing (Set)
+import Set
 import Time
 
 
@@ -155,8 +155,15 @@ type alias MkEditDialog =
     }
 
 
+type alias MkCreateDialog =
+    { descr : String
+    , amount : String
+    }
+
+
 type Dialog
     = EditDialog MkEditDialog
+    | CreateDialog MkCreateDialog
 
 
 type alias Model =
@@ -166,14 +173,22 @@ type alias Model =
 
 
 type MkEditDialogChanged
-    = DescrChanged String
-    | AmountChanged String
+    = EditDescrChanged String
+    | EditAmountChanged String
     | EditDialogSave
+
+
+type MkCreateDialogChanged
+    = CreateDescrChanged String
+    | CreateAmountChanged String
+    | CreateDialogSave
 
 
 type Msg
     = TransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
+    | CreateDialogChanged MkCreateDialogChanged
+    | AddTransactionClicked
     | EscapedPressed
     | EnterPressed
 
@@ -281,7 +296,14 @@ view model =
             [ H.h3
                 [ HA.style "margin-bottom" "0"
                 ]
-                [ H.text "Transactions" ]
+                [ H.text "Transactions"
+                , H.span [ HA.style "margin-left" "10px" ]
+                    [ H.button
+                        [ HE.onClick AddTransactionClicked
+                        ]
+                        [ H.text "Add" ]
+                    ]
+                ]
             , H.ul [ HA.class "entries" ]
                 (List.map
                     (\( transactionId, o ) ->
@@ -307,41 +329,90 @@ view model =
                     [ HA.attribute "open" ""
                     ]
                     [ viewEditDialog data ]
+
+            Just (CreateDialog data) ->
+                H.node "dialog"
+                    [ HA.attribute "open" ""
+                    ]
+                    [ viewCreateDialog data ]
         ]
+
+
+field : { a | onInput : String -> msg, text : String, value : String } -> Html msg
+field { onInput, text, value } =
+    H.div []
+        [ H.label
+            [ HA.style "display" "inline-block"
+            , HA.style "min-width" "110px"
+            ]
+            [ H.text text ]
+        , H.input
+            [ HA.value value
+            , HE.onInput onInput
+            ]
+            []
+        ]
+
+
+viewDialog : { a | title : String, saveMsg : Msg, fields : List (Html Msg) } -> Html Msg
+viewDialog { title, saveMsg, fields } =
+    H.div [ HA.style "margin-bottom" "20px" ]
+        (List.concat
+            [ [ H.h3 [] [ H.text title ] ]
+            , fields
+            , [ H.div [ HA.style "margin-top" "30px" ]
+                    [ H.button
+                        [ HE.onClick EscapedPressed
+                        ]
+                        [ H.text "Cancel" ]
+                    , H.button
+                        [ HE.onClick saveMsg
+                        ]
+                        [ H.text "Save" ]
+                    ]
+              ]
+            ]
+        )
 
 
 viewEditDialog : MkEditDialog -> Html Msg
 viewEditDialog data =
-    let
-        field msg text value =
-            H.div []
-                [ H.label
-                    [ HA.style "display" "inline-block"
-                    , HA.style "min-width" "110px"
-                    ]
-                    [ H.text text ]
-                , H.input
-                    [ HA.value value
-                    , HE.onInput (EditDialogChanged << msg)
-                    ]
-                    []
-                ]
-    in
-    H.div [ HA.style "margin-bottom" "20px" ]
-        [ H.h3 [] [ H.text "Edit transaction" ]
-        , field DescrChanged "Description" data.descr
-        , field AmountChanged "Amount" data.amount
-        , H.div [ HA.style "margin-top" "30px" ]
-            [ H.button
-                [ HE.onClick EscapedPressed
-                ]
-                [ H.text "Cancel" ]
-            , H.button
-                [ HE.onClick (EditDialogChanged EditDialogSave)
-                ]
-                [ H.text "Save" ]
+    viewDialog
+        { title = "Edit transaction"
+        , saveMsg = EditDialogChanged EditDialogSave
+        , fields =
+            [ field
+                { onInput = EditDialogChanged << EditDescrChanged
+                , text = "Description"
+                , value = data.descr
+                }
+            , field
+                { onInput = EditDialogChanged << EditAmountChanged
+                , text = "Amount"
+                , value = data.amount
+                }
             ]
-        ]
+        }
+
+
+viewCreateDialog : MkCreateDialog -> Html Msg
+viewCreateDialog data =
+    viewDialog
+        { title = "Create transaction"
+        , saveMsg = CreateDialogChanged CreateDialogSave
+        , fields =
+            [ field
+                { onInput = CreateDialogChanged << CreateDescrChanged
+                , text = "Description"
+                , value = data.descr
+                }
+            , field
+                { onInput = CreateDialogChanged << CreateAmountChanged
+                , text = "Amount"
+                , value = data.amount
+                }
+            ]
+        }
 
 
 onDay : Int -> Time.Posix
@@ -443,12 +514,12 @@ update msg model =
             case model.dialog of
                 Just (EditDialog data) ->
                     case subMsg of
-                        DescrChanged str ->
+                        EditDescrChanged str ->
                             ( { model | dialog = Just <| EditDialog { data | descr = str } }
                             , Cmd.none
                             )
 
-                        AmountChanged str ->
+                        EditAmountChanged str ->
                             ( { model | dialog = Just <| EditDialog { data | amount = str } }
                             , Cmd.none
                             )
@@ -466,6 +537,68 @@ update msg model =
                                                     }
                                             )
                                         )
+                                        model.book
+                            in
+                            ( { model
+                                | dialog = Nothing
+                                , book = newBook
+                              }
+                            , Cmd.none
+                            )
+
+                _ ->
+                    ( model
+                    , Cmd.none
+                    )
+
+        AddTransactionClicked ->
+            ( { model
+                | dialog =
+                    Just <|
+                        CreateDialog
+                            { descr = ""
+                            , amount = ""
+                            }
+              }
+            , Cmd.none
+            )
+
+        CreateDialogChanged subMsg ->
+            case model.dialog of
+                Just (CreateDialog data) ->
+                    case subMsg of
+                        CreateDescrChanged str ->
+                            ( { model | dialog = Just <| CreateDialog { data | descr = str } }
+                            , Cmd.none
+                            )
+
+                        CreateAmountChanged str ->
+                            ( { model | dialog = Just <| CreateDialog { data | amount = str } }
+                            , Cmd.none
+                            )
+
+                        CreateDialogSave ->
+                            let
+                                newTransaction : Transaction
+                                newTransaction =
+                                    { date = Time.millisToPosix 0
+                                    , descr = data.descr
+                                    , from = openingBalance
+                                    , to = checkingAccount
+                                    , amount = Maybe.withDefault 0 <| String.toInt data.amount
+                                    }
+
+                                nextId : Int
+                                nextId =
+                                    Dict.keys model.book
+                                        |> List.maximum
+                                        |> Maybe.map ((+) 1)
+                                        |> Maybe.withDefault 0
+
+                                newBook : Dict Int Transaction
+                                newBook =
+                                    Dict.insert nextId
+                                        newTransaction
                                         model.book
                             in
                             ( { model
