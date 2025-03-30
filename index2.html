@@ -19,6 +19,8 @@
         document.addEventListener("keyup", (event) => {
             if (event.key === "Escape") {
                 app.ports.escapePressed.send(null);
+            } else if (event.key === "Enter") {
+                app.ports.enterPressed.send(null);
             }
         });
     </script>

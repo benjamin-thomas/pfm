@@ -16,3 +16,10 @@
     background-color: #222;
     cursor: pointer;
 }
+
+dialog {
+    position: fixed;
+    top: 50%;
+    left:50%; /* shift right to always see the balances */
+    transform: translateY(-50%);
+}

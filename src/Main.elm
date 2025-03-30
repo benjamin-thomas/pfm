@@ -1,18 +1,29 @@
-port module Main exposing (main)
+port module Main exposing (..)
 
 import Browser
 import Dict exposing (Dict)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
+import Iso8601
+import Set exposing (Set)
 import Time
 
 
 port escapePressed : (() -> msg) -> Sub msg
 
 
+port enterPressed : (() -> msg) -> Sub msg
+
+
+type alias Category =
+    { name : String
+    }
+
+
 type alias Account =
     { name : String
+    , category : Category
     }
 
 
@@ -25,39 +36,80 @@ type alias Transaction =
     }
 
 
+assets : Category
+assets =
+    { name = "Assets" }
+
+
+expenses : Category
+expenses =
+    { name = "Expenses" }
+
+
+equity : Category
+equity =
+    { name = "Equity" }
+
+
+income : Category
+income =
+    { name = "Income" }
+
+
 checkingAccount : Account
 checkingAccount =
-    { name = "Assets:Checking account" }
+    { name = "Checking account"
+    , category = assets
+    }
 
 
 savingsAccount : Account
 savingsAccount =
-    { name = "Assets:Savings account" }
+    { name = "Savings account"
+    , category = assets
+    }
 
 
 openingBalance : Account
 openingBalance =
-    { name = "Equity:OpeningBalance" }
+    { name = "OpeningBalance"
+    , category = equity
+    }
 
 
 employerABC : Account
 employerABC =
-    { name = "Income:EmployerABC" }
+    { name = "EmployerABC"
+    , category = income
+    }
 
 
 customerXYZ : Account
 customerXYZ =
-    { name = "Income:CustomerXYZ" }
+    { name = "CustomerXYZ"
+    , category = income
+    }
 
 
 spar : Account
 spar =
-    { name = "Expenses:Spar" }
+    { name = "Spar"
+    , category = expenses
+    }
+
+
+tesco : Account
+tesco =
+    { name = "Tesco"
+    , category = expenses
+    }
 
 
 amazon : Account
 amazon =
-    { name = "Expenses:Amazon" }
+    { name = "Amazon"
+    , category = expenses
+    }
 
 
 allAccounts_ : List Account
@@ -121,8 +173,9 @@ type MkEditDialogChanged
 
 type Msg
     = TransactionClicked Int
-    | EscapedPressed
     | EditDialogChanged MkEditDialogChanged
+    | EscapedPressed
+    | EnterPressed
 
 
 amountFmt : Int -> String
@@ -146,6 +199,26 @@ amountFmt amount =
         ]
 
 
+uniqueBy : (a -> comparable) -> List a -> List a
+uniqueBy toComparable =
+    Tuple.first
+        << List.foldl
+            (\item ( items, keys ) ->
+                if Set.member (toComparable item) keys then
+                    ( items, keys )
+
+                else
+                    ( item :: items, Set.insert (toComparable item) keys )
+            )
+            ( [], Set.empty )
+
+
+dateFmt : Time.Posix -> String
+dateFmt =
+    String.left 10
+        << Iso8601.fromTime
+
+
 view : Model -> Html Msg
 view model =
     let
@@ -154,6 +227,13 @@ view model =
 
         amountPadLen =
             12
+
+        allCategories : List Category
+        allCategories =
+            model.book
+                |> Dict.values
+                |> List.concatMap (\tx -> [ tx.from.category, tx.to.category ])
+                |> uniqueBy .name
     in
     H.div []
         [ H.pre []
@@ -161,25 +241,47 @@ view model =
                 Debug.toString
                     { dialog = model.dialog }
             ]
-        , H.div [ HA.style "margin-top" "10px" ]
-            [ H.h3 [] [ H.text "All balances" ]
-            , H.ul [ HA.class "entries" ]
+        , H.div [ HA.style "margin-bottom" "10px" ]
+            [ H.h3 [] [ H.text "Balances (by category)" ]
+            , H.div []
                 (List.map
-                    (\o ->
-                        H.li [ HA.class "entry" ]
-                            [ H.text <| String.padRight accountPadLen '.' o.name
-                            , H.text ":\u{00A0}"
-                            , H.text <|
-                                String.padLeft amountPadLen '\u{00A0}' <|
-                                    amountFmt <|
-                                        balance model.book o
+                    (\category ->
+                        H.div []
+                            [ H.h4
+                                [ HA.style "margin-top" "0"
+                                , HA.style "margin-bottom" "0"
+                                ]
+                                [ H.text category.name ]
+                            , H.ul
+                                [ HA.class "entries" ]
+                                (List.map
+                                    (\o ->
+                                        H.li [ HA.class "entry" ]
+                                            [ H.text <| String.padRight accountPadLen '.' o.name
+                                            , H.text ":\u{00A0}"
+                                            , H.text <|
+                                                String.padLeft amountPadLen '\u{00A0}' <|
+                                                    amountFmt <|
+                                                        balance model.book o
+                                            ]
+                                    )
+                                    (List.filter (\o -> o.category == category) allAccounts_)
+                                )
                             ]
                     )
-                    allAccounts_
+                    allCategories
                 )
             ]
-        , H.div [ HA.style "margin-top" "10px" ]
-            [ H.h3 [] [ H.text "Transactions" ]
+        , H.hr
+            [ HA.style "border-color" "#333"
+            , HA.style "margin" "30px 0"
+            ]
+            []
+        , H.div [ HA.style "margin-top" "40px" ]
+            [ H.h3
+                [ HA.style "margin-bottom" "0"
+                ]
+                [ H.text "Transactions" ]
             , H.ul [ HA.class "entries" ]
                 (List.map
                     (\( transactionId, o ) ->
@@ -190,6 +292,7 @@ view model =
                             [ H.text <| String.padRight accountPadLen '.' o.descr
                             , H.text ":\u{00A0}"
                             , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
+                            , H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]"
                             ]
                     )
                     (Dict.toList model.book)
@@ -237,6 +340,25 @@ viewEditDialog data =
         ]
 
 
+onDay : Int -> Time.Posix
+onDay n =
+    {-
+       $ date -d '1 week ago 14:00'
+       dim. 23 mars 2025 14:00:00 CET
+
+       $ date -d '1 week ago 14:00' +%s
+       1742734800
+    -}
+    let
+        offset =
+            1742734800 * 1000
+
+        oneDay =
+            60 * 60 * 24 * 1000
+    in
+    Time.millisToPosix <| n * oneDay + offset
+
+
 init : flags -> ( Model, Cmd Msg )
 init _ =
     let
@@ -244,7 +366,7 @@ init _ =
         book =
             Dict.fromList <|
                 [ ( 1
-                  , { date = Time.millisToPosix 0
+                  , { date = onDay 0
                     , descr = "Opening balance"
                     , from = openingBalance
                     , to = checkingAccount
@@ -252,7 +374,7 @@ init _ =
                     }
                   )
                 , ( 2
-                  , { date = Time.millisToPosix 1
+                  , { date = onDay 1
                     , descr = "Groceries"
                     , from = checkingAccount
                     , to = spar
@@ -260,7 +382,7 @@ init _ =
                     }
                   )
                 , ( 3
-                  , { date = Time.millisToPosix 1
+                  , { date = onDay 2
                     , descr = "Book purchase"
                     , from = checkingAccount
                     , to = amazon
@@ -268,7 +390,15 @@ init _ =
                     }
                   )
                 , ( 4
-                  , { date = Time.millisToPosix 2
+                  , { date = onDay 3
+                    , descr = "Groceries, again"
+                    , from = checkingAccount
+                    , to = spar
+                    , amount = 3742
+                    }
+                  )
+                , ( 5
+                  , { date = onDay 4
                     , descr = "Salary"
                     , from = employerABC
                     , to = checkingAccount
@@ -302,11 +432,6 @@ update msg model =
 
                 Nothing ->
                     model
-            , Cmd.none
-            )
-
-        EscapedPressed ->
-            ( { model | dialog = Nothing }
             , Cmd.none
             )
 
@@ -351,10 +476,28 @@ update msg model =
                     , Cmd.none
                     )
 
+        EscapedPressed ->
+            ( { model | dialog = Nothing }
+            , Cmd.none
+            )
+
+        EnterPressed ->
+            case model.dialog of
+                Just (EditDialog _) ->
+                    update (EditDialogChanged EditDialogSave) model
+
+                _ ->
+                    ( model
+                    , Cmd.none
+                    )
+
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    escapePressed (\() -> EscapedPressed)
+    Sub.batch
+        [ escapePressed (\() -> EscapedPressed)
+        , enterPressed (\() -> EnterPressed)
+        ]
 
 
 main : Program () Model Msg
