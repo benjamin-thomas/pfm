@@ -315,28 +315,32 @@ viewEditDialog data =
     let
         field msg text value =
             H.div []
-                [ H.label []
-                    [ H.text text
-                    , H.input
-                        [ HA.value value
-                        , HE.onInput (EditDialogChanged << msg)
-                        ]
-                        []
+                [ H.label
+                    [ HA.style "display" "inline-block"
+                    , HA.style "min-width" "110px"
                     ]
+                    [ H.text text ]
+                , H.input
+                    [ HA.value value
+                    , HE.onInput (EditDialogChanged << msg)
+                    ]
+                    []
                 ]
     in
-    H.div []
+    H.div [ HA.style "margin-bottom" "20px" ]
         [ H.h3 [] [ H.text "Edit transaction" ]
         , field DescrChanged "Description" data.descr
         , field AmountChanged "Amount" data.amount
-        , H.button
-            [ HE.onClick EscapedPressed
+        , H.div [ HA.style "margin-top" "30px" ]
+            [ H.button
+                [ HE.onClick EscapedPressed
+                ]
+                [ H.text "Cancel" ]
+            , H.button
+                [ HE.onClick (EditDialogChanged EditDialogSave)
+                ]
+                [ H.text "Save" ]
             ]
-            [ H.text "Cancel" ]
-        , H.button
-            [ HE.onClick (EditDialogChanged EditDialogSave)
-            ]
-            [ H.text "Save" ]
         ]
 
 
