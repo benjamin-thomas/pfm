@@ -31,9 +31,45 @@ type alias Account =
 type alias Transaction =
     { date : Time.Posix
     , descr : String
+    , fromAccountId : Int
+    , toAccountId : Int
+    , amount : Decimal
+    }
+
+
+type alias Decimal =
+    { whole : Int
+    , fract : Int
+    }
+
+
+
+-- addDecimal : { precision : Int } -> Decimal -> Decimal -> Decimal
+-- addDecimal { precision } d1 d2 =
+--     let
+--         sumWhole =
+--             d1.whole + d2.whole
+--         sumFract =
+--             d1.fract + d2.fract
+--         overflow =
+--             Debug.log "overflow" <|
+--                 (sumFract // precision)
+--         _ =
+--             Debug.todo "wat"
+--         adjustedFract =
+--             modBy precision sumFract
+--     in
+--     { whole = sumWhole + overflow
+--     , fract = adjustedFract
+--     }
+
+
+type alias TransactionView =
+    { date : Time.Posix
+    , descr : String
     , from : Account
     , to : Account
-    , amount : Int -- in cents
+    , amount : Decimal
     }
 
 
@@ -132,20 +168,20 @@ allAccounts =
         |> Dict.fromList
 
 
-balance : Dict Int Transaction -> Account -> Int
+balance : Dict Int TransactionView -> Account -> Decimal
 balance txs account =
     Dict.foldl
         (\_ { from, to, amount } total ->
             if to == account then
-                total + amount
+                add total amount
 
             else if from == account then
-                total - amount
+                add total amount
 
             else
                 total
         )
-        0
+        (Decimal 0 0)
         txs
 
 
@@ -170,7 +206,7 @@ type Dialog
 type alias Model =
     { now : Time.Posix
     , zone : Time.Zone
-    , book : Dict Int Transaction
+    , book : Dict Int TransactionView
     , dialog : Maybe Dialog
     }
 
@@ -314,7 +350,7 @@ view model =
                 , HA.style "padding-left" "10px"
                 ]
                 (let
-                    transactions : List ( Int, Transaction )
+                    transactions : List ( Int, TransactionView )
                     transactions =
                         List.sortBy
                             (\( _, tx ) -> -(Time.posixToMillis tx.date))
@@ -462,7 +498,7 @@ onDay n =
 init : flags -> ( Model, Cmd Msg )
 init _ =
     let
-        book : Dict Int Transaction
+        book : Dict Int TransactionView
         book =
             Dict.fromList <|
                 [ ( 1
@@ -606,7 +642,7 @@ update msg model =
 
                         CreateDialogSave ->
                             let
-                                newTransaction : Transaction
+                                newTransaction : TransactionView
                                 newTransaction =
                                     { date = model.now
                                     , descr = data.descr
@@ -622,7 +658,7 @@ update msg model =
                                         |> Maybe.map ((+) 1)
                                         |> Maybe.withDefault 0
 
-                                newBook : Dict Int Transaction
+                                newBook : Dict Int TransactionView
                                 newBook =
                                     Dict.insert nextId
                                         newTransaction
