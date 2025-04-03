@@ -1,0 +1,12 @@
+#!/bin/bash
+
+set -e
+
+YELLOW="\033[33;1m"
+RESET="\033[0m"
+
+echo -e "${YELLOW}=> Running elm-test...${RESET}"
+elm-test
+
+echo -e "${YELLOW}=> Running elm-doctest...${RESET}"
+rg --files -t elm ./src/ | xargs -r -L1 ./elm-doctest
