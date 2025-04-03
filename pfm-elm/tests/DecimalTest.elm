@@ -1,4 +1,4 @@
-module DecimalTest exposing (..)
+module DecimalTest exposing (wipTest)
 
 import Decimal exposing (..)
 import Expect
@@ -119,4 +119,34 @@ addTest =
                 )
             }
             (add (MkDecimal -5 25) (MkDecimal 5 25))
+        , t
+            { title = "-1.1 + 0.0 = -1.1"
+            , expected =
+                ( "-1.1"
+                , MkDecimalFull { whole = -1, fract = 1, precision = 1 }
+                )
+            }
+            (add (MkDecimal -1 1) (MkDecimal 0 0))
+        , t
+            { title = "5.5 + 5.5 = 11.0"
+            , expected =
+                ( "11.0"
+                , MkDecimalFull { whole = 11, fract = 0, precision = 1 }
+                )
+            }
+            (add (MkDecimal 5 5) (MkDecimal 5 5))
         ]
+
+
+wipTest : Test
+wipTest =
+    test "WIP" <|
+        \_ ->
+            add (MkDecimal 0 5) (MkDecimal 0 5)
+                |> Expect.equal
+                    (MkDecimalFull
+                        { whole = 0
+                        , fract = 0
+                        , precision = 1
+                        }
+                    )

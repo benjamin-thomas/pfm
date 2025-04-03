@@ -1,13 +1,3 @@
 import Decimal exposing (..)
 
--- precisionFor 123
-
 decToString <| add (MkDecimal 2 5) (MkDecimal 2 5)
-
-decToString <| add (MkDecimal 2 500) (MkDecimal 2 550)
-
-decToString <| add (MkDecimal 0 1) (MkDecimal 0 222)
-
-decToString <| add (MkDecimal -2 5) (MkDecimal -2 5)
-
-decToString <| add (MkDecimal 2 5) (MkDecimal -2 5)

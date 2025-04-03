@@ -143,7 +143,8 @@ addStep2 precision (MkDecimal aWhole aRawFract) (MkDecimal bWhole bRawFract) =
             10 ^ precision
 
         whole =
-            aWhole + bWhole
+            Debug.log "whole"
+                (Debug.log "aWhole" aWhole + Debug.log "bWhole" bWhole)
 
         sign whole_ fract_ =
             if whole_ < 0 then
@@ -153,20 +154,25 @@ addStep2 precision (MkDecimal aWhole aRawFract) (MkDecimal bWhole bRawFract) =
                 fract_
 
         aFract =
-            sign aWhole aRawFract
+            Debug.log "aFract"
+                (sign aWhole aRawFract)
 
         bFract =
-            sign bWhole bRawFract
+            Debug.log "bFract"
+                (sign bWhole bRawFract)
 
         overflow =
-            (aFract + bFract) // ref
+            Debug.log "overflow"
+                ((aFract + bFract) // ref)
 
-        rest =
-            modBy ref (aFract + bFract)
+        newFract =
+            -- Debug.log "newFract" <|
+            modBy ref <|
+                abs (aFract + bFract)
     in
     MkDecimalFull
         { whole = whole + overflow
-        , fract = rest
+        , fract = newFract
         , precision = precision
         }
 
