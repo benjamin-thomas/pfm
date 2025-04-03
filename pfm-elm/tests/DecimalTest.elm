@@ -11,7 +11,7 @@ import Test exposing (..)
 
 normalizeTest : Test
 normalizeTest =
-    describe "normalize fracts returns a simplified ration (a over b)"
+    describe "normalize fracts returns a simplified ratio a over b, but only by factors of 10"
         [ test "(10, 100) simplifies to (1,10)" <|
             \_ ->
                 normalize ( 10, 100 ) |> Expect.equal ( 1, 10 )
@@ -111,4 +111,12 @@ addTest =
                 )
             }
             (add (MkDecimal -2 5) (MkDecimal 2 5))
+        , t
+            { title = "-5.25 + 5.25 = 0.0"
+            , expected =
+                ( "0.00"
+                , MkDecimalFull { whole = 0, fract = 0, precision = 2 }
+                )
+            }
+            (add (MkDecimal -5 25) (MkDecimal 5 25))
         ]

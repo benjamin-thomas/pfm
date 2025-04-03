@@ -4,6 +4,7 @@ module Decimal exposing
     , add
     , decToString
     , normalize
+    , precisionFor
     )
 
 
@@ -19,13 +20,22 @@ type DecimalFull
         }
 
 
-{-| Normalizes a fraction (a over b) to a simplified ratio (only for base 10 values).
 
-    normalize ( 10, 230 )
-    -- => ( 1, 23 )
+{-
 
-    normalize ( 123, 0 )
-    -- => ( 123, 0 )
+   doctest-setup> import Decimal exposing (..)
+   _doctest-interact>
+
+-}
+
+
+{-| Normalizes a fraction (a over b) to a simplified ratio, but only by factors of 10.
+
+doctest> normalize (10, 230)
+(1,23) : ( Int, Int )
+
+doctest> normalize (123, 0)
+(123,0) : ( Int, Int )
 
 -}
 normalize : ( Int, Int ) -> ( Int, Int )
@@ -42,6 +52,21 @@ normalize ( a, b ) =
                 ( a, b )
 
 
+{-| Returns the "base 10 width" of a number. Equivalent to (String.length << String.fromInt).
+
+doctest> precisionFor 1
+1 : Int
+
+doctest> precisionFor 12
+2 : Int
+
+doctest> precisionFor 123
+3 : Int
+
+doctest> precisionFor 1234567890
+10 : Int
+
+-}
 precisionFor : Int -> Int
 precisionFor n =
     1 + (truncate <| logBase 10 <| toFloat <| abs n)
@@ -56,6 +81,39 @@ scale n p =
         scale (n * 10) p
 
 
+{-| Adds two decimal numbers.
+
+doctest> decToString <| add (MkDecimal 0 1) (MkDecimal 0 2)
+"0.3" : String
+
+doctest> decToString <| add (MkDecimal 3 3) (MkDecimal 3 33)
+"6.63" : String
+
+doctest> decToString <| add (MkDecimal 3 30) (MkDecimal 3 33)
+"6.63" : String
+
+doctest> decToString <| add (MkDecimal 3 300) (MkDecimal 3 330)
+"6.63" : String
+
+doctest> decToString <| add (MkDecimal 5 5) (MkDecimal 5 5)
+"11.0" : String
+
+doctest> decToString <| add (MkDecimal 5 5) (MkDecimal -5 5)
+"0.0" : String
+
+doctest> decToString <| add (MkDecimal -5 5) (MkDecimal 5 5)
+"0.0" : String
+
+doctest> decToString <| add (MkDecimal -5 25) (MkDecimal 5 25)
+"0.00" : String
+
+doctest> decToString <| add (MkDecimal -5 255) (MkDecimal 5 255)
+"0.000" : String
+
+doctest> decToString <| add (MkDecimal -5 250) (MkDecimal 5 255)
+"0.005" : String
+
+-}
 add : Decimal -> Decimal -> DecimalFull
 add (MkDecimal aWhole aFract) (MkDecimal bWhole bFract) =
     let
@@ -79,7 +137,7 @@ addStep1 (MkDecimal aWhole aFract) (MkDecimal bWhole bFract) =
 
 
 addStep2 : Int -> Decimal -> Decimal -> DecimalFull
-addStep2 precision (MkDecimal aWhole aFract) (MkDecimal bWhole bFract) =
+addStep2 precision (MkDecimal aWhole aRawFract) (MkDecimal bWhole bRawFract) =
     let
         ref =
             10 ^ precision
@@ -94,8 +152,14 @@ addStep2 precision (MkDecimal aWhole aFract) (MkDecimal bWhole bFract) =
             else
                 fract_
 
+        aFract =
+            sign aWhole aRawFract
+
+        bFract =
+            sign bWhole bRawFract
+
         overflow =
-            (sign aWhole aFract + sign bWhole bFract) // ref
+            (aFract + bFract) // ref
 
         rest =
             modBy ref (aFract + bFract)

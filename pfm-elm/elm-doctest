@@ -1,0 +1,132 @@
+#!/usr/bin/env ruby
+
+require 'open3'
+
+=begin 
+
+Usage:
+
+  Run on a single file:
+    ./elm-doctest ./src/Decimal.elm
+
+  Run on all files:  
+    rg --files -t elm ./src/ | xargs -r -L1 ./elm-doctest
+
+  Run on file change:
+    rg --files -t elm ./src/ | entr -cp ./elm-doctest /_
+  
+
+=end
+
+RESET = "\033[0m"
+LIGHT_GREY = "\033[38;5;244m"
+RED = "\033[31m"
+GREEN = "\033[32m"
+
+stdin, stdout, wait_thr = Open3.popen2e('elm repl --no-colors')
+
+expect = proc do |str|
+  buf = ""
+  loop do
+    char = stdout.read(1)
+    buf << char
+    break if buf.end_with?(str)
+  end
+  buf
+end
+
+expect.("> ")
+
+setup_commands = []
+doctest_commands = []
+
+path = ARGV[0]
+if !File.exist?(path)
+  warn "#{RED}ERROR#{RESET}: file not found '#{path}'"
+  exit 1
+end
+lines = File.readlines(path)
+
+interact = false
+i = 0
+loop do
+  break if i >= lines.length
+  line = lines[i]
+  i += 1
+
+  if line =~ /^\s*doctest-interact>/
+    interact = true
+    break
+  end
+    
+
+  if line =~ /^\s*doctest-setup>(.+)/
+    setup_commands << $1.strip
+    next
+  end
+  
+  if line =~ /^\s*doctest>(.+)/
+    doctest_command = $1
+    expected = lines[i].chomp
+    doctest_commands << [doctest_command.strip, expected.strip] # unless expected.empty?
+    i += 1 # skip one more
+  end
+end
+
+setup_commands.each do |command|
+  stdin.puts command
+  expect.("> ")
+end
+
+if interact
+  stdin.close
+  stdout.close
+  child_exit = wait_thr.value
+  fail "Child process failed, won't interact!" unless child_exit.success?
+
+  simple_path = path.sub(Dir.pwd, '')
+  puts("interact request from: #{simple_path}")
+  
+  # I need to think about this some more, leaving as-is for now.
+  # Executing "expect" was the simplest way to achieve this result
+  require 'shellwords'
+  setups = setup_commands.map { |c| Shellwords.escape(c) }.join('\r').concat('\r')
+  
+  expect_commands = %Q[spawn elm repl;expect "> "; send "#{setups}";interact]
+  exec("expect", "-c", expect_commands)
+end
+
+passed = 0
+failed = 0
+i = 0
+doctest_commands.shuffle.each do |(command, expected)|
+  is_last_line = i == doctest_commands.length - 1
+  i += 1
+  stdin.puts command
+  output = expect.("> ")
+  lines = output.split("\n")
+  answer = lines.first&.strip
+  if answer == expected
+    puts "✓ Test passed: #{command}".sub("✓", "#{GREEN}✓#{RESET}")
+    passed += 1
+  else
+    puts "✗ Test failed: #{command}".sub("✗", "#{RED}✗#{RESET}")
+    puts "     Expected: #{expected}"
+    puts "          Got: #{answer}"
+    failed += 1
+  end
+  puts if is_last_line
+end
+
+stdin.close
+stdout.close
+process = wait_thr.value
+
+if process.exitstatus != 0
+  puts "The REPL exited with a non-zero status code"
+  exit 2
+end
+
+puts "== Tests completed: #{passed} passed, #{failed} failed #{LIGHT_GREY}on #{path}#{RESET}"
+puts
+exit(failed > 0 ? 3 : 0)
