@@ -1,3 +1,6 @@
-import Decimal exposing (..)
+import Dec exposing (..)
 
-decToString <| add (MkDecimal 2 5) (MkDecimal 2 5)
+--fromString "1.23"
+--fromString "1.01"
+
+fromString "-0.23"
