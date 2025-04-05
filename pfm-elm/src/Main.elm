@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser
+import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
 import Html as H exposing (Html)
 import Html.Attributes as HA
@@ -35,33 +36,6 @@ type alias Transaction =
     , toAccountId : Int
     , amount : Decimal
     }
-
-
-type alias Decimal =
-    { whole : Int
-    , fract : Int
-    }
-
-
-
--- addDecimal : { precision : Int } -> Decimal -> Decimal -> Decimal
--- addDecimal { precision } d1 d2 =
---     let
---         sumWhole =
---             d1.whole + d2.whole
---         sumFract =
---             d1.fract + d2.fract
---         overflow =
---             Debug.log "overflow" <|
---                 (sumFract // precision)
---         _ =
---             Debug.todo "wat"
---         adjustedFract =
---             modBy precision sumFract
---     in
---     { whole = sumWhole + overflow
---     , fract = adjustedFract
---     }
 
 
 type alias TransactionView =
@@ -173,15 +147,15 @@ balance txs account =
     Dict.foldl
         (\_ { from, to, amount } total ->
             if to == account then
-                add total amount
+                Decimal.add total amount
 
             else if from == account then
-                add total amount
+                Decimal.sub total amount
 
             else
                 total
         )
-        (Decimal 0 0)
+        zero
         txs
 
 
@@ -234,25 +208,21 @@ type Msg
     | GotZone Time.Zone
 
 
-amountFmt : Int -> String
+amountFmt : Decimal -> String
 amountFmt amount =
     let
-        euros =
-            String.fromInt (amount // 100)
+        str =
+            case Decimal.toString amount |> String.split "." of
+                [ euros, cents ] ->
+                    euros ++ "." ++ String.padRight 2 '0' cents
 
-        cents =
-            let
-                n =
-                    modBy 100 amount
-            in
-            String.padLeft 2 '0' (String.fromInt n)
+                [ euros ] ->
+                    euros ++ ".00"
+
+                _ ->
+                    "IMPOSSIBLE"
     in
-    String.concat
-        [ euros
-        , "."
-        , cents
-        , "\u{00A0}€"
-        ]
+    str ++ "\u{00A0}€"
 
 
 uniqueBy : (a -> comparable) -> List a -> List a
@@ -353,7 +323,7 @@ view model =
                     transactions : List ( Int, TransactionView )
                     transactions =
                         List.sortBy
-                            (\( _, tx ) -> -(Time.posixToMillis tx.date))
+                            (\( _, tx ) -> Time.posixToMillis tx.date)
                             (Dict.toList model.book)
                  in
                  List.map
@@ -498,6 +468,10 @@ onDay n =
 init : flags -> ( Model, Cmd Msg )
 init _ =
     let
+        v : String -> Decimal
+        v =
+            Maybe.withDefault zero << Decimal.fromString
+
         book : Dict Int TransactionView
         book =
             Dict.fromList <|
@@ -506,7 +480,7 @@ init _ =
                     , descr = "Opening balance"
                     , from = openingBalance
                     , to = checkingAccount
-                    , amount = 100000 -- 1000€
+                    , amount = v "1000.00"
                     }
                   )
                 , ( 2
@@ -514,7 +488,7 @@ init _ =
                     , descr = "Groceries"
                     , from = checkingAccount
                     , to = spar
-                    , amount = 999 -- 9.99€
+                    , amount = v "9.99"
                     }
                   )
                 , ( 3
@@ -522,7 +496,7 @@ init _ =
                     , descr = "Book purchase"
                     , from = checkingAccount
                     , to = amazon
-                    , amount = 5499
+                    , amount = v "54.99"
                     }
                   )
                 , ( 4
@@ -530,7 +504,7 @@ init _ =
                     , descr = "Groceries, again"
                     , from = checkingAccount
                     , to = spar
-                    , amount = 3742
+                    , amount = v "37.42"
                     }
                   )
                 , ( 5
@@ -538,7 +512,7 @@ init _ =
                     , descr = "Salary"
                     , from = employerABC
                     , to = checkingAccount
-                    , amount = 100000 -- 1000€
+                    , amount = v "100.00"
                     }
                   )
                 ]
@@ -564,7 +538,7 @@ update msg model =
                                 EditDialog
                                     { transactionId = transactionId
                                     , descr = tx.descr
-                                    , amount = String.fromInt tx.amount
+                                    , amount = Decimal.toString tx.amount
                                     }
                     }
 
@@ -589,6 +563,7 @@ update msg model =
 
                         EditDialogSave ->
                             let
+                                newBook : Dict Int TransactionView
                                 newBook =
                                     Dict.update data.transactionId
                                         (Maybe.andThen
@@ -596,7 +571,10 @@ update msg model =
                                                 Just
                                                     { old
                                                         | descr = data.descr
-                                                        , amount = Maybe.withDefault old.amount (String.toInt data.amount)
+                                                        , amount =
+                                                            Maybe.withDefault
+                                                                old.amount
+                                                                (Decimal.fromString data.amount)
                                                     }
                                             )
                                         )
@@ -648,7 +626,7 @@ update msg model =
                                     , descr = data.descr
                                     , from = openingBalance
                                     , to = checkingAccount
-                                    , amount = Maybe.withDefault 0 <| String.toInt data.amount
+                                    , amount = Maybe.withDefault zero <| Decimal.fromString data.amount
                                     }
 
                                 nextId : Int
