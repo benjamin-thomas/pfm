@@ -17,6 +17,14 @@ type Dec a
         )
 
 
+
+{-
+
+   doctest-setup> import Dec exposing (..)
+
+-}
+
+
 {-| Convert a string to a `Dec`.
 
 doctest> fromString "wat"
@@ -91,22 +99,174 @@ fromString str =
             Nothing
 
 
+{-| --
 
-{- Simplifies fractions whose elements are multiples of 10
+doctest> toString Zero
+"0.00" : String
 
-   doctest-setup> import Dec exposing (..)
+doctest> fromString "1" |> Maybe.map toString
+Just "1.00" : Maybe String
 
-   \_doctest> normalize (Zero, Zero)
-   (Zero,Zero) : ( Dec, Dec )
+doctest> fromString "1.23" |> Maybe.map toString
+Just "1.23" : Maybe String
 
-   \_doctest> normalize (Pos 10 230, Pos 10 230)
-   (Pos 1 23,Pos 1 23) : ( Dec, Dec )
+doctest> fromString "-1.23" |> Maybe.map toString
+Just "-1.23" : Maybe String
+
+doctest> fromString "-0.23" |> Maybe.map toString
+Just "-0.23" : Maybe String
+
+doctest> fromString "0" |> Maybe.map toString
+Just "0.00" : Maybe String
+
+doctest> fromString "0.023" |> Maybe.map toString
+Just "0.023" : Maybe String
+
+doctest> fromString "42.0007" |> Maybe.map toString
+Just "42.0007" : Maybe String
+
+doctest> fromString "-42.0007" |> Maybe.map toString
+Just "-42.0007" : Maybe String
+
+doctest> fromString "0.3" |> Maybe.map toString
+Just "0.30" : Maybe String
 
 -}
--- normalize : ( Dec, Dec ) -> ( Dec, Dec )
--- normalize ( a, b ) =
---     case ( a, b ) of
---         ( Zero, Zero ) ->
---             ( Zero, Zero )
---         _ ->
---             Debug.todo "x"
+toString : Dec Int -> String
+toString dec =
+    let
+        padFract fract precision =
+            String.padRight 2 '0' <|
+                String.padLeft
+                    precision
+                    '0'
+                    (String.fromInt fract)
+    in
+    case dec of
+        Zero ->
+            "0.00"
+
+        MkSign (Pos { whole, fract, precision }) ->
+            String.fromInt whole ++ "." ++ padFract fract precision
+
+        MkSign (Neg { whole, fract, precision }) ->
+            "-" ++ String.fromInt whole ++ "." ++ padFract fract precision
+
+
+{-| --
+
+doctest> add Zero Zero
+Zero : Dec Int
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "0") (fromString "0")
+Just "0.00" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "0") (fromString "1")
+Just "1.00" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "1") (fromString "0")
+Just "1.00" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "1") (fromString "1")
+Just "2.00" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "1.23") (fromString "1.23")
+Just "2.46" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "1.23") (fromString "1.20")
+Just "2.43" : Maybe String
+
+doctest> Maybe.map toString <| Maybe.map2 add (fromString "1.23") (fromString "1.2")
+Just "2.43" : Maybe String
+
+-}
+add : Dec Int -> Dec Int -> Dec Int
+add a b =
+    case ( a, b ) of
+        ( Zero, b_ ) ->
+            b_
+
+        ( a_, Zero ) ->
+            a_
+
+        ( MkSign a2, MkSign b2 ) ->
+            let
+                maxPrecision =
+                    max (getPrecision a2) (getPrecision b2)
+
+                valueA =
+                    toSmallestUnits maxPrecision a2
+
+                valueB =
+                    toSmallestUnits maxPrecision b2
+
+                sumValue =
+                    valueA + valueB
+            in
+            fromSmallestUnits maxPrecision sumValue
+
+
+getPrecision : Sign { whole : a, fract : a, precision : Int } -> Int
+getPrecision sign =
+    case sign of
+        Pos { precision } ->
+            precision
+
+        Neg { precision } ->
+            precision
+
+
+toSmallestUnits : Int -> Sign { whole : Int, fract : Int, precision : Int } -> Int
+toSmallestUnits targetPrecision sign =
+    case sign of
+        Pos { whole, fract, precision } ->
+            let
+                scaleFactor =
+                    10 ^ targetPrecision
+
+                scaledWhole =
+                    whole * scaleFactor
+
+                scaledFract =
+                    fract * (10 ^ (targetPrecision - precision))
+            in
+            scaledWhole + scaledFract
+
+        Neg { whole, fract, precision } ->
+            let
+                scaleFactor =
+                    10 ^ targetPrecision
+
+                scaledWhole =
+                    whole * scaleFactor
+
+                scaledFract =
+                    fract * (10 ^ (targetPrecision - precision))
+            in
+            -(scaledWhole + scaledFract)
+
+
+fromSmallestUnits : Int -> Int -> Dec Int
+fromSmallestUnits precision value =
+    if value == 0 then
+        Zero
+
+    else
+        let
+            scaleFactor =
+                10 ^ precision
+
+            absValue =
+                abs value
+
+            whole =
+                absValue // scaleFactor
+
+            fract =
+                modBy scaleFactor absValue
+        in
+        if value < 0 then
+            MkSign (Neg { whole = whole, fract = fract, precision = precision })
+
+        else
+            MkSign (Pos { whole = whole, fract = fract, precision = precision })

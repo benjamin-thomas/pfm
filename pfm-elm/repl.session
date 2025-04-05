@@ -1,6 +1,0 @@
-import Dec exposing (..)
-
---fromString "1.23"
---fromString "1.01"
-
-fromString "-0.23"

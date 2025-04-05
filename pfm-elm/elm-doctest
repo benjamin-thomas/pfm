@@ -99,7 +99,7 @@ end
 passed = 0
 failed = 0
 i = 0
-doctest_commands.shuffle.each do |(command, expected)|
+doctest_commands.each do |(command, expected)|
   is_last_line = i == doctest_commands.length - 1
   i += 1
   stdin.puts command
