@@ -493,15 +493,17 @@ viewEditDialog data =
             , value = data.descr
             , onInput = \str -> EditDialogChanged (EditDescrChanged str)
             }
-        , field
+        , accountSelect
             { text = "From"
             , value = data.from
             , onInput = \str -> EditDialogChanged (EditFromChanged str)
+            , accounts = allAccounts_
             }
-        , field
+        , accountSelect
             { text = "To"
             , value = data.to
             , onInput = \str -> EditDialogChanged (EditToChanged str)
+            , accounts = allAccounts_
             }
         , field
             { text = "Amount"
@@ -537,15 +539,17 @@ viewCreateDialog data =
             , value = data.descr
             , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
             }
-        , field
+        , accountSelect
             { text = "From"
             , value = data.from
             , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
+            , accounts = allAccounts_
             }
-        , field
+        , accountSelect
             { text = "To"
             , value = data.to
             , onInput = \str -> CreateDialogChanged (CreateToChanged str)
+            , accounts = allAccounts_
             }
         , field
             { text = "Amount"
@@ -583,6 +587,30 @@ field { onInput, text, value } =
             , HE.onInput onInput
             ]
             []
+        ]
+
+
+accountSelect : { a | onInput : String -> msg, text : String, value : String, accounts : List Account } -> Html msg
+accountSelect { onInput, text, value, accounts } =
+    H.div [ HA.class "field" ]
+        [ H.label [ HA.class "field__label" ]
+            [ H.text text ]
+        , H.select
+            [ HA.class "field__select"
+            , HE.onInput onInput
+            , HA.value value
+            ]
+            (H.option [ HA.value "" ] [ H.text "-- Select an account --" ]
+                :: List.map
+                    (\account ->
+                        H.option
+                            [ HA.value account.name
+                            , HA.selected (account.name == value)
+                            ]
+                            [ H.text (account.category.name ++ ": " ++ account.name) ]
+                    )
+                    accounts
+            )
         ]
 
 
@@ -749,36 +777,35 @@ update msg model =
                                     Dict.update
                                         data.transactionId
                                         (\mbOld ->
-                                            case mbOld of
-                                                Nothing ->
-                                                    Nothing
+                                            mbOld
+                                                |> Maybe.andThen
+                                                    (\old ->
+                                                        let
+                                                            fromAccount =
+                                                                Dict.get data.from allAccounts
+                                                                    |> Maybe.withDefault old.from
 
-                                                Just old ->
-                                                    let
-                                                        fromAccount =
-                                                            Dict.get data.from allAccounts
-                                                                |> Maybe.withDefault old.from
+                                                            toAccount =
+                                                                Dict.get data.to allAccounts
+                                                                    |> Maybe.withDefault old.to
 
-                                                        toAccount =
-                                                            Dict.get data.to allAccounts
-                                                                |> Maybe.withDefault old.to
-
-                                                        newDate =
-                                                            Iso8601.toTime data.date
-                                                                |> Result.toMaybe
-                                                                |> Maybe.withDefault old.date
-                                                    in
-                                                    Just
-                                                        { old
-                                                            | descr = data.descr
-                                                            , from = fromAccount
-                                                            , to = toAccount
-                                                            , amount =
-                                                                Maybe.withDefault
-                                                                    old.amount
-                                                                    (Decimal.fromString data.amount)
-                                                            , date = newDate
-                                                        }
+                                                            newDate =
+                                                                Iso8601.toTime data.date
+                                                                    |> Result.toMaybe
+                                                                    |> Maybe.withDefault old.date
+                                                        in
+                                                        Just
+                                                            { old
+                                                                | descr = data.descr
+                                                                , from = fromAccount
+                                                                , to = toAccount
+                                                                , amount =
+                                                                    Maybe.withDefault
+                                                                        old.amount
+                                                                        (Decimal.fromString data.amount)
+                                                                , date = newDate
+                                                            }
+                                                    )
                                         )
                                         model.book
                             in

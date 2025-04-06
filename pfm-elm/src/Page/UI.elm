@@ -38,9 +38,21 @@ type ComponentToShow
 view : Html msg
 view =
     let
-        -- Extract the component to show from the URL hash (default to All)
+        -- Get the component from the URL query parameter
+        urlParams = 
+            -- This is a placeholder, in a real app we would use Browser.Navigation
+            -- For now, we'll use the hash for navigation
+            ""
+            
         activeComponent =
-            AllComponents
+            if String.contains "component=balance-cards" urlParams then
+                BalanceCardsComponent
+            else if String.contains "component=transaction-list" urlParams then
+                TransactionListComponent
+            else if String.contains "component=buttons" urlParams then
+                ButtonsComponent
+            else
+                AllComponents
     in
     H.div [ HA.class "ui-page" ]
         [ H.div [ HA.class "ui-page__content" ]
@@ -61,20 +73,22 @@ viewSidebar activeComponent =
             ]
         , H.nav [ HA.class "ui-sidebar__nav" ]
             [ H.ul [ HA.class "ui-sidebar__nav-list" ]
-                [ viewNavItem "All Components" "/ui?component=all" (activeComponent == AllComponents)
-                , viewNavItem "Balance Cards" "/ui?component=balance-cards" (activeComponent == BalanceCardsComponent)
-                , viewNavItem "Transaction List" "/ui?component=transaction-list" (activeComponent == TransactionListComponent)
-                , viewNavItem "Buttons" "/ui?component=buttons" (activeComponent == ButtonsComponent)
+                [ viewNavItem "All Components" "#all" (activeComponent == AllComponents)
+                , viewNavItem "Balance Cards" "#balance-cards" (activeComponent == BalanceCardsComponent)
+                , viewNavItem "Transaction List" "#transaction-list" (activeComponent == TransactionListComponent)
+                , viewNavItem "Buttons" "#buttons" (activeComponent == ButtonsComponent)
                 ]
             ]
         ]
 
 
 viewNavItem : String -> String -> Bool -> Html msg
-viewNavItem label url isActive =
+viewNavItem label href isActive =
     H.li []
         [ H.a
-            [ HA.href url
+            [ HA.id (String.dropLeft 1 href)
+            , HA.href href
+            , HA.class "ui-sidebar__nav-item"
             , HA.classList [ ( "ui-sidebar__nav-item--active", isActive ) ]
             ]
             [ H.text label ]
