@@ -27,6 +27,9 @@ port enterPressed : (() -> msg) -> Sub msg
 port focusElement : String -> Cmd msg
 
 
+port toggleTheme : () -> Cmd msg
+
+
 type alias Category =
     { name : String
     }
@@ -208,6 +211,7 @@ type alias Model =
     , zone : Time.Zone
     , book : Dict Int TransactionView
     , dialog : Maybe Dialog
+    , isDarkTheme : Bool
     }
 
 
@@ -242,6 +246,7 @@ type Msg
     | EnterPressed
     | GotTime Time.Posix
     | GotZone Time.Zone
+    | ToggleTheme
 
 
 amountFmt : Decimal -> String
@@ -281,41 +286,53 @@ dateFmt =
         << Iso8601.fromTime
 
 
-view : Model -> Browser.Document Msg
 view model =
     let
-        viewPage : Html Msg
         viewPage =
             case model.route of
                 Route.NotFound ->
-                    H.text "Not found"
+                    H.div [] [ H.text "Not Found" ]
 
                 Route.Home ->
                     viewHome model
 
                 Route.UI ->
                     UI_Page.view
-
+                    
         cssLink =
-            case model.route of
-                Route.UI ->
-                    H.node "link"
-                        [ HA.rel "stylesheet"
-                        , HA.href "/ui.css"
-                        ]
-                        []
-
-                _ ->
-                    H.node "link"
-                        [ HA.rel "stylesheet"
-                        , HA.href "/main.css"
-                        ]
-                        []
+            H.node "link"
+                [ HA.rel "stylesheet"
+                , HA.href "/main.css"
+                ]
+                []
     in
     { title = "Personal Finance Manager"
     , body =
-        [ cssLink
-        , viewPage
+        [ H.div
+            [ HA.classList
+                [ ( "app", True )
+                , ( "dark-theme", model.isDarkTheme )
+                ]
+            ]
+            [ cssLink
+            , themeToggleButton model.isDarkTheme
+            , viewPage
+            , case model.dialog of
+                Nothing ->
+                    H.text ""
+
+                Just (EditDialog data) ->
+                    H.div [ HA.class "dialog-overlay" ]
+                        [ H.div [ HA.class "dialog" ]
+                            [ viewEditDialog data ]
+                        ]
+
+                Just (CreateDialog data) ->
+                    H.div [ HA.class "dialog-overlay" ]
+                        [ H.div [ HA.class "dialog" ]
+                            [ viewCreateDialog data ]
+                        ]
+            ]
         ]
     }
 
@@ -766,7 +783,7 @@ init () url key =
 
         book : Dict Int TransactionView
         book =
-            Dict.fromList <|
+            Dict.fromList
                 [ ( 1
                   , { date = onDay 0
                     , descr = "Opening balance"
@@ -812,10 +829,11 @@ init () url key =
     ( { key = key
       , url = url
       , route = Route.fromUrl url
-      , dialog = Nothing
-      , book = book
       , now = Time.millisToPosix 0
       , zone = Time.utc
+      , book = book
+      , dialog = Nothing
+      , isDarkTheme = False
       }
     , Task.perform GotZone Time.here
     )
@@ -1047,6 +1065,11 @@ update msg model =
             , Cmd.none
             )
 
+        ToggleTheme ->
+            ( { model | isDarkTheme = not model.isDarkTheme }
+            , toggleTheme ()
+            )
+
 
 handleEditDialog : Int -> Model -> ( Model, Cmd Msg )
 handleEditDialog id model =
@@ -1088,6 +1111,18 @@ subscriptions _ =
         [ escapePressed (\() -> EscapedPressed)
         , enterPressed (\() -> EnterPressed)
         , Time.every (Debug.log "time" 9991000) GotTime
+        ]
+
+
+themeToggleButton : Bool -> Html Msg
+themeToggleButton isDarkTheme =
+    H.button
+        [ HA.class "theme-toggle"
+        , HE.onClick ToggleTheme
+        , HA.title (if isDarkTheme then "Switch to Light Mode" else "Switch to Dark Mode")
+        ]
+        [ H.span []
+            [ H.text (if isDarkTheme then "☀️" else "🌙") ]
         ]
 
 

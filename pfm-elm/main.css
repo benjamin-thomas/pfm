@@ -5,17 +5,20 @@
     --space-lg: 24px;
     --space-xl: 32px;
     --space-xxl: 48px;
-    
+}
+
+/* Light theme (default) */
+:root {
     /* Colors */
-    --color-bg: #121212;
-    --color-card-bg: #1e1e1e;
-    --color-text: #e0e0e0;
-    --color-text-secondary: #999;
-    --color-text-tertiary: #777;
-    --color-text-bright: #fff;
-    --color-border: #2a2a2a;
-    --color-border-dark: #333;
-    --color-hover: #252525;
+    --color-bg: #f5f5f5;
+    --color-card-bg: #ffffff;
+    --color-text: #333333;
+    --color-text-secondary: #666666;
+    --color-text-tertiary: #999999;
+    --color-text-bright: #000000;
+    --color-border: #e0e0e0;
+    --color-border-dark: #cccccc;
+    --color-hover: #f0f0f0;
     --color-primary: #3498db;
     --color-secondary: #9b59b6;
     --color-positive: #2ecc71;
@@ -25,14 +28,57 @@
     --sidebar-width: 250px;
 }
 
+/* Dark theme */
+html.dark-theme {
+    --color-bg: #121212;
+    --color-card-bg: #1e1e1e;
+    --color-text: #e0e0e0;
+    --color-text-secondary: #999;
+    --color-text-tertiary: #777;
+    --color-text-bright: #fff;
+    --color-border: #2a2a2a;
+    --color-border-dark: #333;
+    --color-hover: #252525;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 100;
+    background-color: var(--color-card-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.theme-toggle:hover {
+    transform: scale(1.05);
+}
+
+.theme-toggle svg {
+    width: 20px;
+    height: 20px;
+    fill: var(--color-text);
+}
+
 html {
-    zoom: 1.4;
+    zoom: 1;
+    background-color: var(--color-bg);
+    color: var(--color-text);
 }
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background-color: var(--color-bg);
-    color: var(--color-text);
     margin: 0;
     padding: 0;
 }

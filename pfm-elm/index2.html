@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Finance Manager</title>
     <script src="dist/main.js"></script>
+    <script src="theme-toggle.js"></script>
     <link rel="stylesheet" href="/main.css">
 </head>
 
@@ -38,6 +39,9 @@
                 }
             }, 50); // Small delay to ensure DOM is updated
         });
+
+        // Set up theme toggle functionality
+        setupThemeToggle(app);
     </script>
 </body>
 
