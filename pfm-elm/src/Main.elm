@@ -498,12 +498,14 @@ viewEditDialog data =
             , value = data.from
             , onInput = \str -> EditDialogChanged (EditFromChanged str)
             , accounts = allAccounts_
+            , excludeAccount = Just data.to
             }
         , accountSelect
             { text = "To"
             , value = data.to
             , onInput = \str -> EditDialogChanged (EditToChanged str)
             , accounts = allAccounts_
+            , excludeAccount = Just data.from
             }
         , field
             { text = "Amount"
@@ -544,12 +546,14 @@ viewCreateDialog data =
             , value = data.from
             , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
             , accounts = allAccounts_
+            , excludeAccount = Just data.to
             }
         , accountSelect
             { text = "To"
             , value = data.to
             , onInput = \str -> CreateDialogChanged (CreateToChanged str)
             , accounts = allAccounts_
+            , excludeAccount = Just data.from
             }
         , field
             { text = "Amount"
@@ -590,8 +594,20 @@ field { onInput, text, value } =
         ]
 
 
-accountSelect : { a | onInput : String -> msg, text : String, value : String, accounts : List Account } -> Html msg
-accountSelect { onInput, text, value, accounts } =
+accountSelect : { a | onInput : String -> msg, text : String, value : String, accounts : List Account, excludeAccount : Maybe String } -> Html msg
+accountSelect { onInput, text, value, accounts, excludeAccount } =
+    let
+        filteredAccounts =
+            case excludeAccount of
+                Just excludeName ->
+                    if String.isEmpty excludeName then
+                        accounts
+                    else
+                        List.filter (\account -> account.name /= excludeName) accounts
+                
+                Nothing ->
+                    accounts
+    in
     H.div [ HA.class "field" ]
         [ H.label [ HA.class "field__label" ]
             [ H.text text ]
@@ -609,7 +625,7 @@ accountSelect { onInput, text, value, accounts } =
                             ]
                             [ H.text (account.category.name ++ ": " ++ account.name) ]
                     )
-                    accounts
+                    filteredAccounts
             )
         ]
 
