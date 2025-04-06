@@ -5,22 +5,512 @@
     --space-lg: 24px;
     --space-xl: 32px;
     --space-xxl: 48px;
+    
+    /* Colors */
+    --color-bg: #121212;
+    --color-card-bg: #1e1e1e;
+    --color-text: #e0e0e0;
+    --color-text-secondary: #999;
+    --color-text-tertiary: #777;
+    --color-text-bright: #fff;
+    --color-border: #2a2a2a;
+    --color-border-dark: #333;
+    --color-hover: #252525;
+    --color-primary: #3498db;
+    --color-secondary: #9b59b6;
+    --color-positive: #2ecc71;
+    --color-negative: #e74c3c;
+    
+    /* Sidebar */
+    --sidebar-width: 250px;
 }
-
 
 html {
     zoom: 1.4;
 }
 
-* {
-    background-color: #000;
-    color: #DDD;
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    margin: 0;
+    padding: 0;
 }
 
+a {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+/* UI Page Layout */
+
+.ui-page {
+    display: flex;
+    min-height: 100vh;
+}
+
+.ui-page__content {
+    display: flex;
+    width: 100%;
+}
+
+/* Sidebar */
+
+.ui-sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--color-card-bg);
+    border-right: 1px solid var(--color-border);
+    padding: var(--space-lg);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+.ui-sidebar__header {
+    margin-bottom: var(--space-xl);
+}
+
+.ui-sidebar__header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-bright);
+    margin-bottom: var(--space-md);
+}
+
+.ui-sidebar__nav-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ui-sidebar__nav-list li {
+    margin-bottom: var(--space-md);
+}
+
+.ui-sidebar__nav-list a {
+    display: block;
+    padding: var(--space-sm) 0;
+    color: var(--color-text);
+    transition: color 0.2s;
+}
+
+.ui-sidebar__nav-list a:hover {
+    color: var(--color-primary);
+    text-decoration: none;
+}
+
+/* Component Library */
+
+.ui-component-library {
+    flex: 1;
+    padding: var(--space-lg) var(--space-xl);
+    overflow-y: auto;
+}
+
+.ui-component-section {
+    margin-bottom: var(--space-xxl);
+}
+
+.ui-component-section__title {
+    font-size: 24px;
+    font-weight: 600;
+    margin-bottom: var(--space-lg);
+    color: var(--color-text-bright);
+    padding-bottom: var(--space-sm);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.ui-component-section__content {
+    background-color: var(--color-card-bg);
+    border-radius: 8px;
+    padding: var(--space-lg);
+}
+
+/* Balance Cards Component */
+
+.balance-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-md);
+}
+
+.balance-card {
+    background: var(--color-card-bg);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    border-left: 4px solid var(--color-primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.balance-card__category {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-xs);
+}
+
+.balance-card__account {
+    font-size: 16px;
+    margin-bottom: var(--space-sm);
+}
+
+.balance-card__amount {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--color-text-bright);
+}
+
+/* Transaction List Component */
+
+.transaction-list {
+    background: var(--color-card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.transaction-list__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border-dark);
+}
+
+.transaction-list__header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-text-bright);
+}
+
+.transaction-list__items {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+/* Transaction Item Component */
+
+.transaction-item {
+    display: grid;
+    grid-template-columns: 1fr 120px 120px;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.transaction-item:hover {
+    background-color: var(--color-hover);
+}
+
+.transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-item__details {
+    display: flex;
+    flex-direction: column;
+}
+
+.transaction-item__description {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.transaction-item__accounts {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.transaction-item__date {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+    align-self: center;
+}
+
+.transaction-item__amount {
+    font-weight: 600;
+    text-align: right;
+    align-self: center;
+}
+
+.transaction-item__amount--positive {
+    color: var(--color-positive);
+}
+
+.transaction-item__amount--negative {
+    color: var(--color-negative);
+}
+
+/* Buttons Component */
+
+.buttons-showcase {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.buttons-showcase__row {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.button {
+    background-color: var(--color-card-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.button:hover {
+    background-color: var(--color-hover);
+}
+
+.button--primary {
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+}
+
+.button--primary:hover {
+    background-color: #2980b9;
+}
+
+.button--secondary {
+    background-color: var(--color-secondary);
+    color: white;
+    border: none;
+}
+
+.button--secondary:hover {
+    background-color: #8e44ad;
+}
+
+.button--small {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+.button--large {
+    padding: 12px 20px;
+    font-size: 16px;
+}
+
+/* Home Page Layout */
+.container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.section {
+    margin-bottom: var(--space-xl);
+}
+
+.section-title {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    color: var(--color-text-bright);
+}
+
+/* Balance Cards */
+.balances {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+}
+
+.balance-card {
+    background: var(--color-card-bg);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    border-left: 4px solid var(--color-primary);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.balance-card__category {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: var(--space-xs);
+}
+
+.balance-card__account {
+    font-size: 16px;
+    margin-bottom: var(--space-sm);
+}
+
+.balance-card__amount {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--color-text-bright);
+}
+
+/* Transaction List */
+.transaction-list {
+    background: var(--color-card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.transaction-list__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border-dark);
+}
+
+.transaction-list__header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-text-bright);
+}
+
+.transaction-list__items {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+/* Transaction Item */
+.transaction-item {
+    display: grid;
+    grid-template-columns: 1fr 120px 120px;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.transaction-item:hover {
+    background-color: var(--color-hover);
+}
+
+.transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-item__details {
+    display: flex;
+    flex-direction: column;
+}
+
+.transaction-item__description {
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.transaction-item__accounts {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.transaction-item__date {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+    align-self: center;
+}
+
+.transaction-item__amount {
+    font-weight: 600;
+    text-align: right;
+    align-self: center;
+}
+
+.transaction-item__amount--positive {
+    color: var(--color-positive);
+}
+
+.transaction-item__amount--negative {
+    color: var(--color-negative);
+}
+
+/* Buttons */
+.button {
+    background-color: var(--color-card-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.button:hover {
+    background-color: var(--color-hover);
+}
+
+.button--primary {
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+}
+
+.button--primary:hover {
+    background-color: #2980b9;
+}
+
+/* Dialog */
+dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translateY(-50%);
+    background-color: var(--color-card-bg);
+    color: var(--color-text);
+    border: 1px solid var(--color-border-dark);
+    border-radius: 8px;
+    padding: var(--space-lg);
+    min-width: 400px;
+}
+
+dialog h3 {
+    margin-top: 0;
+    color: var(--color-text-bright);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: var(--space-sm);
+    margin-bottom: var(--space-lg);
+}
+
+dialog label {
+    color: var(--color-text-secondary);
+}
+
+dialog input, dialog select {
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    padding: 8px 12px;
+    border-radius: 4px;
+    margin-bottom: var(--space-md);
+}
+
+dialog .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+}
+
+/* Legacy styles - keeping for compatibility */
 .entries {
     display: inline-block;
     font-family: monospace;
-    /*font-size: var(--space-md);*/
 }
 
 .entry {
@@ -28,14 +518,6 @@ html {
 }
 
 .tx:hover {
-    background-color: #222;
+    background-color: var(--color-hover);
     cursor: pointer;
-}
-
-dialog {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    /* shift right to always see the balances */
-    transform: translateY(-50%);
 }

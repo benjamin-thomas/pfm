@@ -284,173 +284,170 @@ view model =
 
                 Route.UI ->
                     UI_Page.view
+
+        cssLink =
+            case model.route of
+                Route.UI ->
+                    H.node "link"
+                        [ HA.rel "stylesheet"
+                        , HA.href "/ui.css"
+                        ]
+                        []
+
+                _ ->
+                    H.node "link"
+                        [ HA.rel "stylesheet"
+                        , HA.href "/main.css"
+                        ]
+                        []
     in
     { title = "Personal Finance Manager"
-    , body = [ viewPage ]
+    , body = 
+        [ cssLink
+        , viewPage 
+        ]
     }
 
 
 viewHome : Model -> Html Msg
 viewHome model =
     let
-        accountPadLen =
-            60
-
-        amountPadLen =
-            12
-
         allCategories : List Category
         allCategories =
             model.book
                 |> Dict.values
                 |> List.concatMap (\tx -> [ tx.from.category, tx.to.category ])
                 |> uniqueBy .name
-    in
-    H.div []
-        [ H.pre []
-            [ H.text <|
-                Debug.toString
-                    { dialog = model.dialog }
-            , H.div []
-                [ H.a [ Route.href Route.UI ] [ H.text <| "Go to UI" ] ]
-            ]
-        , H.div [ HA.style "margin-bottom" "10px" ]
-            [ H.h3 [] [ H.text "Balances (by category)" ]
-            , H.div []
-                (List.map
-                    (\category ->
-                        H.div []
-                            [ H.h4
-                                [ HA.style "margin-top" "0"
-                                , HA.style "margin-bottom" "0"
-                                ]
-                                [ H.text category.name ]
-                            , H.ul
-                                [ HA.class "entries" ]
-                                (List.map
-                                    (\o ->
-                                        H.li [ HA.class "entry" ]
-                                            [ H.text <| String.padRight accountPadLen '.' o.name
-                                            , H.text ":\u{00A0}"
-                                            , H.text <|
-                                                String.padLeft amountPadLen '\u{00A0}' <|
-                                                    amountFmt <|
-                                                        balance model.book o
-                                            ]
-                                    )
-                                    (List.filter (\o -> o.category == category) allAccounts_)
+                
+        transactions : List ( Int, TransactionView )
+        transactions =
+            List.sortBy
+                (\( _, tx ) -> Time.posixToMillis tx.date)
+                (Dict.toList model.book)
+
+        transactions2 : List ( Int, TransactionViewWithBalance )
+        transactions2 =
+            let
+                f :
+                    ( Int, TransactionView )
+                    -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
+                    -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
+                f ( transactionId, o ) ( prevBalance, txs ) =
+                    let
+                        newBalance =
+                            Decimal.add
+                                prevBalance
+                                (if o.to.name == checkingAccount.name then
+                                    o.amount
+
+                                 else if o.from.name == checkingAccount.name then
+                                    Decimal.negate o.amount
+
+                                 else
+                                    zero
                                 )
-                            ]
+                    in
+                    ( newBalance
+                    , ( transactionId
+                      , { date = o.date
+                        , descr = o.descr
+                        , from = o.from
+                        , to = o.to
+                        , amount = o.amount
+                        , balanceMovement = { from = prevBalance, to = newBalance }
+                        }
+                      )
+                        :: txs
+                    )
+            in
+            List.reverse <|
+                Tuple.second <|
+                    List.foldl
+                        f
+                        ( zero, [] )
+                        transactions
+    in
+    H.div [ HA.class "container" ]
+        [ H.div [ HA.class "section" ]
+            [ H.div [ HA.class "debug-info" ]
+                [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
+            ]
+        , H.div [ HA.class "section" ]
+            [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
+            , H.div [ HA.class "balances" ]
+                (List.concatMap
+                    (\category ->
+                        List.map
+                            (\account ->
+                                let
+                                    accountBalance = balance model.book account
+                                    colorAccent = 
+                                        if category.name == "Assets" then
+                                            "#3498db"
+                                        else if category.name == "Expenses" then
+                                            "#e74c3c"
+                                        else
+                                            "#9b59b6"
+                                in
+                                H.div [ HA.class "balance-card", HA.style "border-left-color" colorAccent ]
+                                    [ H.div [ HA.class "balance-card__category" ] [ H.text category.name ]
+                                    , H.div [ HA.class "balance-card__account" ] [ H.text account.name ]
+                                    , H.div [ HA.class "balance-card__amount" ] [ H.text (amountFmt accountBalance) ]
+                                    ]
+                            )
+                            (List.filter (\o -> o.category == category) allAccounts_)
                     )
                     allCategories
                 )
             ]
-        , H.hr
-            [ HA.style "border-color" "#333"
-            , HA.style "margin" "30px 0"
-            ]
-            []
-        , H.div [ HA.style "margin-top" "40px" ]
-            [ H.h3
-                [ HA.style "margin-bottom" "0"
-                ]
-                [ H.text "Transactions"
-                , H.span [ HA.style "margin-left" "10px" ]
-                    [ H.button
-                        [ HE.onClick AddTransactionClicked
-                        ]
-                        [ H.text "Add" ]
+        , H.div [ HA.class "section" ]
+            [ H.div [ HA.class "transaction-list" ]
+                [ H.div [ HA.class "transaction-list__header" ]
+                    [ H.h3 [] [ H.text "Transactions" ]
+                    , H.button 
+                        [ HA.class "button button--primary"
+                        , HE.onClick AddTransactionClicked
+                        ] 
+                        [ H.text "Add Transaction" ]
                     ]
-                ]
-            , H.ul
-                [ HA.class "entries"
-                , HA.style "padding-left" "10px"
-                ]
-                (let
-                    transactions : List ( Int, TransactionView )
-                    transactions =
-                        List.sortBy
-                            (\( _, tx ) -> Time.posixToMillis tx.date)
-                            (Dict.toList model.book)
+                , H.ul [ HA.class "transaction-list__items" ]
+                    (List.map
+                        (\( transactionId, tx ) ->
+                            let
+                                isPositive =
+                                    Decimal.gt tx.amount Decimal.zero
 
-                    transactions2 : List ( Int, TransactionViewWithBalance )
-                    transactions2 =
-                        let
-                            f :
-                                ( Int, TransactionView )
-                                -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
-                                -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
-                            f ( transactionId, o ) ( prevBalance, txs ) =
-                                let
-                                    newBalance =
-                                        Decimal.add
-                                            prevBalance
-                                            (if o.to.name == checkingAccount.name then
-                                                o.amount
+                                amountClass =
+                                    if isPositive then
+                                        "transaction-item__amount transaction-item__amount--positive"
+                                    else
+                                        "transaction-item__amount transaction-item__amount--negative"
 
-                                             else if o.from.name == checkingAccount.name then
-                                                Decimal.negate o.amount
-
-                                             else
-                                                zero
-                                            )
-                                in
-                                ( newBalance
-                                , ( transactionId
-                                  , { date = o.date
-                                    , descr = o.descr
-                                    , from = o.from
-                                    , to = o.to
-                                    , amount = o.amount
-                                    , balanceMovement = { from = prevBalance, to = newBalance }
-                                    }
-                                  )
-                                    :: txs
-                                )
-                        in
-                        List.reverse <|
-                            Tuple.second <|
-                                List.foldl
-                                    f
-                                    ( zero, [] )
-                                    transactions
-                 in
-                 List.map
-                    (\( transactionId, o ) ->
-                        H.span []
-                            [ H.li
-                                [ HA.class "entry tx"
+                                amountSign =
+                                    if isPositive then
+                                        "+"
+                                    else
+                                        ""
+                            in
+                            H.li 
+                                [ HA.class "transaction-item"
                                 , HE.onClick (TransactionClicked transactionId)
                                 ]
-                                [ H.span
-                                    [ HA.style "display" "inline-block"
-                                    , HA.style "width" "30px"
+                                [ H.div [ HA.class "transaction-item__details" ]
+                                    [ H.div [ HA.class "transaction-item__description" ]
+                                        [ H.text tx.descr ]
+                                    , H.div [ HA.class "transaction-item__accounts" ]
+                                        [ H.text (tx.from.name ++ " → " ++ tx.to.name) ]
                                     ]
-                                    [ H.text <| String.fromInt transactionId ]
-                                , H.text <| String.padRight accountPadLen '.' o.descr
-                                , H.text ":\u{00A0}"
-                                , H.text <| String.padLeft amountPadLen '\u{00A0}' <| amountFmt o.amount
-                                , H.span
-                                    [ HA.title <| Iso8601.fromTime o.date
-                                    ]
-                                    [ H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]" ]
-                                , H.span []
-                                    [ H.text <|
-                                        String.padLeft amountPadLen
-                                            '\u{00A0}'
-                                            (amountFmt o.balanceMovement.from)
-                                    , H.text "\u{00A0}\u{00A0}->"
-                                    , H.text <|
-                                        String.padLeft
-                                            amountPadLen
-                                            '\u{00A0}'
-                                            (amountFmt o.balanceMovement.to)
-                                    ]
+                                , H.div [ HA.class "transaction-item__date" ]
+                                    [ H.text (dateFmt tx.date) ]
+                                , H.div [ HA.class amountClass ]
+                                    [ H.text (amountSign ++ amountFmt tx.amount) ]
                                 ]
-                            ]
+                        )
+                        transactions2
                     )
-                    transactions2
-                )
+                ]
             ]
         , case model.dialog of
             Nothing ->
@@ -472,11 +469,8 @@ viewHome model =
 
 field : { a | onInput : String -> msg, text : String, value : String } -> Html msg
 field { onInput, text, value } =
-    H.div []
-        [ H.label
-            [ HA.style "display" "inline-block"
-            , HA.style "min-width" "110px"
-            ]
+    H.div [ HA.class "field" ]
+        [ H.label []
             [ H.text text ]
         , H.input
             [ HA.value value
@@ -509,42 +503,60 @@ viewDialog { title, saveMsg, fields } =
 
 viewEditDialog : MkEditDialog -> Html Msg
 viewEditDialog data =
-    viewDialog
-        { title = "Edit transaction"
-        , saveMsg = EditDialogChanged EditDialogSave
-        , fields =
-            [ field
-                { onInput = EditDialogChanged << EditDescrChanged
-                , text = "Description"
-                , value = data.descr
-                }
-            , field
-                { onInput = EditDialogChanged << EditAmountChanged
-                , text = "Amount"
-                , value = data.amount
-                }
+    H.div []
+        [ H.h3 [] [ H.text "Edit Transaction" ]
+        , field
+            { text = "Description"
+            , value = data.descr
+            , onInput = \str -> EditDialogChanged (EditDescrChanged str)
+            }
+        , field
+            { text = "Amount"
+            , value = data.amount
+            , onInput = \str -> EditDialogChanged (EditAmountChanged str)
+            }
+        , H.div [ HA.class "actions" ]
+            [ H.button
+                [ HA.class "button"
+                , HE.onClick EscapedPressed
+                ]
+                [ H.text "Cancel" ]
+            , H.button
+                [ HA.class "button button--primary"
+                , HE.onClick (EditDialogChanged EditDialogSave)
+                ]
+                [ H.text "Save" ]
             ]
-        }
+        ]
 
 
 viewCreateDialog : MkCreateDialog -> Html Msg
 viewCreateDialog data =
-    viewDialog
-        { title = "Create transaction"
-        , saveMsg = CreateDialogChanged CreateDialogSave
-        , fields =
-            [ field
-                { onInput = CreateDialogChanged << CreateDescrChanged
-                , text = "Description"
-                , value = data.descr
-                }
-            , field
-                { onInput = CreateDialogChanged << CreateAmountChanged
-                , text = "Amount"
-                , value = data.amount
-                }
+    H.div []
+        [ H.h3 [] [ H.text "Add Transaction" ]
+        , field
+            { text = "Description"
+            , value = data.descr
+            , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
+            }
+        , field
+            { text = "Amount"
+            , value = data.amount
+            , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
+            }
+        , H.div [ HA.class "actions" ]
+            [ H.button
+                [ HA.class "button"
+                , HE.onClick EscapedPressed
+                ]
+                [ H.text "Cancel" ]
+            , H.button
+                [ HA.class "button button--primary"
+                , HE.onClick (CreateDialogChanged CreateDialogSave)
+                ]
+                [ H.text "Add" ]
             ]
-        }
+        ]
 
 
 onDay : Int -> Time.Posix
