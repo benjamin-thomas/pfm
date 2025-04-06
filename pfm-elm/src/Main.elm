@@ -4,6 +4,7 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
+import Domain exposing (Account, Category, TransactionViewWithBalance)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -14,6 +15,7 @@ import Set
 import Task
 import Time
 import Url exposing (Url)
+import Utils exposing (formatDateForInput)
 
 
 port escapePressed : (() -> msg) -> Sub msg
@@ -51,16 +53,6 @@ type alias TransactionView =
     , from : Account
     , to : Account
     , amount : Decimal
-    }
-
-
-type alias TransactionViewWithBalance =
-    { date : Time.Posix
-    , descr : String
-    , from : Account
-    , to : Account
-    , amount : Decimal
-    , balanceMovement : { from : Decimal, to : Decimal }
     }
 
 
@@ -321,9 +313,9 @@ view model =
                         []
     in
     { title = "Personal Finance Manager"
-    , body = 
+    , body =
         [ cssLink
-        , viewPage 
+        , viewPage
         ]
     }
 
@@ -337,7 +329,7 @@ viewHome model =
                 |> Dict.values
                 |> List.concatMap (\tx -> [ tx.from.category, tx.to.category ])
                 |> uniqueBy .name
-                
+
         transactions : List ( Int, TransactionView )
         transactions =
             List.sortBy
@@ -399,12 +391,16 @@ viewHome model =
                         List.map
                             (\account ->
                                 let
-                                    accountBalance = balance model.book account
-                                    colorAccent = 
+                                    accountBalance =
+                                        balance model.book account
+
+                                    colorAccent =
                                         if category.name == "Assets" then
                                             "#3498db"
+
                                         else if category.name == "Expenses" then
                                             "#e74c3c"
+
                                         else
                                             "#9b59b6"
                                 in
@@ -423,10 +419,10 @@ viewHome model =
             [ H.div [ HA.class "transaction-list" ]
                 [ H.div [ HA.class "transaction-list__header" ]
                     [ H.h3 [] [ H.text "Transactions" ]
-                    , H.button 
+                    , H.button
                         [ HA.class "button button--primary"
                         , HE.onClick AddTransactionClicked
-                        ] 
+                        ]
                         [ H.text "Add Transaction" ]
                     ]
                 , H.ul [ HA.class "transaction-list__items" ]
@@ -439,16 +435,18 @@ viewHome model =
                                 amountClass =
                                     if isPositive then
                                         "transaction-item__amount transaction-item__amount--positive"
+
                                     else
                                         "transaction-item__amount transaction-item__amount--negative"
 
                                 amountSign =
                                     if isPositive then
                                         "+"
+
                                     else
                                         ""
                             in
-                            H.li 
+                            H.li
                                 [ HA.class "transaction-item"
                                 , HE.onClick (TransactionClicked transactionId)
                                 ]
@@ -608,30 +606,35 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
         dateOnly =
             if String.contains "T" date then
                 String.split "T" date |> List.head |> Maybe.withDefault date
+
             else
                 date
-                
+
         timeOnly =
             if String.contains "T" date then
-                String.split "T" date 
-                    |> List.drop 1 
-                    |> List.head 
+                String.split "T" date
+                    |> List.drop 1
+                    |> List.head
                     |> Maybe.withDefault "00:00"
+
             else
                 "00:00"
-                
+
         inputType =
             if showTime then
                 "datetime-local"
+
             else
                 "date"
-                
+
         inputValue =
             if showTime then
                 if String.contains "T" date then
                     date
+
                 else
                     date ++ "T" ++ timeOnly
+
             else
                 dateOnly
     in
@@ -653,20 +656,25 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
                 ]
             ]
         , H.input
-            ([ HA.class "field__input"
-             , HA.type_ inputType
-             , HA.value inputValue
-             , HE.onInput (\newValue ->
-                if showTime then
-                    onDateInput newValue
-                else
+            [ HA.class "field__input"
+            , HA.type_ inputType
+            , HA.value inputValue
+            , HE.onInput
+                (\newValue ->
+                    if showTime then
+                        onDateInput newValue
+
+                    else
                     -- Preserve any existing time when changing just the date
-                    if String.contains "T" date then
+                    if
+                        String.contains "T" date
+                    then
                         onDateInput (newValue ++ "T" ++ timeOnly)
+
                     else
                         onDateInput newValue
-              )
-             ])
+                )
+            ]
             []
         ]
 
@@ -680,10 +688,15 @@ field { onInput, text, value, id } =
             ([ HA.class "field__input"
              , HA.value value
              , HE.onInput onInput
-             ] ++ (case id of
-                    Just idStr -> [ HA.id idStr ]
-                    Nothing -> []
-                 ))
+             ]
+                ++ (case id of
+                        Just idStr ->
+                            [ HA.id idStr ]
+
+                        Nothing ->
+                            []
+                   )
+            )
             []
         ]
 
@@ -696,9 +709,10 @@ accountSelect { onInput, text, value, accounts, excludeAccount } =
                 Just excludeName ->
                     if String.isEmpty excludeName then
                         accounts
+
                     else
                         List.filter (\account -> account.name /= excludeName) accounts
-                
+
                 Nothing ->
                     accounts
     in
@@ -1040,11 +1054,13 @@ handleEditDialog id model =
         Just tx ->
             let
                 -- Check if the date has time information (not just 00:00:00)
-                dateString = Iso8601.fromTime tx.date
-                hasTimeInfo = 
-                    String.contains "T" dateString && 
-                    not (String.endsWith "T00:00:00.000Z" dateString) &&
-                    not (String.endsWith "T00:00:00Z" dateString)
+                dateString =
+                    Iso8601.fromTime tx.date
+
+                hasTimeInfo =
+                    String.contains "T" dateString
+                        && not (String.endsWith "T00:00:00.000Z" dateString)
+                        && not (String.endsWith "T00:00:00Z" dateString)
             in
             ( { model
                 | dialog =
@@ -1064,55 +1080,6 @@ handleEditDialog id model =
 
         Nothing ->
             ( model, Cmd.none )
-
-
-formatDateForInput : Time.Posix -> Bool -> String
-formatDateForInput time showTime =
-    let
-        year = String.fromInt (Time.toYear Time.utc time)
-        
-        month = 
-            Time.toMonth Time.utc time
-                |> monthToInt
-                |> String.fromInt
-                |> String.padLeft 2 '0'
-        
-        day =
-            Time.toDay Time.utc time
-                |> String.fromInt
-                |> String.padLeft 2 '0'
-        
-        hour =
-            Time.toHour Time.utc time
-                |> String.fromInt
-                |> String.padLeft 2 '0'
-        
-        minute =
-            Time.toMinute Time.utc time
-                |> String.fromInt
-                |> String.padLeft 2 '0'
-    in
-    if showTime then
-        year ++ "-" ++ month ++ "-" ++ day ++ "T" ++ hour ++ ":" ++ minute
-    else
-        year ++ "-" ++ month ++ "-" ++ day
-
-
-monthToInt : Time.Month -> Int
-monthToInt month =
-    case month of
-        Time.Jan -> 1
-        Time.Feb -> 2
-        Time.Mar -> 3
-        Time.Apr -> 4
-        Time.May -> 5
-        Time.Jun -> 6
-        Time.Jul -> 7
-        Time.Aug -> 8
-        Time.Sep -> 9
-        Time.Oct -> 10
-        Time.Nov -> 11
-        Time.Dec -> 12
 
 
 subscriptions : Model -> Sub Msg
