@@ -8,6 +8,7 @@ import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
+import Page.UI as UI_Page
 import Set
 import Task
 import Time
@@ -282,16 +283,11 @@ view model =
                     viewHome model
 
                 UI ->
-                    viewUI model
+                    UI_Page.view
     in
     { title = "Personal Finance Manager"
     , body = [ viewPage ]
     }
-
-
-viewUI : Model -> Html Msg
-viewUI model =
-    H.text "UI"
 
 
 viewHome : Model -> Html Msg
