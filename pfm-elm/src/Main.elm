@@ -176,13 +176,19 @@ balance txs account =
 type alias MkEditDialog =
     { transactionId : Int
     , descr : String
+    , from : String
+    , to : String
     , amount : String
+    , date : String
     }
 
 
 type alias MkCreateDialog =
     { descr : String
+    , from : String
+    , to : String
     , amount : String
+    , date : String
     }
 
 
@@ -210,13 +216,19 @@ type alias Model =
 
 type MkEditDialogChanged
     = EditDescrChanged String
+    | EditFromChanged String
+    | EditToChanged String
     | EditAmountChanged String
+    | EditDateChanged String
     | EditDialogSave
 
 
 type MkCreateDialogChanged
     = CreateDescrChanged String
+    | CreateFromChanged String
+    | CreateToChanged String
     | CreateAmountChanged String
+    | CreateDateChanged String
     | CreateDialogSave
 
 
@@ -443,6 +455,11 @@ viewHome model =
                                     [ H.text (dateFmt tx.date) ]
                                 , H.div [ HA.class amountClass ]
                                     [ H.text (amountSign ++ amountFmt tx.amount) ]
+                                , H.div [ HA.class "transaction-item__balance-movement" ]
+                                    [ H.span [ HA.class "balance-before" ] [ H.text (amountFmt tx.balanceMovement.from) ]
+                                    , H.span [ HA.class "arrow-icon" ] [ H.text " → " ]
+                                    , H.span [ HA.class "balance-after" ] [ H.text (amountFmt tx.balanceMovement.to) ]
+                                    ]
                                 ]
                         )
                         transactions2
@@ -454,70 +471,51 @@ viewHome model =
                 H.text ""
 
             Just (EditDialog data) ->
-                H.node "dialog"
-                    [ HA.attribute "open" ""
+                H.div [ HA.class "dialog-overlay" ]
+                    [ H.div [ HA.class "dialog" ]
+                        [ viewEditDialog data ]
                     ]
-                    [ viewEditDialog data ]
 
             Just (CreateDialog data) ->
-                H.node "dialog"
-                    [ HA.attribute "open" ""
+                H.div [ HA.class "dialog-overlay" ]
+                    [ H.div [ HA.class "dialog" ]
+                        [ viewCreateDialog data ]
                     ]
-                    [ viewCreateDialog data ]
         ]
-
-
-field : { a | onInput : String -> msg, text : String, value : String } -> Html msg
-field { onInput, text, value } =
-    H.div [ HA.class "field" ]
-        [ H.label []
-            [ H.text text ]
-        , H.input
-            [ HA.value value
-            , HE.onInput onInput
-            ]
-            []
-        ]
-
-
-viewDialog : { a | title : String, saveMsg : Msg, fields : List (Html Msg) } -> Html Msg
-viewDialog { title, saveMsg, fields } =
-    H.div [ HA.style "margin-bottom" "20px" ]
-        (List.concat
-            [ [ H.h3 [] [ H.text title ] ]
-            , fields
-            , [ H.div [ HA.style "margin-top" "30px" ]
-                    [ H.button
-                        [ HE.onClick EscapedPressed
-                        ]
-                        [ H.text "Cancel" ]
-                    , H.button
-                        [ HE.onClick saveMsg
-                        ]
-                        [ H.text "Save" ]
-                    ]
-              ]
-            ]
-        )
 
 
 viewEditDialog : MkEditDialog -> Html Msg
 viewEditDialog data =
-    H.div []
-        [ H.h3 [] [ H.text "Edit Transaction" ]
+    H.div [ HA.class "dialog-content" ]
+        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
         , field
             { text = "Description"
             , value = data.descr
             , onInput = \str -> EditDialogChanged (EditDescrChanged str)
             }
         , field
+            { text = "From"
+            , value = data.from
+            , onInput = \str -> EditDialogChanged (EditFromChanged str)
+            }
+        , field
+            { text = "To"
+            , value = data.to
+            , onInput = \str -> EditDialogChanged (EditToChanged str)
+            }
+        , field
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> EditDialogChanged (EditAmountChanged str)
             }
-        , H.div [ HA.class "actions" ]
+        , field
+            { text = "Date"
+            , value = data.date
+            , onInput = \str -> EditDialogChanged (EditDateChanged str)
+            }
+        , H.div [ HA.class "dialog-actions" ]
             [ H.button
-                [ HA.class "button"
+                [ HA.class "button button--secondary"
                 , HE.onClick EscapedPressed
                 ]
                 [ H.text "Cancel" ]
@@ -532,21 +530,36 @@ viewEditDialog data =
 
 viewCreateDialog : MkCreateDialog -> Html Msg
 viewCreateDialog data =
-    H.div []
-        [ H.h3 [] [ H.text "Add Transaction" ]
+    H.div [ HA.class "dialog-content" ]
+        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
         , field
             { text = "Description"
             , value = data.descr
             , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
             }
         , field
+            { text = "From"
+            , value = data.from
+            , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
+            }
+        , field
+            { text = "To"
+            , value = data.to
+            , onInput = \str -> CreateDialogChanged (CreateToChanged str)
+            }
+        , field
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
             }
-        , H.div [ HA.class "actions" ]
+        , field
+            { text = "Date"
+            , value = data.date
+            , onInput = \str -> CreateDialogChanged (CreateDateChanged str)
+            }
+        , H.div [ HA.class "dialog-actions" ]
             [ H.button
-                [ HA.class "button"
+                [ HA.class "button button--secondary"
                 , HE.onClick EscapedPressed
                 ]
                 [ H.text "Cancel" ]
@@ -556,6 +569,20 @@ viewCreateDialog data =
                 ]
                 [ H.text "Add" ]
             ]
+        ]
+
+
+field : { a | onInput : String -> msg, text : String, value : String } -> Html msg
+field { onInput, text, value } =
+    H.div [ HA.class "field" ]
+        [ H.label [ HA.class "field__label" ]
+            [ H.text text ]
+        , H.input
+            [ HA.class "field__input"
+            , HA.value value
+            , HE.onInput onInput
+            ]
+            []
         ]
 
 
@@ -674,7 +701,10 @@ update msg model =
                                 EditDialog
                                     { transactionId = transactionId
                                     , descr = tx.descr
+                                    , from = tx.from.name
+                                    , to = tx.to.name
                                     , amount = Decimal.toString tx.amount
+                                    , date = Iso8601.fromTime tx.date
                                     }
                     }
 
@@ -692,8 +722,23 @@ update msg model =
                             , Cmd.none
                             )
 
+                        EditFromChanged str ->
+                            ( { model | dialog = Just <| EditDialog { data | from = str } }
+                            , Cmd.none
+                            )
+
+                        EditToChanged str ->
+                            ( { model | dialog = Just <| EditDialog { data | to = str } }
+                            , Cmd.none
+                            )
+
                         EditAmountChanged str ->
                             ( { model | dialog = Just <| EditDialog { data | amount = str } }
+                            , Cmd.none
+                            )
+
+                        EditDateChanged str ->
+                            ( { model | dialog = Just <| EditDialog { data | date = str } }
                             , Cmd.none
                             )
 
@@ -701,24 +746,45 @@ update msg model =
                             let
                                 newBook : Dict Int TransactionView
                                 newBook =
-                                    Dict.update data.transactionId
-                                        (Maybe.andThen
-                                            (\old ->
-                                                Just
-                                                    { old
-                                                        | descr = data.descr
-                                                        , amount =
-                                                            Maybe.withDefault
-                                                                old.amount
-                                                                (Decimal.fromString data.amount)
-                                                    }
-                                            )
+                                    Dict.update
+                                        data.transactionId
+                                        (\mbOld ->
+                                            case mbOld of
+                                                Nothing ->
+                                                    Nothing
+
+                                                Just old ->
+                                                    let
+                                                        fromAccount =
+                                                            Dict.get data.from allAccounts
+                                                                |> Maybe.withDefault old.from
+
+                                                        toAccount =
+                                                            Dict.get data.to allAccounts
+                                                                |> Maybe.withDefault old.to
+
+                                                        newDate =
+                                                            Iso8601.toTime data.date
+                                                                |> Result.toMaybe
+                                                                |> Maybe.withDefault old.date
+                                                    in
+                                                    Just
+                                                        { old
+                                                            | descr = data.descr
+                                                            , from = fromAccount
+                                                            , to = toAccount
+                                                            , amount =
+                                                                Maybe.withDefault
+                                                                    old.amount
+                                                                    (Decimal.fromString data.amount)
+                                                            , date = newDate
+                                                        }
                                         )
                                         model.book
                             in
                             ( { model
-                                | dialog = Nothing
-                                , book = newBook
+                                | book = newBook
+                                , dialog = Nothing
                               }
                             , Cmd.none
                             )
@@ -734,7 +800,10 @@ update msg model =
                     Just <|
                         CreateDialog
                             { descr = ""
+                            , from = ""
+                            , to = ""
                             , amount = ""
+                            , date = ""
                             }
               }
             , Cmd.none
@@ -749,8 +818,23 @@ update msg model =
                             , Cmd.none
                             )
 
+                        CreateFromChanged str ->
+                            ( { model | dialog = Just <| CreateDialog { data | from = str } }
+                            , Cmd.none
+                            )
+
+                        CreateToChanged str ->
+                            ( { model | dialog = Just <| CreateDialog { data | to = str } }
+                            , Cmd.none
+                            )
+
                         CreateAmountChanged str ->
                             ( { model | dialog = Just <| CreateDialog { data | amount = str } }
+                            , Cmd.none
+                            )
+
+                        CreateDateChanged str ->
+                            ( { model | dialog = Just <| CreateDialog { data | date = str } }
                             , Cmd.none
                             )
 
@@ -758,29 +842,30 @@ update msg model =
                             let
                                 newTransaction : TransactionView
                                 newTransaction =
-                                    { date = model.now
+                                    let
+                                        fromAccount =
+                                            Dict.get data.from allAccounts
+                                                |> Maybe.withDefault checkingAccount
+
+                                        toAccount =
+                                            Dict.get data.to allAccounts
+                                                |> Maybe.withDefault spar
+
+                                        parsedDate =
+                                            Iso8601.toTime data.date
+                                                |> Result.toMaybe
+                                                |> Maybe.withDefault model.now
+                                    in
+                                    { date = parsedDate
                                     , descr = data.descr
-                                    , from = checkingAccount
-                                    , to = spar
+                                    , from = fromAccount
+                                    , to = toAccount
                                     , amount = Maybe.withDefault zero <| Decimal.fromString data.amount
                                     }
-
-                                nextId : Int
-                                nextId =
-                                    Dict.keys model.book
-                                        |> List.maximum
-                                        |> Maybe.map ((+) 1)
-                                        |> Maybe.withDefault 0
-
-                                newBook : Dict Int TransactionView
-                                newBook =
-                                    Dict.insert nextId
-                                        newTransaction
-                                        model.book
                             in
                             ( { model
                                 | dialog = Nothing
-                                , book = newBook
+                                , book = Dict.insert (Dict.size model.book + 1) newTransaction model.book
                               }
                             , Cmd.none
                             )

@@ -438,6 +438,31 @@ a:hover {
     color: var(--color-negative);
 }
 
+.transaction-item__balance-movement {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    grid-column: span 4;
+    padding-top: var(--space-xs);
+}
+
+.balance-before,
+.balance-after {
+    white-space: nowrap;
+}
+
+.arrow-icon {
+    margin: 0 var(--space-xs);
+    font-size: 10px;
+}
+
+.balance-after {
+    font-weight: 500;
+    color: var(--color-text-tertiary);
+}
+
 /* Buttons */
 .button {
     background-color: var(--color-card-bg);
@@ -466,45 +491,84 @@ a:hover {
 }
 
 /* Dialog */
-dialog {
+.dialog-overlay {
     position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translateY(-50%);
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.dialog {
     background-color: var(--color-card-bg);
-    color: var(--color-text);
-    border: 1px solid var(--color-border-dark);
     border-radius: 8px;
-    padding: var(--space-lg);
-    min-width: 400px;
+    width: 100%;
+    max-width: 500px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    animation: dialog-appear 0.3s ease-out;
 }
 
-dialog h3 {
+@keyframes dialog-appear {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.dialog-content {
+    padding: var(--space-xl);
+}
+
+.dialog-title {
     margin-top: 0;
-    color: var(--color-text-bright);
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: var(--space-sm);
     margin-bottom: var(--space-lg);
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-bright);
 }
 
-dialog label {
-    color: var(--color-text-secondary);
-}
-
-dialog input, dialog select {
-    background-color: var(--color-bg);
-    border: 1px solid var(--color-border);
-    color: var(--color-text);
-    padding: 8px 12px;
-    border-radius: 4px;
+.field {
     margin-bottom: var(--space-md);
 }
 
-dialog .actions {
+.field__label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.field__input {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    background-color: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text);
+    font-size: 16px;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.field__input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
+.dialog-actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-md);
-    margin-top: var(--space-lg);
+    margin-top: var(--space-xl);
 }
 
 /* Legacy styles - keeping for compatibility */
