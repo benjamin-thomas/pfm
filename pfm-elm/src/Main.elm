@@ -9,11 +9,11 @@ import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
 import Page.UI as UI_Page
+import Route exposing (Route)
 import Set
 import Task
 import Time
 import Url exposing (Url)
-import Url.Parser as UP exposing (Parser)
 
 
 port escapePressed : (() -> msg) -> Sub msg
@@ -200,7 +200,7 @@ type Page
 type alias Model =
     { key : Nav.Key
     , url : Url
-    , page : Page
+    , route : Route
     , now : Time.Posix
     , zone : Time.Zone
     , book : Dict Int TransactionView
@@ -221,8 +221,8 @@ type MkCreateDialogChanged
 
 
 type Msg
-    = UrlChanged Url
-    | UrlRequestChanged UrlRequest
+    = UrlRequested UrlRequest
+    | UrlChanged Url
     | TransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
@@ -275,14 +275,14 @@ view model =
     let
         viewPage : Html Msg
         viewPage =
-            case model.page of
-                NotFound ->
+            case model.route of
+                Route.NotFound ->
                     H.text "Not found"
 
-                Home ->
+                Route.Home ->
                     viewHome model
 
-                UI ->
+                Route.UI ->
                     UI_Page.view
     in
     { title = "Personal Finance Manager"
@@ -311,6 +311,8 @@ viewHome model =
             [ H.text <|
                 Debug.toString
                     { dialog = model.dialog }
+            , H.div []
+                [ H.a [ Route.href Route.UI ] [ H.text <| "Go to UI" ] ]
             ]
         , H.div [ HA.style "margin-bottom" "10px" ]
             [ H.h3 [] [ H.text "Balances (by category)" ]
@@ -564,24 +566,6 @@ onDay n =
     Time.millisToPosix <| n * oneDay + offset
 
 
-routeParser : Parser (Page -> a) a
-routeParser =
-    UP.oneOf
-        [ UP.map Home UP.top
-        , UP.map UI <| UP.s "ui"
-        ]
-
-
-urlToPage : Url -> Page
-urlToPage url =
-    case UP.parse routeParser url of
-        Just page ->
-            page
-
-        Nothing ->
-            NotFound
-
-
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
     let
@@ -636,7 +620,7 @@ init () url key =
     in
     ( { key = key
       , url = url
-      , page = urlToPage url
+      , route = Route.fromUrl url
       , dialog = Nothing
       , book = book
       , now = Time.millisToPosix 0
@@ -649,12 +633,7 @@ init () url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        UrlChanged url ->
-            ( { model | url = url }
-            , Cmd.none
-            )
-
-        UrlRequestChanged urlRequest ->
+        UrlRequested urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
                     ( model
@@ -665,6 +644,14 @@ update msg model =
                     ( model
                     , Nav.load href
                     )
+
+        UrlChanged url ->
+            ( { model
+                | url = url
+                , route = Route.fromUrl url
+              }
+            , Cmd.none
+            )
 
         TransactionClicked transactionId ->
             ( case Dict.get transactionId model.book of
@@ -836,6 +823,6 @@ main =
         , view = view
         , update = update
         , subscriptions = subscriptions
-        , onUrlRequest = UrlRequestChanged
+        , onUrlRequest = UrlRequested
         , onUrlChange = UrlChanged
         }

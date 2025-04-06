@@ -1,6 +1,7 @@
 module Page.UI exposing (view)
 
 import Html as H exposing (Html)
+import Html.Attributes as HA
 
 
 
@@ -10,4 +11,7 @@ import Html as H exposing (Html)
 
 view : Html msg
 view =
-    H.text "UI"
+    H.div []
+        [ H.p [] [ H.text "UI" ]
+        , H.a [ HA.href "/" ] [ H.text "Go back to root" ]
+        ]
