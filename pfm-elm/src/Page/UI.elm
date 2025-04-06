@@ -246,7 +246,7 @@ viewTransactionItem ( id, transaction ) =
                 "+"
 
             else
-                ""
+                "-"
     in
     H.li [ HA.class "transaction-item" ]
         [ H.div [ HA.class "transaction-item__details" ]

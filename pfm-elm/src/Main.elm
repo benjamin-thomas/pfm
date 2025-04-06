@@ -430,7 +430,7 @@ viewHome model =
                         (\( transactionId, tx ) ->
                             let
                                 isPositive =
-                                    Decimal.gt tx.amount Decimal.zero
+                                    Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
 
                                 amountClass =
                                     if isPositive then
@@ -444,7 +444,7 @@ viewHome model =
                                         "+"
 
                                     else
-                                        ""
+                                        "-"
                             in
                             H.li
                                 [ HA.class "transaction-item"
