@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
-import Browser
+import Browser exposing (UrlRequest)
+import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
 import Html as H exposing (Html)
@@ -10,6 +11,8 @@ import Iso8601
 import Set
 import Task
 import Time
+import Url exposing (Url)
+import Url.Parser as UP exposing (Parser)
 
 
 port escapePressed : (() -> msg) -> Sub msg
@@ -44,6 +47,16 @@ type alias TransactionView =
     , from : Account
     , to : Account
     , amount : Decimal
+    }
+
+
+type alias TransactionViewWithBalance =
+    { date : Time.Posix
+    , descr : String
+    , from : Account
+    , to : Account
+    , amount : Decimal
+    , balanceMovement : { from : Decimal, to : Decimal }
     }
 
 
@@ -177,8 +190,17 @@ type Dialog
     | CreateDialog MkCreateDialog
 
 
+type Page
+    = NotFound
+    | Home
+    | UI
+
+
 type alias Model =
-    { now : Time.Posix
+    { key : Nav.Key
+    , url : Url
+    , page : Page
+    , now : Time.Posix
     , zone : Time.Zone
     , book : Dict Int TransactionView
     , dialog : Maybe Dialog
@@ -198,7 +220,9 @@ type MkCreateDialogChanged
 
 
 type Msg
-    = TransactionClicked Int
+    = UrlChanged Url
+    | UrlRequestChanged UrlRequest
+    | TransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
@@ -245,8 +269,33 @@ dateFmt =
         << Iso8601.fromTime
 
 
-view : Model -> Html Msg
+view : Model -> Browser.Document Msg
 view model =
+    let
+        viewPage : Html Msg
+        viewPage =
+            case model.page of
+                NotFound ->
+                    H.text "Not found"
+
+                Home ->
+                    viewHome model
+
+                UI ->
+                    viewUI model
+    in
+    { title = "Personal Finance Manager"
+    , body = [ viewPage ]
+    }
+
+
+viewUI : Model -> Html Msg
+viewUI model =
+    H.text "UI"
+
+
+viewHome : Model -> Html Msg
+viewHome model =
     let
         accountPadLen =
             60
@@ -325,6 +374,48 @@ view model =
                         List.sortBy
                             (\( _, tx ) -> Time.posixToMillis tx.date)
                             (Dict.toList model.book)
+
+                    transactions2 : List ( Int, TransactionViewWithBalance )
+                    transactions2 =
+                        let
+                            f :
+                                ( Int, TransactionView )
+                                -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
+                                -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
+                            f ( transactionId, o ) ( prevBalance, txs ) =
+                                let
+                                    newBalance =
+                                        Decimal.add
+                                            prevBalance
+                                            (if o.to.name == checkingAccount.name then
+                                                o.amount
+
+                                             else if o.from.name == checkingAccount.name then
+                                                Decimal.negate o.amount
+
+                                             else
+                                                zero
+                                            )
+                                in
+                                ( newBalance
+                                , ( transactionId
+                                  , { date = o.date
+                                    , descr = o.descr
+                                    , from = o.from
+                                    , to = o.to
+                                    , amount = o.amount
+                                    , balanceMovement = { from = prevBalance, to = newBalance }
+                                    }
+                                  )
+                                    :: txs
+                                )
+                        in
+                        List.reverse <|
+                            Tuple.second <|
+                                List.foldl
+                                    f
+                                    ( zero, [] )
+                                    transactions
                  in
                  List.map
                     (\( transactionId, o ) ->
@@ -345,10 +436,22 @@ view model =
                                     [ HA.title <| Iso8601.fromTime o.date
                                     ]
                                     [ H.text <| "\u{00A0}\u{00A0}\u{00A0}[" ++ dateFmt o.date ++ "]" ]
+                                , H.span []
+                                    [ H.text <|
+                                        String.padLeft amountPadLen
+                                            '\u{00A0}'
+                                            (amountFmt o.balanceMovement.from)
+                                    , H.text "\u{00A0}\u{00A0}->"
+                                    , H.text <|
+                                        String.padLeft
+                                            amountPadLen
+                                            '\u{00A0}'
+                                            (amountFmt o.balanceMovement.to)
+                                    ]
                                 ]
                             ]
                     )
-                    transactions
+                    transactions2
                 )
             ]
         , case model.dialog of
@@ -465,8 +568,26 @@ onDay n =
     Time.millisToPosix <| n * oneDay + offset
 
 
-init : flags -> ( Model, Cmd Msg )
-init _ =
+routeParser : Parser (Page -> a) a
+routeParser =
+    UP.oneOf
+        [ UP.map Home UP.top
+        , UP.map UI <| UP.s "ui"
+        ]
+
+
+urlToPage : Url -> Page
+urlToPage url =
+    case UP.parse routeParser url of
+        Just page ->
+            page
+
+        Nothing ->
+            NotFound
+
+
+init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init () url key =
     let
         v : String -> Decimal
         v =
@@ -517,7 +638,10 @@ init _ =
                   )
                 ]
     in
-    ( { dialog = Nothing
+    ( { key = key
+      , url = url
+      , page = urlToPage url
+      , dialog = Nothing
       , book = book
       , now = Time.millisToPosix 0
       , zone = Time.utc
@@ -529,6 +653,23 @@ init _ =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        UrlChanged url ->
+            ( { model | url = url }
+            , Cmd.none
+            )
+
+        UrlRequestChanged urlRequest ->
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model
+                    , Nav.pushUrl model.key (Url.toString url)
+                    )
+
+                Browser.External href ->
+                    ( model
+                    , Nav.load href
+                    )
+
         TransactionClicked transactionId ->
             ( case Dict.get transactionId model.book of
                 Just tx ->
@@ -624,8 +765,8 @@ update msg model =
                                 newTransaction =
                                     { date = model.now
                                     , descr = data.descr
-                                    , from = openingBalance
-                                    , to = checkingAccount
+                                    , from = checkingAccount
+                                    , to = spar
                                     , amount = Maybe.withDefault zero <| Decimal.fromString data.amount
                                     }
 
@@ -688,15 +829,17 @@ subscriptions _ =
     Sub.batch
         [ escapePressed (\() -> EscapedPressed)
         , enterPressed (\() -> EnterPressed)
-        , Time.every 1000 GotTime
+        , Time.every (Debug.log "time" 9991000) GotTime
         ]
 
 
 main : Program () Model Msg
 main =
-    Browser.element
+    Browser.application
         { init = init
         , view = view
         , update = update
         , subscriptions = subscriptions
+        , onUrlRequest = UrlRequestChanged
+        , onUrlChange = UrlChanged
         }

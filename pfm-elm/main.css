@@ -1,3 +1,13 @@
+:root {
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    --space-xxl: 48px;
+}
+
+
 html {
     zoom: 1.4;
 }
@@ -10,6 +20,7 @@ html {
 .entries {
     display: inline-block;
     font-family: monospace;
+    /*font-size: var(--space-md);*/
 }
 
 .entry {
