@@ -180,6 +180,7 @@ type alias MkEditDialog =
     , to : String
     , amount : String
     , date : String
+    , showTime : Bool
     }
 
 
@@ -189,6 +190,7 @@ type alias MkCreateDialog =
     , to : String
     , amount : String
     , date : String
+    , showTime : Bool
     }
 
 
@@ -220,6 +222,7 @@ type MkEditDialogChanged
     | EditToChanged String
     | EditAmountChanged String
     | EditDateChanged String
+    | EditToggleTimeDisplay
     | EditDialogSave
 
 
@@ -229,6 +232,7 @@ type MkCreateDialogChanged
     | CreateToChanged String
     | CreateAmountChanged String
     | CreateDateChanged String
+    | CreateToggleTimeDisplay
     | CreateDialogSave
 
 
@@ -512,10 +516,12 @@ viewEditDialog data =
             , value = data.amount
             , onInput = \str -> EditDialogChanged (EditAmountChanged str)
             }
-        , field
+        , dateField
             { text = "Date"
-            , value = data.date
-            , onInput = \str -> EditDialogChanged (EditDateChanged str)
+            , date = data.date
+            , showTime = data.showTime
+            , onDateInput = \str -> EditDialogChanged (EditDateChanged str)
+            , onToggleTime = EditDialogChanged EditToggleTimeDisplay
             }
         , H.div [ HA.class "dialog-actions" ]
             [ H.button
@@ -560,10 +566,12 @@ viewCreateDialog data =
             , value = data.amount
             , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
             }
-        , field
+        , dateField
             { text = "Date"
-            , value = data.date
-            , onInput = \str -> CreateDialogChanged (CreateDateChanged str)
+            , date = data.date
+            , showTime = data.showTime
+            , onDateInput = \str -> CreateDialogChanged (CreateDateChanged str)
+            , onToggleTime = CreateDialogChanged CreateToggleTimeDisplay
             }
         , H.div [ HA.class "dialog-actions" ]
             [ H.button
@@ -577,6 +585,76 @@ viewCreateDialog data =
                 ]
                 [ H.text "Add" ]
             ]
+        ]
+
+
+dateField : { text : String, date : String, showTime : Bool, onDateInput : String -> msg, onToggleTime : msg } -> Html msg
+dateField { text, date, showTime, onDateInput, onToggleTime } =
+    let
+        -- Parse the current date string
+        dateOnly =
+            if String.contains "T" date then
+                String.split "T" date |> List.head |> Maybe.withDefault date
+            else
+                date
+                
+        timeOnly =
+            if String.contains "T" date then
+                String.split "T" date 
+                    |> List.drop 1 
+                    |> List.head 
+                    |> Maybe.withDefault "00:00"
+            else
+                "00:00"
+                
+        inputType =
+            if showTime then
+                "datetime-local"
+            else
+                "date"
+                
+        inputValue =
+            if showTime then
+                if String.contains "T" date then
+                    date
+                else
+                    date ++ "T" ++ timeOnly
+            else
+                dateOnly
+    in
+    H.div [ HA.class "field" ]
+        [ H.div [ HA.class "field__header" ]
+            [ H.label [ HA.class "field__label" ]
+                [ H.text text ]
+            , H.div [ HA.class "field__toggle" ]
+                [ H.label [ HA.class "toggle" ]
+                    [ H.input
+                        [ HA.type_ "checkbox"
+                        , HA.checked showTime
+                        , HE.onClick onToggleTime
+                        , HA.class "toggle__input"
+                        ]
+                        []
+                    , H.span [ HA.class "toggle__label" ] [ H.text "Include time" ]
+                    ]
+                ]
+            ]
+        , H.input
+            [ HA.class "field__input"
+            , HA.type_ inputType
+            , HA.value inputValue
+            , HE.onInput (\newValue ->
+                if showTime then
+                    onDateInput newValue
+                else
+                    -- Preserve any existing time when changing just the date
+                    if String.contains "T" date then
+                        onDateInput (newValue ++ "T" ++ timeOnly)
+                    else
+                        onDateInput newValue
+              )
+            ]
+            []
         ]
 
 
@@ -737,25 +815,7 @@ update msg model =
             )
 
         TransactionClicked transactionId ->
-            ( case Dict.get transactionId model.book of
-                Just tx ->
-                    { model
-                        | dialog =
-                            Just <|
-                                EditDialog
-                                    { transactionId = transactionId
-                                    , descr = tx.descr
-                                    , from = tx.from.name
-                                    , to = tx.to.name
-                                    , amount = Decimal.toString tx.amount
-                                    , date = Iso8601.fromTime tx.date
-                                    }
-                    }
-
-                Nothing ->
-                    model
-            , Cmd.none
-            )
+            handleEditDialog transactionId model
 
         EditDialogChanged subMsg ->
             case model.dialog of
@@ -783,6 +843,11 @@ update msg model =
 
                         EditDateChanged str ->
                             ( { model | dialog = Just <| EditDialog { data | date = str } }
+                            , Cmd.none
+                            )
+
+                        EditToggleTimeDisplay ->
+                            ( { model | dialog = Just <| EditDialog { data | showTime = not data.showTime } }
                             , Cmd.none
                             )
 
@@ -847,6 +912,7 @@ update msg model =
                             , to = ""
                             , amount = ""
                             , date = ""
+                            , showTime = False
                             }
               }
             , Cmd.none
@@ -878,6 +944,11 @@ update msg model =
 
                         CreateDateChanged str ->
                             ( { model | dialog = Just <| CreateDialog { data | date = str } }
+                            , Cmd.none
+                            )
+
+                        CreateToggleTimeDisplay ->
+                            ( { model | dialog = Just <| CreateDialog { data | showTime = not data.showTime } }
                             , Cmd.none
                             )
 
@@ -945,6 +1016,87 @@ update msg model =
             ( { model | zone = zone }
             , Cmd.none
             )
+
+
+handleEditDialog : Int -> Model -> ( Model, Cmd Msg )
+handleEditDialog id model =
+    case Dict.get id model.book of
+        Just tx ->
+            let
+                -- Check if the date has time information (not just 00:00:00)
+                dateString = Iso8601.fromTime tx.date
+                hasTimeInfo = 
+                    String.contains "T" dateString && 
+                    not (String.endsWith "T00:00:00.000Z" dateString) &&
+                    not (String.endsWith "T00:00:00Z" dateString)
+            in
+            ( { model
+                | dialog =
+                    Just <|
+                        EditDialog
+                            { transactionId = id
+                            , descr = tx.descr
+                            , from = tx.from.name
+                            , to = tx.to.name
+                            , amount = Decimal.toString tx.amount
+                            , date = formatDateForInput tx.date hasTimeInfo
+                            , showTime = hasTimeInfo
+                            }
+              }
+            , Cmd.none
+            )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+formatDateForInput : Time.Posix -> Bool -> String
+formatDateForInput time showTime =
+    let
+        year = String.fromInt (Time.toYear Time.utc time)
+        
+        month = 
+            Time.toMonth Time.utc time
+                |> monthToInt
+                |> String.fromInt
+                |> String.padLeft 2 '0'
+        
+        day =
+            Time.toDay Time.utc time
+                |> String.fromInt
+                |> String.padLeft 2 '0'
+        
+        hour =
+            Time.toHour Time.utc time
+                |> String.fromInt
+                |> String.padLeft 2 '0'
+        
+        minute =
+            Time.toMinute Time.utc time
+                |> String.fromInt
+                |> String.padLeft 2 '0'
+    in
+    if showTime then
+        year ++ "-" ++ month ++ "-" ++ day ++ "T" ++ hour ++ ":" ++ minute
+    else
+        year ++ "-" ++ month ++ "-" ++ day
+
+
+monthToInt : Time.Month -> Int
+monthToInt month =
+    case month of
+        Time.Jan -> 1
+        Time.Feb -> 2
+        Time.Mar -> 3
+        Time.Apr -> 4
+        Time.May -> 5
+        Time.Jun -> 6
+        Time.Jul -> 7
+        Time.Aug -> 8
+        Time.Sep -> 9
+        Time.Oct -> 10
+        Time.Nov -> 11
+        Time.Dec -> 12
 
 
 subscriptions : Model -> Sub Msg
