@@ -13,8 +13,28 @@
 <body>
     <div id="app"></div>
     <script>
+        // Fonction pour obtenir les paramètres de l'URL
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search;
+            const urlParams = new URLSearchParams(queryString);
+            
+            for (const [key, value] of urlParams.entries()) {
+                params[key] = value;
+            }
+            
+            return params;
+        }
+
+        // Obtenir les paramètres de l'URL
+        const urlParams = getUrlParams();
+        
+        // Initialiser l'application Elm avec les flags
         const app = Elm.Main.init({
             node: document.getElementById("app"),
+            flags: {
+                language: urlParams.lang === "fr" ? "French" : "English"
+            }
         });
 
         document.addEventListener("keyup", (event) => {
