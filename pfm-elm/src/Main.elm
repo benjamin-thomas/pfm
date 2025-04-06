@@ -22,6 +22,9 @@ port escapePressed : (() -> msg) -> Sub msg
 port enterPressed : (() -> msg) -> Sub msg
 
 
+port focusElement : String -> Cmd msg
+
+
 type alias Category =
     { name : String
     }
@@ -502,6 +505,7 @@ viewEditDialog data =
             { text = "Description"
             , value = data.descr
             , onInput = \str -> EditDialogChanged (EditDescrChanged str)
+            , id = Just "edit-description-field"
             }
         , accountSelect
             { text = "From"
@@ -521,6 +525,7 @@ viewEditDialog data =
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> EditDialogChanged (EditAmountChanged str)
+            , id = Just "edit-amount-field"
             }
         , dateField
             { text = "Date"
@@ -552,6 +557,7 @@ viewCreateDialog data =
             { text = "Description"
             , value = data.descr
             , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
+            , id = Just "create-description-field"
             }
         , accountSelect
             { text = "From"
@@ -571,6 +577,7 @@ viewCreateDialog data =
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
+            , id = Just "create-amount-field"
             }
         , dateField
             { text = "Date"
@@ -646,10 +653,10 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
                 ]
             ]
         , H.input
-            [ HA.class "field__input"
-            , HA.type_ inputType
-            , HA.value inputValue
-            , HE.onInput (\newValue ->
+            ([ HA.class "field__input"
+             , HA.type_ inputType
+             , HA.value inputValue
+             , HE.onInput (\newValue ->
                 if showTime then
                     onDateInput newValue
                 else
@@ -659,21 +666,24 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
                     else
                         onDateInput newValue
               )
-            ]
+             ])
             []
         ]
 
 
-field : { a | onInput : String -> msg, text : String, value : String } -> Html msg
-field { onInput, text, value } =
+field : { a | onInput : String -> msg, text : String, value : String, id : Maybe String } -> Html msg
+field { onInput, text, value, id } =
     H.div [ HA.class "field" ]
         [ H.label [ HA.class "field__label" ]
             [ H.text text ]
         , H.input
-            [ HA.class "field__input"
-            , HA.value value
-            , HE.onInput onInput
-            ]
+            ([ HA.class "field__input"
+             , HA.value value
+             , HE.onInput onInput
+             ] ++ (case id of
+                    Just idStr -> [ HA.id idStr ]
+                    Nothing -> []
+                 ))
             []
         ]
 
@@ -921,7 +931,7 @@ update msg model =
                             , showTime = False
                             }
               }
-            , Cmd.none
+            , focusElement "create-description-field"
             )
 
         CreateDialogChanged subMsg ->
@@ -1049,7 +1059,7 @@ handleEditDialog id model =
                             , showTime = hasTimeInfo
                             }
               }
-            , Cmd.none
+            , focusElement "edit-amount-field"
             )
 
         Nothing ->
