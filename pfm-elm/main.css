@@ -640,13 +640,17 @@ a:hover {
     padding-left: 50px;
     font-size: 12px;
     color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    line-height: 18px;
 }
 
 .toggle__label::before {
     content: '';
     position: absolute;
     left: 0;
-    top: 0;
+    top: 50%;
+    transform: translateY(-50%);
     width: 36px;
     height: 18px;
     border-radius: 10px;
@@ -659,7 +663,8 @@ a:hover {
     content: '';
     position: absolute;
     left: 3px;
-    top: 3px;
+    top: 50%;
+    transform: translateY(-50%);
     width: 12px;
     height: 12px;
     border-radius: 50%;
@@ -673,7 +678,7 @@ a:hover {
 }
 
 .toggle__input:checked + .toggle__label::after {
-    transform: translateX(18px);
+    transform: translateX(18px) translateY(-50%);
     background-color: white;
 }
 
