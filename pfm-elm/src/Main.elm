@@ -551,7 +551,18 @@ viewHome model =
                             )
                             (List.filter (\o -> o.category == category) allAccounts_)
                     )
-                    allCategories
+                    (List.sortBy (\c -> c.name) <|
+                        List.filter
+                            (\c ->
+                                List.member c
+                                    [ assets
+
+                                    -- , expenses
+                                    -- , income
+                                    ]
+                            )
+                            allCategories
+                    )
                 )
             ]
         , H.div [ HA.class "section" ]
