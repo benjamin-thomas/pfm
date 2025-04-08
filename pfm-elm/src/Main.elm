@@ -100,116 +100,6 @@ openingBalance =
     }
 
 
-translate : Language -> String -> String
-translate language key =
-    case language of
-        English ->
-            case key of
-                "Transactions" ->
-                    "Transactions"
-
-                "Add Transaction" ->
-                    "Add Transaction"
-
-                "Edit Transaction" ->
-                    "Edit Transaction"
-
-                "Delete" ->
-                    "Delete"
-
-                "Save" ->
-                    "Save"
-
-                "Cancel" ->
-                    "Cancel"
-
-                "Description" ->
-                    "Description"
-
-                "From" ->
-                    "From"
-
-                "To" ->
-                    "To"
-
-                "Amount" ->
-                    "Amount"
-
-                "Date" ->
-                    "Date"
-
-                "Include time" ->
-                    "Include time"
-
-                "Personal Finance Manager" ->
-                    "Personal Finance Manager"
-
-                "Go to UI" ->
-                    "Go to UI"
-
-                "Balances" ->
-                    "Balances"
-
-                "Add" ->
-                    "Add"
-
-                _ ->
-                    key
-
-        French ->
-            case key of
-                "Transactions" ->
-                    "Transactions"
-
-                "Add Transaction" ->
-                    "Ajouter une transaction"
-
-                "Edit Transaction" ->
-                    "Modifier la transaction"
-
-                "Delete" ->
-                    "Supprimer"
-
-                "Save" ->
-                    "Enregistrer"
-
-                "Cancel" ->
-                    "Annuler"
-
-                "Description" ->
-                    "Description"
-
-                "From" ->
-                    "De"
-
-                "To" ->
-                    "À"
-
-                "Amount" ->
-                    "Montant"
-
-                "Date" ->
-                    "Date"
-
-                "Include time" ->
-                    "Inclure l'heure"
-
-                "Personal Finance Manager" ->
-                    "Gestionnaire de finances personnelles"
-
-                "Go to UI" ->
-                    "Aller à l'interface utilisateur"
-
-                "Balances" ->
-                    "Soldes"
-
-                "Add" ->
-                    "Ajouter"
-
-                _ ->
-                    key
-
-
 employerABC : Account
 employerABC =
     { name = "EmployerABC"
@@ -313,16 +203,10 @@ type Page
     | UI
 
 
-type Language
-    = English
-    | French
-
-
 type alias Model =
     { key : Nav.Key
     , url : Url
     , route : Route
-    , language : Language
     , now : Time.Posix
     , zone : Time.Zone
     , book : Dict Int TransactionView
@@ -421,11 +305,8 @@ view model =
                 , HA.href "/main.css"
                 ]
                 []
-
-        t =
-            translate model.language
     in
-    { title = t "Personal Finance Manager"
+    { title = "Personal Finance Manager"
     , body =
         [ H.div
             [ HA.classList
@@ -443,13 +324,13 @@ view model =
                 Just (EditDialog data) ->
                     H.div [ HA.class "dialog-overlay" ]
                         [ H.div [ HA.class "dialog" ]
-                            [ viewEditDialog model.language data ]
+                            [ viewEditDialog data ]
                         ]
 
                 Just (CreateDialog data) ->
                     H.div [ HA.class "dialog-overlay" ]
                         [ H.div [ HA.class "dialog" ]
-                            [ viewCreateDialog model.language data ]
+                            [ viewCreateDialog data ]
                         ]
             ]
         ]
@@ -513,17 +394,14 @@ viewHome model =
                         f
                         ( zero, [] )
                         transactions
-
-        t =
-            translate model.language
     in
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.div [ HA.class "debug-info" ]
-                [ H.a [ Route.href Route.UI ] [ H.text (t "Go to UI") ] ]
+                [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
             ]
         , H.div [ HA.class "section" ]
-            [ H.h2 [ HA.class "section-title" ] [ H.text (t "Balances") ]
+            [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
             , H.div [ HA.class "balances" ]
                 (List.concatMap
                     (\category ->
@@ -568,12 +446,12 @@ viewHome model =
         , H.div [ HA.class "section" ]
             [ H.div [ HA.class "transaction-list" ]
                 [ H.div [ HA.class "transaction-list__header" ]
-                    [ H.h3 [] [ H.text (t "Transactions") ]
+                    [ H.h3 [] [ H.text "Transactions" ]
                     , H.button
                         [ HA.class "button button--primary"
                         , HE.onClick AddTransactionClicked
                         ]
-                        [ H.text (t "Add Transaction") ]
+                        [ H.text "Add Transaction" ]
                     ]
                 , H.ul [ HA.class "transaction-list__items" ]
                     (List.map
@@ -634,53 +512,49 @@ viewHome model =
             Just (EditDialog data) ->
                 H.div [ HA.class "dialog-overlay" ]
                     [ H.div [ HA.class "dialog" ]
-                        [ viewEditDialog model.language data ]
+                        [ viewEditDialog data ]
                     ]
 
             Just (CreateDialog data) ->
                 H.div [ HA.class "dialog-overlay" ]
                     [ H.div [ HA.class "dialog" ]
-                        [ viewCreateDialog model.language data ]
+                        [ viewCreateDialog data ]
                     ]
         ]
 
 
-viewEditDialog : Language -> MkEditDialog -> Html Msg
-viewEditDialog language data =
-    let
-        t =
-            translate language
-    in
+viewEditDialog : MkEditDialog -> Html Msg
+viewEditDialog data =
     H.div [ HA.class "dialog-content" ]
-        [ H.h3 [ HA.class "dialog-title" ] [ H.text (t "Edit Transaction") ]
+        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
         , field
-            { text = t "Description"
+            { text = "Description"
             , value = data.descr
             , onInput = \str -> EditDialogChanged (EditDescrChanged str)
             , id = Just "edit-description-field"
             }
         , accountSelect
-            { text = t "From"
+            { text = "From"
             , value = data.from
             , onInput = \str -> EditDialogChanged (EditFromChanged str)
             , accounts = allAccounts_
             , excludeAccount = Just data.to
             }
         , accountSelect
-            { text = t "To"
+            { text = "To"
             , value = data.to
             , onInput = \str -> EditDialogChanged (EditToChanged str)
             , accounts = allAccounts_
             , excludeAccount = Just data.from
             }
         , field
-            { text = t "Amount"
+            { text = "Amount"
             , value = data.amount
             , onInput = \str -> EditDialogChanged (EditAmountChanged str)
             , id = Just "edit-amount-field"
             }
         , dateField
-            { text = t "Date"
+            { text = "Date"
             , date = data.date
             , showTime = data.showTime
             , onDateInput = \str -> EditDialogChanged (EditDateChanged str)
@@ -691,52 +565,48 @@ viewEditDialog language data =
                 [ HA.class "button button--secondary"
                 , HE.onClick EscapedPressed
                 ]
-                [ H.text (t "Cancel") ]
+                [ H.text "Cancel" ]
             , H.button
                 [ HA.class "button button--primary"
                 , HE.onClick (EditDialogChanged EditDialogSave)
                 ]
-                [ H.text (t "Save") ]
+                [ H.text "Save" ]
             ]
         ]
 
 
-viewCreateDialog : Language -> MkCreateDialog -> Html Msg
-viewCreateDialog language data =
-    let
-        t =
-            translate language
-    in
+viewCreateDialog : MkCreateDialog -> Html Msg
+viewCreateDialog data =
     H.div [ HA.class "dialog-content" ]
-        [ H.h3 [ HA.class "dialog-title" ] [ H.text (t "Add Transaction") ]
+        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
         , field
-            { text = t "Description"
+            { text = "Description"
             , value = data.descr
             , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
             , id = Just "create-description-field"
             }
         , accountSelect
-            { text = t "From"
+            { text = "From"
             , value = data.from
             , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
             , accounts = allAccounts_
             , excludeAccount = Just data.to
             }
         , accountSelect
-            { text = t "To"
+            { text = "To"
             , value = data.to
             , onInput = \str -> CreateDialogChanged (CreateToChanged str)
             , accounts = allAccounts_
             , excludeAccount = Just data.from
             }
         , field
-            { text = t "Amount"
+            { text = "Amount"
             , value = data.amount
             , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
             , id = Just "create-amount-field"
             }
         , dateField
-            { text = t "Date"
+            { text = "Date"
             , date = data.date
             , showTime = data.showTime
             , onDateInput = \str -> CreateDialogChanged (CreateDateChanged str)
@@ -747,12 +617,12 @@ viewCreateDialog language data =
                 [ HA.class "button button--secondary"
                 , HE.onClick EscapedPressed
                 ]
-                [ H.text (t "Cancel") ]
+                [ H.text "Cancel" ]
             , H.button
                 [ HA.class "button button--primary"
                 , HE.onClick (CreateDialogChanged CreateDialogSave)
                 ]
-                [ H.text (t "Add") ]
+                [ H.text "Add" ]
             ]
         ]
 
@@ -920,8 +790,8 @@ type alias Flags =
     }
 
 
-init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
-init flags url key =
+init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
+init () url key =
     let
         v : String -> Decimal
         v =
@@ -971,13 +841,6 @@ init flags url key =
                     }
                   )
                 ]
-
-        language =
-            if flags.language == "French" then
-                French
-
-            else
-                English
     in
     ( { key = key
       , url = url
@@ -987,7 +850,6 @@ init flags url key =
       , book = book
       , dialog = Nothing
       , isDarkTheme = False
-      , language = language
       }
     , Task.perform GotZone Time.here
     )
@@ -1293,7 +1155,7 @@ themeToggleButton isDarkTheme =
         ]
 
 
-main : Program Flags Model Msg
+main : Program () Model Msg
 main =
     Browser.application
         { init = init
