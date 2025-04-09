@@ -25,19 +25,12 @@
         }
     });
 
-    // Handle focusing elements
-    app.ports.focusElement.subscribe(id => {
-        // Use setTimeout to ensure the element is in the DOM
-        setTimeout(() => {
-            const element = document.getElementById(id);
-            if (element) {
-                element.focus();
-                // If it's an input field, optionally select all text
-                if (element.tagName.toLowerCase() === 'input') {
-                    element.select();
-                }
-            }
-        }, 50); // Small delay to ensure DOM is updated
+    app.ports.consoleLogRaw.subscribe((x) => {
+        if (x.title) {
+            console.log(`[APP] ${x.title}`, x.data);
+        } else {
+            console.log(`[APP]`, x);
+        }
     });
 
     // Set up theme toggle functionality

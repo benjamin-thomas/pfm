@@ -6,12 +6,12 @@ import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
 import Domain exposing (Account, Category, TransactionViewWithBalance)
-import Html as H exposing (Html)
+import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
+import Json.Encode as E
 import Page.UI as UI_Page
-import Process
 import Route exposing (Route)
 import Set
 import Task exposing (Task)
@@ -26,7 +26,16 @@ port escapePressed : (() -> msg) -> Sub msg
 port enterPressed : (() -> msg) -> Sub msg
 
 
-port focusElement : String -> Cmd msg
+port consoleLogRaw : E.Value -> Cmd msg
+
+
+consoleLog : String -> E.Value -> Cmd msg
+consoleLog str value =
+    consoleLogRaw <|
+        E.object
+            [ ( "title", E.string str )
+            , ( "data", value )
+            ]
 
 
 port toggleTheme : () -> Cmd msg
@@ -205,12 +214,49 @@ type Page
     | UI
 
 
+{-| These types exist to circumvent browser limitations (it seems?) related to the ":focused" CSS pseudo class.
+
+When using a fixed or absolute position (for the dialog), then ":focused" pseudo class won't get "set" by the browser,
+when initiating a "focus" action, programmatically.
+
+Since I want to automatically "focus" an element, after dialog open, I need to track the state of the "just focused"
+state (the pseudo class does kick-in after user action, such as modifying an input's value).
+
+The type carries with it its CSS id.
+
+-}
+type JustFocusable
+    = FocusableAmount String
+    | FocusableDescr String
+
+
+focusedInputToString : JustFocusable -> String
+focusedInputToString justFocused =
+    case justFocused of
+        FocusableAmount str ->
+            str
+
+        FocusableDescr str ->
+            str
+
+
+amountField : JustFocusable
+amountField =
+    FocusableAmount "amount-field"
+
+
+descriptionField : JustFocusable
+descriptionField =
+    FocusableDescr "description-field"
+
+
 type alias Model =
     { key : Nav.Key
     , url : Url
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
+    , justFocused : Maybe JustFocusable
     , book : Dict Int TransactionView
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
@@ -240,13 +286,14 @@ type MkCreateDialogChanged
 type Msg
     = FocusFailed
     | FocusOk
+    | SetJustFocused (Maybe JustFocusable)
     | UrlRequested UrlRequest
     | UrlChanged Url
-    | TransactionClicked Int
+    | EditTransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
-    | Focus
+    | AfterFocus (Result Dom.Error ())
     | EscapedPressed
     | EnterPressed
     | GotTime Time.Posix
@@ -303,14 +350,6 @@ view model =
 
                 Route.UI ->
                     UI_Page.view
-
-        --cssLink =
-        --    H.node "link"
-        --        [ HA.rel "stylesheet"
-        --
-        --        --, HA.href "/main.css"
-        --        ]
-        --        []
     in
     { title = "Personal Finance Manager"
     , body =
@@ -328,19 +367,26 @@ view model =
                     H.text ""
 
                 Just (EditDialog data) ->
-                    H.div [ HA.class "dialog-overlay" ]
-                        [ H.div [ HA.class "dialog" ]
-                            [ viewEditDialog data ]
+                    dialog
+                        [ HA.class "transaction"
+                        , HA.attribute "open" ""
                         ]
+                        [ viewEditDialog model.justFocused data ]
 
                 Just (CreateDialog data) ->
-                    H.div [ HA.class "dialog-overlay" ]
-                        [ H.div [ HA.class "dialog" ]
-                            [ viewCreateDialog data ]
+                    dialog
+                        [ HA.class "transaction"
+                        , HA.attribute "open" ""
                         ]
+                        [ viewCreateDialog model.justFocused data ]
             ]
         ]
     }
+
+
+dialog : List (Attribute msg) -> List (Html msg) -> Html msg
+dialog =
+    H.node "dialog"
 
 
 viewHome : Model -> Html Msg
@@ -482,7 +528,7 @@ viewHome model =
                             in
                             H.li
                                 [ HA.class "transaction-item"
-                                , HE.onClick (TransactionClicked transactionId)
+                                , HE.onClick (EditTransactionClicked transactionId)
                                 ]
                                 [ H.div [ HA.class "transaction-item__row" ]
                                     [ H.div [ HA.class "transaction-item__main-content" ]
@@ -516,28 +562,31 @@ viewHome model =
                 H.text ""
 
             Just (EditDialog data) ->
-                H.div [ HA.class "dialog-overlay" ]
-                    [ H.div [ HA.class "dialog" ]
-                        [ viewEditDialog data ]
+                dialog
+                    [ HA.class "transaction"
+                    , HA.attribute "open" ""
                     ]
+                    [ viewEditDialog model.justFocused data ]
 
             Just (CreateDialog data) ->
-                H.div [ HA.class "dialog-overlay" ]
-                    [ H.div [ HA.class "dialog" ]
-                        [ viewCreateDialog data ]
+                dialog
+                    [ HA.class "transaction"
+                    , HA.attribute "open" ""
                     ]
+                    [ viewCreateDialog model.justFocused data ]
         ]
 
 
-viewEditDialog : MkEditDialog -> Html Msg
-viewEditDialog data =
-    H.div [ HA.class "dialog-content" ]
+viewEditDialog : Maybe JustFocusable -> MkEditDialog -> Html Msg
+viewEditDialog justFocused data =
+    H.div [ HA.class "dialog-content", HE.onClick <| SetJustFocused Nothing ]
         [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
-        , field
+        , makeField
             { text = "Description"
             , value = data.descr
             , onInput = \str -> EditDialogChanged (EditDescrChanged str)
-            , id = Just "edit-description-field"
+            , justFocused = justFocused
+            , field = descriptionField
             }
         , accountSelect
             { text = "From"
@@ -553,11 +602,12 @@ viewEditDialog data =
             , accounts = allAccounts_
             , excludeAccount = Just data.from
             }
-        , field
+        , makeField
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> EditDialogChanged (EditAmountChanged str)
-            , id = Just "edit-amount-field"
+            , justFocused = justFocused
+            , field = amountField
             }
         , dateField
             { text = "Date"
@@ -581,15 +631,16 @@ viewEditDialog data =
         ]
 
 
-viewCreateDialog : MkCreateDialog -> Html Msg
-viewCreateDialog data =
-    H.div [ HA.class "dialog-content" ]
+viewCreateDialog : Maybe JustFocusable -> MkCreateDialog -> Html Msg
+viewCreateDialog justFocused data =
+    H.div [ HA.class "dialog-content", HE.onClick <| SetJustFocused Nothing ]
         [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
-        , field
+        , makeField
             { text = "Description"
             , value = data.descr
             , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
-            , id = Just "create-description-field"
+            , field = descriptionField
+            , justFocused = justFocused
             }
         , accountSelect
             { text = "From"
@@ -605,11 +656,12 @@ viewCreateDialog data =
             , accounts = allAccounts_
             , excludeAccount = Just data.from
             }
-        , field
+        , makeField
             { text = "Amount"
             , value = data.amount
             , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
-            , id = Just "create-amount-field"
+            , field = amountField
+            , justFocused = justFocused
             }
         , dateField
             { text = "Date"
@@ -713,24 +765,21 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
         ]
 
 
-field : { a | onInput : String -> msg, text : String, value : String, id : Maybe String } -> Html msg
-field { onInput, text, value, id } =
+makeField : { a | onInput : String -> Msg, text : String, value : String, field : JustFocusable, justFocused : Maybe JustFocusable } -> Html Msg
+makeField { onInput, text, value, field, justFocused } =
     H.div [ HA.class "field" ]
         [ H.label [ HA.class "field__label" ]
             [ H.text text ]
         , H.input
-            ([ HA.class "field__input"
-             , HA.value value
-             , HE.onInput onInput
-             ]
-                ++ (case id of
-                        Just idStr ->
-                            [ HA.id idStr ]
-
-                        Nothing ->
-                            []
-                   )
-            )
+            [ HA.classList
+                [ ( "field__input", True )
+                , ( "just-focused", justFocused == Just field )
+                ]
+            , HA.value value
+            , HE.onInput onInput
+            , HE.onClick (SetJustFocused <| Just field)
+            , HA.id (focusedInputToString field)
+            ]
             []
         ]
 
@@ -853,6 +902,7 @@ init () url key =
       , route = Route.fromUrl url
       , now = Time.millisToPosix 0
       , zone = Time.utc
+      , justFocused = Nothing
       , book = book
       , dialog = Nothing
       , isDarkTheme = False
@@ -861,64 +911,38 @@ init () url key =
     )
 
 
-focusCreateDescription : Cmd Msg
-focusCreateDescription =
+focusField : JustFocusable -> Cmd Msg
+focusField field =
     Task.attempt
-        (\x ->
-            case x of
-                Ok () ->
-                    -- TODO: Log error
-                    FocusFailed |> Debug.log "failed"
-
-                Err _ ->
-                    FocusFailed |> Debug.log "succeeded"
-        )
-        (Dom.focus "create-description-field")
-
-
-
--- wat : Task.Task Dom.Error (List ())
-
-
-waitAndFocus : Cmd Msg
-waitAndFocus =
-    Task.attempt
-        (\res ->
-            case res of
-                Ok () ->
-                    FocusFailed |> Debug.log "focusing failed"
-
-                Err error ->
-                    FocusFailed |> Debug.log "focusing succeeded!"
-        )
-        (Process.sleep 1000
-            |> Task.andThen
-                (\() ->
-                    let
-                        _ =
-                            Debug.log "focusing..." 1
-                    in
-                    Dom.focus "create-description-field"
-                )
-        )
-
-
-timeInOneHour : Task x Time.Posix
-timeInOneHour =
-    Process.sleep (60 * 60 * 1000)
-        |> Task.andThen (\() -> Time.now)
-
-
-
---wat2 =
---    Task.attempt (\_ -> Task.succeed ())
---        |> Task.andThen (\_ -> Task.attempt (\_ -> NoOp) <| Dom.focus "create-description-field")
---
+        AfterFocus
+        (Dom.focus <| focusedInputToString field)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        AfterFocus result ->
+            case result of
+                Ok () ->
+                    ( model
+                    , Cmd.none
+                    )
+
+                Err (Dom.NotFound str) ->
+                    ( model
+                    , consoleLog
+                        "Focusing failed"
+                        (E.object
+                            [ ( "fieldName", E.string str )
+                            ]
+                        )
+                    )
+
+        SetJustFocused x ->
+            ( { model | justFocused = x }
+            , Cmd.none
+            )
+
         FocusOk ->
             ( model, Cmd.none )
 
@@ -945,7 +969,7 @@ update msg model =
             , Cmd.none
             )
 
-        TransactionClicked transactionId ->
+        EditTransactionClicked transactionId ->
             handleEditDialog transactionId model
 
         EditDialogChanged subMsg ->
@@ -953,12 +977,17 @@ update msg model =
                 Just (EditDialog data) ->
                     case subMsg of
                         EditDescrChanged str ->
-                            ( { model | dialog = Just <| EditDialog { data | descr = str } }
+                            ( { model
+                                | dialog = Just <| EditDialog { data | descr = str }
+                              }
                             , Cmd.none
                             )
 
                         EditFromChanged str ->
-                            ( { model | dialog = Just <| EditDialog { data | from = str } }
+                            ( { model
+                                | dialog = Just <| EditDialog { data | from = str }
+                                , justFocused = Nothing
+                              }
                             , Cmd.none
                             )
 
@@ -1034,8 +1063,13 @@ update msg model =
                     )
 
         AddTransactionClicked ->
+            let
+                field =
+                    descriptionField
+            in
             ( { model
-                | dialog =
+                | justFocused = Just field
+                , dialog =
                     Just <|
                         CreateDialog
                             { descr = ""
@@ -1046,40 +1080,7 @@ update msg model =
                             , showTime = False
                             }
               }
-              --             , Task.perform (\_ -> FocusCreateDescriptionField) (Task.succeed ())
-              -- , Task.perform (\_ -> NoOp) focusCreateDescription
-              -- , Task.perform
-              --     (always NoOp)
-              --     (Task.succeed ()
-              --         |> Task.ch
-              --             (\() ->
-              --                 Task.attempt (\_ -> NoOp) (Dom.focus "create-description-field")
-              --             )
-              --     )
-            , Task.attempt
-                (\res ->
-                    case res of
-                        Ok () ->
-                            FocusOk
-
-                        Err _ ->
-                            FocusFailed
-                )
-                (Dom.focus "create-description-field")
-            )
-
-        Focus ->
-            ( model
-            , Task.attempt
-                (\res ->
-                    case res of
-                        Ok () ->
-                            FocusOk
-
-                        Err error ->
-                            FocusFailed
-                )
-                (Dom.focus "create-description-field")
+            , focusField field
             )
 
         CreateDialogChanged subMsg ->
@@ -1200,9 +1201,13 @@ handleEditDialog id model =
                     String.contains "T" dateString
                         && not (String.endsWith "T00:00:00.000Z" dateString)
                         && not (String.endsWith "T00:00:00Z" dateString)
+
+                field =
+                    amountField
             in
             ( { model
-                | dialog =
+                | justFocused = Just field
+                , dialog =
                     Just <|
                         EditDialog
                             { transactionId = id
@@ -1214,7 +1219,7 @@ handleEditDialog id model =
                             , showTime = hasTimeInfo
                             }
               }
-            , focusElement "edit-amount-field"
+            , focusField field
             )
 
         Nothing ->
