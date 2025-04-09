@@ -1,6 +1,7 @@
 port module Main exposing (..)
 
 import Browser exposing (UrlRequest)
+import Browser.Dom as Dom
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
@@ -10,9 +11,10 @@ import Html.Attributes as HA
 import Html.Events as HE
 import Iso8601
 import Page.UI as UI_Page
+import Process
 import Route exposing (Route)
 import Set
-import Task
+import Task exposing (Task)
 import Time
 import Url exposing (Url)
 import Utils exposing (formatDateForInput)
@@ -236,12 +238,15 @@ type MkCreateDialogChanged
 
 
 type Msg
-    = UrlRequested UrlRequest
+    = FocusFailed
+    | FocusOk
+    | UrlRequested UrlRequest
     | UrlChanged Url
     | TransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
+    | Focus
     | EscapedPressed
     | EnterPressed
     | GotTime Time.Posix
@@ -299,12 +304,13 @@ view model =
                 Route.UI ->
                     UI_Page.view
 
-        cssLink =
-            H.node "link"
-                [ HA.rel "stylesheet"
-                , HA.href "/main.css"
-                ]
-                []
+        --cssLink =
+        --    H.node "link"
+        --        [ HA.rel "stylesheet"
+        --
+        --        --, HA.href "/main.css"
+        --        ]
+        --        []
     in
     { title = "Personal Finance Manager"
     , body =
@@ -314,8 +320,8 @@ view model =
                 , ( "dark-theme", model.isDarkTheme )
                 ]
             ]
-            [ cssLink
-            , themeToggleButton model.isDarkTheme
+            [ --cssLink
+              themeToggleButton model.isDarkTheme
             , viewPage
             , case model.dialog of
                 Nothing ->
@@ -855,9 +861,70 @@ init () url key =
     )
 
 
+focusCreateDescription : Cmd Msg
+focusCreateDescription =
+    Task.attempt
+        (\x ->
+            case x of
+                Ok () ->
+                    -- TODO: Log error
+                    FocusFailed |> Debug.log "failed"
+
+                Err _ ->
+                    FocusFailed |> Debug.log "succeeded"
+        )
+        (Dom.focus "create-description-field")
+
+
+
+-- wat : Task.Task Dom.Error (List ())
+
+
+waitAndFocus : Cmd Msg
+waitAndFocus =
+    Task.attempt
+        (\res ->
+            case res of
+                Ok () ->
+                    FocusFailed |> Debug.log "focusing failed"
+
+                Err error ->
+                    FocusFailed |> Debug.log "focusing succeeded!"
+        )
+        (Process.sleep 1000
+            |> Task.andThen
+                (\() ->
+                    let
+                        _ =
+                            Debug.log "focusing..." 1
+                    in
+                    Dom.focus "create-description-field"
+                )
+        )
+
+
+timeInOneHour : Task x Time.Posix
+timeInOneHour =
+    Process.sleep (60 * 60 * 1000)
+        |> Task.andThen (\() -> Time.now)
+
+
+
+--wat2 =
+--    Task.attempt (\_ -> Task.succeed ())
+--        |> Task.andThen (\_ -> Task.attempt (\_ -> NoOp) <| Dom.focus "create-description-field")
+--
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        FocusOk ->
+            ( model, Cmd.none )
+
+        FocusFailed ->
+            ( model, Cmd.none )
+
         UrlRequested urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -979,7 +1046,40 @@ update msg model =
                             , showTime = False
                             }
               }
-            , focusElement "create-description-field"
+              --             , Task.perform (\_ -> FocusCreateDescriptionField) (Task.succeed ())
+              -- , Task.perform (\_ -> NoOp) focusCreateDescription
+              -- , Task.perform
+              --     (always NoOp)
+              --     (Task.succeed ()
+              --         |> Task.ch
+              --             (\() ->
+              --                 Task.attempt (\_ -> NoOp) (Dom.focus "create-description-field")
+              --             )
+              --     )
+            , Task.attempt
+                (\res ->
+                    case res of
+                        Ok () ->
+                            FocusOk
+
+                        Err _ ->
+                            FocusFailed
+                )
+                (Dom.focus "create-description-field")
+            )
+
+        Focus ->
+            ( model
+            , Task.attempt
+                (\res ->
+                    case res of
+                        Ok () ->
+                            FocusOk
+
+                        Err error ->
+                            FocusFailed
+                )
+                (Dom.focus "create-description-field")
             )
 
         CreateDialogChanged subMsg ->
