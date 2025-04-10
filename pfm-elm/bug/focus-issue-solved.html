@@ -1,6 +1,22 @@
 <!doctype html>
 <html lang="en">
 
+<!--
+
+The "best" way to handle focusing an input after dialog open is to: 
+
+- use the browser-native `dialog` HTML element
+- use it's showModal() function
+  - which adds a `dialog::backdrop` CSS property
+  - which centers the dialog
+  - which disables text selection, etc. on the "background elements"
+  - it's possible do use show() as well, but that won't disable background text selection, etc. 
+- very important: use the autofocus property
+ - this focuses the field perfectly, it's "frame-perfect", no focus "jumping" due to bad focus on prior frames, no focus lost in the ether.
+ - "focus trap" works perfectly (tab between elements)
+
+-->
+
 <head>
     <title>Dialog Focus Bug Reproduction</title>
     <style>
@@ -75,7 +91,6 @@
             box-sizing: border-box;
         }
 
-        /* Added for visual focus */
         input:focus,
         select:focus {
             outline: none;
@@ -118,7 +133,7 @@
         </select>
 
         <label for="input2">Input 2 (Target Focus):</label>
-        <input type="text" id="input2" />
+        <input type="text" id="input2" autofocus>
 
         <label for="select2">Select 2:</label>
         <select id="select2">
@@ -133,44 +148,10 @@
         const openDialogButton = document.getElementById("openDialog");
         const closeDialogButton = document.getElementById("closeDialog");
         const dialog = document.getElementById("myDialog");
-        const focusTarget = document.getElementById("input2");
 
-        openDialogButton.addEventListener("click", () => {
-            // modal functions center the modal and other things...
-            // showModal() disables the backdrop
-            // modal() does not disable the backdrop
-            dialog.showModal(); // Use showModal for proper dialog behavior
-
-            /*
-             0ms for next event loop.
-
-             But this seems to be actually wrong...
-                - the cursor is not focused, sometimes
-                - sometimes, we can see the cursor "jump" form the first input to third input
-                - I *think* I saw a focused input with no cursor, once.
-            */
-            // setTimeout(() => {
-            //     focusTarget.focus();
-            // }, 0);
-
-            requestAnimationFrame(() => {
-                focusTarget.focus();
-            });
-        });
-
-        /* Alternative to requestAnimationFrame
-        const observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                if (mutation.attributeName === 'open' && dialog.hasAttribute('open')) {
-                    focusTarget.focus();
-                    break;
-                }
-            }
-        });
-        observer.observe(dialog, { attributes: true });
-        */
-
+        openDialogButton.addEventListener("click", () => dialog.showModal());
         closeDialogButton.addEventListener("click", () => dialog.close());
+        
         dialog.addEventListener("close", () => console.log("Dialog closed"));
     </script>
 </body>
