@@ -45,7 +45,7 @@
             border: none;
             cursor: pointer;
         }
-        
+
         dialog {
             min-width: 250px;
             padding: var(--spacing-xl)
@@ -59,7 +59,7 @@
             display: block;
             margin-bottom: var(--spacing-sm);
         }
-        
+
         #closeDialog {
             display: block;
             margin-top: var(--spacing-lg);
@@ -143,16 +143,32 @@
 
             /*
              0ms for next event loop.
-             
+
              But this seems to be actually wrong...
                 - the cursor is not focused, sometimes
                 - sometimes, we can see the cursor "jump" form the first input to third input
                 - I *think* I saw a focused input with no cursor, once.
             */
-            setTimeout(() => {
+            // setTimeout(() => {
+            //     focusTarget.focus();
+            // }, 0);
+
+            requestAnimationFrame(() => {
                 focusTarget.focus();
-            }, 0);
+            });
         });
+
+        /* Alternative to requestAnimationFrame
+        const observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                if (mutation.attributeName === 'open' && dialog.hasAttribute('open')) {
+                    focusTarget.focus();
+                    break;
+                }
+            }
+        });
+        observer.observe(dialog, { attributes: true });
+        */
 
         closeDialogButton.addEventListener("click", () => dialog.close());
         dialog.addEventListener("close", () => console.log("Dialog closed"));
