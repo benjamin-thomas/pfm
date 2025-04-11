@@ -1,7 +1,6 @@
 port module Main exposing (..)
 
 import Browser exposing (UrlRequest)
-import Browser.Dom as Dom
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
@@ -39,6 +38,12 @@ consoleLog str value =
 
 
 port toggleTheme : () -> Cmd msg
+
+
+port showDialog : () -> Cmd msg
+
+
+port closeDialog : () -> Cmd msg
 
 
 type alias Category =
@@ -214,49 +219,12 @@ type Page
     | UI
 
 
-{-| These types exist to circumvent browser limitations (it seems?) related to the ":focused" CSS pseudo class.
-
-When using a fixed or absolute position (for the dialog), then ":focused" pseudo class won't get "set" by the browser,
-when initiating a "focus" action, programmatically.
-
-Since I want to automatically "focus" an element, after dialog open, I need to track the state of the "just focused"
-state (the pseudo class does kick-in after user action, such as modifying an input's value).
-
-The type carries with it its CSS id.
-
--}
-type JustFocusable
-    = FocusableAmount String
-    | FocusableDescr String
-
-
-focusedInputToString : JustFocusable -> String
-focusedInputToString justFocused =
-    case justFocused of
-        FocusableAmount str ->
-            str
-
-        FocusableDescr str ->
-            str
-
-
-amountField : JustFocusable
-amountField =
-    FocusableAmount "amount-field"
-
-
-descriptionField : JustFocusable
-descriptionField =
-    FocusableDescr "description-field"
-
-
 type alias Model =
     { key : Nav.Key
     , url : Url
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , justFocused : Maybe JustFocusable
     , book : Dict Int TransactionView
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
@@ -284,16 +252,12 @@ type MkCreateDialogChanged
 
 
 type Msg
-    = FocusFailed
-    | FocusOk
-    | SetJustFocused (Maybe JustFocusable)
-    | UrlRequested UrlRequest
+    = UrlRequested UrlRequest
     | UrlChanged Url
     | EditTransactionClicked Int
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
-    | AfterFocus (Result Dom.Error ())
     | EscapedPressed
     | EnterPressed
     | GotTime Time.Posix
@@ -359,29 +323,45 @@ view model =
                 , ( "dark-theme", model.isDarkTheme )
                 ]
             ]
-            [ --cssLink
-              themeToggleButton model.isDarkTheme
+            [ themeToggleButton model.isDarkTheme
             , viewPage
             , case model.dialog of
                 Nothing ->
                     H.text ""
 
                 Just (EditDialog data) ->
-                    dialog
-                        [ HA.class "transaction"
-                        , HA.attribute "open" ""
-                        ]
-                        [ viewEditDialog model.justFocused data ]
+                    viewEditDialog data
 
                 Just (CreateDialog data) ->
-                    dialog
-                        [ HA.class "transaction"
-                        , HA.attribute "open" ""
-                        ]
-                        [ viewCreateDialog model.justFocused data ]
+                    viewCreateDialog data
             ]
         ]
     }
+
+
+themeToggleButton : Bool -> Html Msg
+themeToggleButton isDarkTheme =
+    H.button
+        [ HA.class "theme-toggle"
+        , HE.onClick ToggleTheme
+        , HA.title
+            (if isDarkTheme then
+                "Switch to Light Mode"
+
+             else
+                "Switch to Dark Mode"
+            )
+        ]
+        [ H.span []
+            [ H.text
+                (if isDarkTheme then
+                    "☀️"
+
+                 else
+                    "🌙"
+                )
+            ]
+        ]
 
 
 dialog : List (Attribute msg) -> List (Html msg) -> Html msg
@@ -566,122 +546,155 @@ viewHome model =
                     [ HA.class "transaction"
                     , HA.attribute "open" ""
                     ]
-                    [ viewEditDialog model.justFocused data ]
+                    [ viewEditDialog data ]
 
             Just (CreateDialog data) ->
                 dialog
                     [ HA.class "transaction"
                     , HA.attribute "open" ""
                     ]
-                    [ viewCreateDialog model.justFocused data ]
+                    [ viewCreateDialog data ]
         ]
 
 
-viewEditDialog : Maybe JustFocusable -> MkEditDialog -> Html Msg
-viewEditDialog justFocused data =
-    H.div [ HA.class "dialog-content", HE.onClick <| SetJustFocused Nothing ]
-        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
-        , makeField
-            { text = "Description"
-            , value = data.descr
-            , onInput = \str -> EditDialogChanged (EditDescrChanged str)
-            , justFocused = justFocused
-            , field = descriptionField
-            }
-        , accountSelect
-            { text = "From"
-            , value = data.from
-            , onInput = \str -> EditDialogChanged (EditFromChanged str)
-            , accounts = allAccounts_
-            , excludeAccount = Just data.to
-            }
-        , accountSelect
-            { text = "To"
-            , value = data.to
-            , onInput = \str -> EditDialogChanged (EditToChanged str)
-            , accounts = allAccounts_
-            , excludeAccount = Just data.from
-            }
-        , makeField
-            { text = "Amount"
-            , value = data.amount
-            , onInput = \str -> EditDialogChanged (EditAmountChanged str)
-            , justFocused = justFocused
-            , field = amountField
-            }
-        , dateField
-            { text = "Date"
-            , date = data.date
-            , showTime = data.showTime
-            , onDateInput = \str -> EditDialogChanged (EditDateChanged str)
-            , onToggleTime = EditDialogChanged EditToggleTimeDisplay
-            }
-        , H.div [ HA.class "dialog-actions" ]
-            [ H.button
-                [ HA.class "button button--secondary"
-                , HE.onClick EscapedPressed
+viewEditDialog : MkEditDialog -> Html Msg
+viewEditDialog data =
+    dialog
+        [ HA.id "transaction-dialog"
+        , HA.class "transaction"
+        ]
+        [ H.div [ HA.class "dialog-content" ]
+            [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
+            , makeField
+                { text = "Description"
+                , value = data.descr
+                , onInput = \str -> EditDialogChanged (EditDescrChanged str)
+                , autofocus = False
+                }
+            , accountSelect
+                { text = "From"
+                , value = data.from
+                , onInput = \str -> EditDialogChanged (EditFromChanged str)
+                , accounts = allAccounts_
+                , excludeAccount = Just data.to
+                }
+            , accountSelect
+                { text = "To"
+                , value = data.to
+                , onInput = \str -> EditDialogChanged (EditToChanged str)
+                , accounts = allAccounts_
+                , excludeAccount = Just data.from
+                }
+            , makeField
+                { text = "Amount"
+                , value = data.amount
+                , onInput = \str -> EditDialogChanged (EditAmountChanged str)
+                , autofocus = True
+                }
+            , dateField
+                { text = "Date"
+                , date = data.date
+                , showTime = data.showTime
+                , onDateInput = \str -> EditDialogChanged (EditDateChanged str)
+                , onToggleTime = EditDialogChanged EditToggleTimeDisplay
+                }
+            , H.div [ HA.class "dialog-actions" ]
+                [ H.button
+                    [ HA.class "button button--secondary"
+                    , HE.onClick EscapedPressed
+                    ]
+                    [ H.text "Cancel" ]
+                , H.button
+                    [ HA.class "button button--primary"
+                    , HE.onClick (EditDialogChanged EditDialogSave)
+                    ]
+                    [ H.text "Save" ]
                 ]
-                [ H.text "Cancel" ]
-            , H.button
-                [ HA.class "button button--primary"
-                , HE.onClick (EditDialogChanged EditDialogSave)
-                ]
-                [ H.text "Save" ]
             ]
         ]
 
 
-viewCreateDialog : Maybe JustFocusable -> MkCreateDialog -> Html Msg
-viewCreateDialog justFocused data =
-    H.div [ HA.class "dialog-content", HE.onClick <| SetJustFocused Nothing ]
-        [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
-        , makeField
-            { text = "Description"
-            , value = data.descr
-            , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
-            , field = descriptionField
-            , justFocused = justFocused
-            }
-        , accountSelect
-            { text = "From"
-            , value = data.from
-            , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
-            , accounts = allAccounts_
-            , excludeAccount = Just data.to
-            }
-        , accountSelect
-            { text = "To"
-            , value = data.to
-            , onInput = \str -> CreateDialogChanged (CreateToChanged str)
-            , accounts = allAccounts_
-            , excludeAccount = Just data.from
-            }
-        , makeField
-            { text = "Amount"
-            , value = data.amount
-            , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
-            , field = amountField
-            , justFocused = justFocused
-            }
-        , dateField
-            { text = "Date"
-            , date = data.date
-            , showTime = data.showTime
-            , onDateInput = \str -> CreateDialogChanged (CreateDateChanged str)
-            , onToggleTime = CreateDialogChanged CreateToggleTimeDisplay
-            }
-        , H.div [ HA.class "dialog-actions" ]
-            [ H.button
-                [ HA.class "button button--secondary"
-                , HE.onClick EscapedPressed
+viewCreateDialog : MkCreateDialog -> Html Msg
+viewCreateDialog data =
+    dialog
+        [ HA.id "transaction-dialog"
+        , HA.class "transaction"
+        ]
+        [ H.div [ HA.class "dialog-content" ]
+            [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
+            , makeField
+                { text = "Description"
+                , value = data.descr
+                , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
+                , autofocus = True
+                }
+            , accountSelect
+                { text = "From"
+                , value = data.from
+                , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
+                , accounts = allAccounts_
+                , excludeAccount = Just data.to
+                }
+            , accountSelect
+                { text = "To"
+                , value = data.to
+                , onInput = \str -> CreateDialogChanged (CreateToChanged str)
+                , accounts = allAccounts_
+                , excludeAccount = Just data.from
+                }
+            , makeField
+                { text = "Amount"
+                , value = data.amount
+                , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
+                , autofocus = False
+                }
+            , dateField
+                { text = "Date"
+                , date = data.date
+                , showTime = data.showTime
+                , onDateInput = \str -> CreateDialogChanged (CreateDateChanged str)
+                , onToggleTime = CreateDialogChanged CreateToggleTimeDisplay
+                }
+            , H.div [ HA.class "dialog-actions" ]
+                [ H.button
+                    [ HA.class "button button--secondary"
+                    , HE.onClick EscapedPressed
+                    ]
+                    [ H.text "Cancel" ]
+                , H.button
+                    [ HA.class "button button--primary"
+                    , HE.onClick (CreateDialogChanged CreateDialogSave)
+                    ]
+                    [ H.text "Add" ]
                 ]
-                [ H.text "Cancel" ]
-            , H.button
-                [ HA.class "button button--primary"
-                , HE.onClick (CreateDialogChanged CreateDialogSave)
-                ]
-                [ H.text "Add" ]
             ]
+        ]
+
+
+makeField : { text : String, value : String, onInput : String -> msg, autofocus : Bool } -> Html msg
+makeField { text, value, onInput, autofocus } =
+    let
+        fieldId =
+            String.toLower text |> String.replace " " "-" |> (\s -> s ++ "-field")
+    in
+    H.div [ HA.class "field" ]
+        [ H.label [ HA.class "field__label", HA.for fieldId ]
+            [ H.text text ]
+        , H.input
+            ([ HA.type_ "text"
+             , HA.id fieldId
+             , HA.class "field__input"
+             , HA.value value
+             , HE.onInput onInput
+             ]
+                ++ (if autofocus then
+                        [ HA.attribute "autofocus" "" ]
+
+                    else
+                        []
+                   )
+            )
+            []
         ]
 
 
@@ -760,25 +773,6 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
                     else
                         onDateInput newValue
                 )
-            ]
-            []
-        ]
-
-
-makeField : { a | onInput : String -> Msg, text : String, value : String, field : JustFocusable, justFocused : Maybe JustFocusable } -> Html Msg
-makeField { onInput, text, value, field, justFocused } =
-    H.div [ HA.class "field" ]
-        [ H.label [ HA.class "field__label" ]
-            [ H.text text ]
-        , H.input
-            [ HA.classList
-                [ ( "field__input", True )
-                , ( "just-focused", justFocused == Just field )
-                ]
-            , HA.value value
-            , HE.onInput onInput
-            , HE.onClick (SetJustFocused <| Just field)
-            , HA.id (focusedInputToString field)
             ]
             []
         ]
@@ -902,53 +896,30 @@ init () url key =
       , route = Route.fromUrl url
       , now = Time.millisToPosix 0
       , zone = Time.utc
-      , justFocused = Nothing
       , book = book
-      , dialog = Nothing
+      , dialog =
+            Just <|
+                CreateDialog
+                    { descr = ""
+                    , from = ""
+                    , to = ""
+                    , amount = ""
+                    , date = ""
+                    , showTime = False
+                    }
       , isDarkTheme = False
       }
-    , Task.perform GotZone Time.here
+    , Cmd.batch
+        [ Task.perform GotZone Time.here
+        , showDialog ()
+        , consoleLog "Booting up..." E.null
+        ]
     )
-
-
-focusField : JustFocusable -> Cmd Msg
-focusField field =
-    Task.attempt
-        AfterFocus
-        (Dom.focus <| focusedInputToString field)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        AfterFocus result ->
-            case result of
-                Ok () ->
-                    ( model
-                    , Cmd.none
-                    )
-
-                Err (Dom.NotFound str) ->
-                    ( model
-                    , consoleLog
-                        "Focusing failed"
-                        (E.object
-                            [ ( "fieldName", E.string str )
-                            ]
-                        )
-                    )
-
-        SetJustFocused x ->
-            ( { model | justFocused = x }
-            , Cmd.none
-            )
-
-        FocusOk ->
-            ( model, Cmd.none )
-
-        FocusFailed ->
-            ( model, Cmd.none )
-
         UrlRequested urlRequest ->
             case urlRequest of
                 Browser.Internal url ->
@@ -986,7 +957,6 @@ update msg model =
                         EditFromChanged str ->
                             ( { model
                                 | dialog = Just <| EditDialog { data | from = str }
-                                , justFocused = Nothing
                               }
                             , Cmd.none
                             )
@@ -1054,7 +1024,7 @@ update msg model =
                                 | book = newBook
                                 , dialog = Nothing
                               }
-                            , Cmd.none
+                            , closeDialog ()
                             )
 
                 _ ->
@@ -1063,13 +1033,8 @@ update msg model =
                     )
 
         AddTransactionClicked ->
-            let
-                field =
-                    descriptionField
-            in
             ( { model
-                | justFocused = Just field
-                , dialog =
+                | dialog =
                     Just <|
                         CreateDialog
                             { descr = ""
@@ -1080,7 +1045,7 @@ update msg model =
                             , showTime = False
                             }
               }
-            , focusField field
+            , showDialog ()
             )
 
         CreateDialogChanged subMsg ->
@@ -1146,7 +1111,7 @@ update msg model =
                                 | dialog = Nothing
                                 , book = Dict.insert (Dict.size model.book + 1) newTransaction model.book
                               }
-                            , Cmd.none
+                            , closeDialog ()
                             )
 
                 _ ->
@@ -1156,7 +1121,7 @@ update msg model =
 
         EscapedPressed ->
             ( { model | dialog = Nothing }
-            , Cmd.none
+            , closeDialog ()
             )
 
         EnterPressed ->
@@ -1201,13 +1166,9 @@ handleEditDialog id model =
                     String.contains "T" dateString
                         && not (String.endsWith "T00:00:00.000Z" dateString)
                         && not (String.endsWith "T00:00:00Z" dateString)
-
-                field =
-                    amountField
             in
             ( { model
-                | justFocused = Just field
-                , dialog =
+                | dialog =
                     Just <|
                         EditDialog
                             { transactionId = id
@@ -1219,11 +1180,13 @@ handleEditDialog id model =
                             , showTime = hasTimeInfo
                             }
               }
-            , focusField field
+            , showDialog ()
             )
 
         Nothing ->
-            ( model, Cmd.none )
+            ( model
+            , Cmd.none
+            )
 
 
 subscriptions : Model -> Sub Msg
@@ -1231,32 +1194,6 @@ subscriptions _ =
     Sub.batch
         [ escapePressed (\() -> EscapedPressed)
         , enterPressed (\() -> EnterPressed)
-        , Time.every (Debug.log "time" 9991000) GotTime
-        ]
-
-
-themeToggleButton : Bool -> Html Msg
-themeToggleButton isDarkTheme =
-    H.button
-        [ HA.class "theme-toggle"
-        , HE.onClick ToggleTheme
-        , HA.title
-            (if isDarkTheme then
-                "Switch to Light Mode"
-
-             else
-                "Switch to Dark Mode"
-            )
-        ]
-        [ H.span []
-            [ H.text
-                (if isDarkTheme then
-                    "☀️"
-
-                 else
-                    "🌙"
-                )
-            ]
         ]
 
 
