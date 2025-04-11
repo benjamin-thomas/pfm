@@ -26,10 +26,14 @@
     });
 
     app.ports.consoleLogRaw.subscribe((x) => {
-        if (x.title) {
-            console.log(`[APP] ${x.title}`, x.data);
-        } else {
+        if (!x.title) {
             console.log(`[APP]`, x);
+        } else {
+            if (x.data === null) {
+                console.log(`[APP] ${x.title}`);
+            } else {
+                console.log(`[APP] ${x.title}`, x.data);
+            }
         }
     });
 
