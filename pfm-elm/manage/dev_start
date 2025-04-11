@@ -1,3 +1,3 @@
 #!/bin/bash
 
-elm-live ./src/Main.elm --start-page=index2.html --pushstate -- --debug --output=dist/main.js
+elm-live ./src/Main.elm --start-page=index.html --pushstate -- --debug --output=dist/main.js
