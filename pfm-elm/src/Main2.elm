@@ -1,9 +1,9 @@
 port module Main2 exposing (main)
 
 import Browser
-import Html exposing (..)
-import Html.Attributes exposing (..)
-import Html.Events exposing (..)
+import Html as H exposing (Attribute, Html)
+import Html.Attributes as HA
+import Html.Events as HE
 
 
 
@@ -22,7 +22,24 @@ port closeDialog : () -> Cmd msg
 
 type alias Model =
     { tableData : List Person
-    , dialogOpen : Bool
+    , dialog : Maybe DialogForm
+    }
+
+
+type alias DialogForm =
+    { input1 : String
+    , select1 : String
+    , input2 : String
+    , select2 : String
+    }
+
+
+emptyForm : DialogForm
+emptyForm =
+    { input1 = ""
+    , select1 = "option1"
+    , input2 = ""
+    , select2 = "option3"
     }
 
 
@@ -38,7 +55,7 @@ init _ =
             [ { name = "John Doe", age = 30 }
             , { name = "Jane Smith", age = 25 }
             ]
-      , dialogOpen = False
+      , dialog = Nothing
       }
     , Cmd.none
     )
@@ -49,91 +66,123 @@ init _ =
 
 
 type Msg
-    = OpenDialog
+    = ShowDialog
     | CloseDialog
-    | DialogClosed
+    | DialogFormMsg DialogFormMsg
+
+
+type DialogFormMsg
+    = Input1Changed String
+    | Select1Changed String
+    | Input2Changed String
+    | Select2Changed String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        OpenDialog ->
-            ( { model | dialogOpen = True }
+        ShowDialog ->
+            ( { model | dialog = Just emptyForm }
             , showDialog ()
             )
 
         CloseDialog ->
-            ( model
+            ( { model | dialog = Nothing }
             , closeDialog ()
             )
 
-        DialogClosed ->
-            ( { model | dialogOpen = False }
-            , Cmd.none
-            )
+        DialogFormMsg formMsg ->
+            case model.dialog of
+                Just form ->
+                    ( { model | dialog = Just (updateDialogForm formMsg form) }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
+
+
+updateDialogForm : DialogFormMsg -> DialogForm -> DialogForm
+updateDialogForm msg form =
+    case msg of
+        Input1Changed value ->
+            { form | input1 = value }
+
+        Select1Changed value ->
+            { form | select1 = value }
+
+        Input2Changed value ->
+            { form | input2 = value }
+
+        Select2Changed value ->
+            { form | select2 = value }
 
 
 
 -- VIEW
 
 
+whenJust : Maybe a -> (a -> Html msg) -> Html msg
+whenJust x f =
+    Maybe.withDefault (H.text "") <| Maybe.map f x
+
+
 view : Model -> Html Msg
 view model =
-    div []
+    H.div []
         [ viewTable model.tableData
-        , button [ onClick OpenDialog ] [ text "Open Dialog" ]
-        , viewDialog
+        , H.button [ HE.onClick ShowDialog ] [ H.text "Open Dialog" ]
+        , whenJust model.dialog viewDialog
         ]
 
 
 viewTable : List Person -> Html Msg
 viewTable people =
-    table []
-        [ thead []
-            [ tr []
-                [ th [] [ text "Name" ]
-                , th [] [ text "Age" ]
+    H.table []
+        [ H.thead []
+            [ H.tr []
+                [ H.th [] [ H.text "Name" ]
+                , H.th [] [ H.text "Age" ]
                 ]
             ]
-        , tbody [] (List.map viewTableRow people)
+        , H.tbody [] (List.map viewTableRow people)
         ]
 
 
 viewTableRow : Person -> Html Msg
 viewTableRow person =
-    tr []
-        [ td [] [ text person.name ]
-        , td [] [ text (String.fromInt person.age) ]
+    H.tr []
+        [ H.td [] [ H.text person.name ]
+        , H.td [] [ H.text (String.fromInt person.age) ]
         ]
 
 
-viewDialog : Html Msg
-viewDialog =
-    node "dialog"
-        [ id "myDialog" ]
-        [ div [ class "dialog-content" ]
-            [ h3 [] [ text "Dialog Form" ]
-            , label [ for "input1" ] [ text "Input 1:" ]
-            , input [ type_ "text", id "input1" ] []
-            , label [ for "select1" ] [ text "Select 1:" ]
-            , select [ id "select1" ]
-                [ option [ value "option1" ] [ text "Option 1" ]
-                , option [ value "option2" ] [ text "Option 2" ]
+viewDialog : DialogForm -> Html Msg
+viewDialog form =
+    H.node "dialog"
+        [ HA.id "myDialog" ]
+        [ H.div [ HA.class "dialog-content" ]
+            [ H.h3 [] [ H.text "Dialog Form" ]
+            , H.label [ HA.for "input1" ] [ H.text "Input 1:" ]
+            , H.input [ HA.type_ "text", HA.id "input1", HE.onInput (DialogFormMsg << Input1Changed), HA.value form.input1 ] []
+            , H.label [ HA.for "select1" ] [ H.text "Select 1:" ]
+            , H.select [ HA.id "select1", HE.onInput (DialogFormMsg << Select1Changed) ]
+                [ H.option [ HA.value "option1", HA.selected (form.select1 == "option1") ] [ H.text "Option 1" ]
+                , H.option [ HA.value "option2", HA.selected (form.select1 == "option2") ] [ H.text "Option 2" ]
                 ]
-            , label [ for "input2" ] [ text "Input 2 (Target Focus):" ]
-            , input [ type_ "text", id "input2", attribute "autofocus" "" ] []
-            , label [ for "select2" ] [ text "Select 2:" ]
-            , select [ id "select2" ]
-                [ option [ value "option3" ] [ text "Option 3" ]
-                , option [ value "option4" ] [ text "Option 4" ]
+            , H.label [ HA.for "input2" ] [ H.text "Input 2 (Target Focus):" ]
+            , H.input [ HA.type_ "text", HA.id "input2", HE.onInput (DialogFormMsg << Input2Changed), HA.value form.input2, HA.attribute "autofocus" "" ] []
+            , H.label [ HA.for "select2" ] [ H.text "Select 2:" ]
+            , H.select [ HA.id "select2", HE.onInput (DialogFormMsg << Select2Changed) ]
+                [ H.option [ HA.value "option3", HA.selected (form.select2 == "option3") ] [ H.text "Option 3" ]
+                , H.option [ HA.value "option4", HA.selected (form.select2 == "option4") ] [ H.text "Option 4" ]
                 ]
-            , button
-                [ id "closeDialog"
-                , onClick CloseDialog
-                , style "display" "block"
-                , style "margin-top" "10px"
+            , H.button
+                [ HA.id "closeDialog"
+                , HE.onClick CloseDialog
+                , HA.style "margin-top" "10px"
                 ]
-                [ text "Close" ]
+                [ H.text "Close" ]
             ]
         ]
 

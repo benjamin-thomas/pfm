@@ -86,26 +86,34 @@
 </head>
 
 <body>
-    <div id="app"></div>
-    <script>
-        const app = Elm.Main2.init({
-            node: document.getElementById("app")
-        });
-        
-        const die = (msg) => {
-            throw new Error(msg); 
-        } 
+<div id="app"></div>
+<script>
+    const die = (msg) => {
+        throw new Error(msg);
+    }
 
-        const getDialogExn = () => document.getElementById("myDialog") || die("Dialog not found");
+    const getDialogExn = () => document.getElementById("myDialog") || die("Dialog not found");
 
-        app.ports["showDialog"].subscribe(() => {
-            getDialogExn().showModal();
-        });
+    const app = Elm.Main2.init({
+        node: document.getElementById("app")
+    });
 
-        app.ports["closeDialog"].subscribe(() => {
-            getDialogExn().close();
+    app.ports["showDialog"].subscribe(() => {
+        /*
+         * We use requestAnimationFrame because we must wait for the dialog from the Elm app to be rendered before
+         * trying to show it.
+         * 
+         * Change `showModal()` to `show()` if you want to use the Elm debugger while having the dialog open.
+         */
+        requestAnimationFrame(() => {
+            getDialogExn().showModal()
         });
-    </script>
+    });
+
+    app.ports["closeDialog"].subscribe(() => {
+        getDialogExn().close();
+    });
+</script>
 </body>
 
 </html>
