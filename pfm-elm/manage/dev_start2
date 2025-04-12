@@ -1,3 +1,3 @@
 #!/bin/bash
 
-elm-live ./src/Main2.elm --start-page=index2.html --pushstate -- --debug --output=dist/main2.js
+elm-live ./src/Main2.elm --port=8001 --start-page=index2.html --pushstate -- --debug --output=dist/main2.js
