@@ -1,6 +1,5 @@
 // noinspection JSUnresolvedReference
 import {Elm} from './Main.elm';
-
 import '../main.css';
 
 document.addEventListener('DOMContentLoaded', function () {
