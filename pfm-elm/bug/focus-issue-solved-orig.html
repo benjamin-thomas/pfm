@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+
+<!--
+
+The "best" way to handle focusing an input after dialog open is to: 
+
+- use the browser-native `dialog` HTML element
+- use it's showModal() function
+  - which adds a `dialog::backdrop` CSS property
+  - which centers the dialog
+  - which disables text selection, etc. on the "background elements"
+  - it's possible do use show() as well, but that won't disable background text selection, etc. 
+- very important: use the autofocus property
+ - this focuses the field perfectly, it's "frame-perfect", no focus "jumping" due to bad focus on prior frames, no focus lost in the ether.
+ - "focus trap" works perfectly (tab between elements)
+
+-->
+
+<head>
+    <title>Dialog Focus Bug Reproduction</title>
+    <style>
+        :root {
+            --font-family: -apple-system, Ubuntu, "Open Sans", "Helvetica Neue";
+            --bg-color: #f0f0f0;
+            --primary-color: #4caf50;
+            --border-color: #ccc;
+            --text-color: white;
+            --shadow-color: rgba(76, 175, 80, 0.5);
+            --backdrop-color: rgba(0, 0, 0, 0.5);
+            --spacing-sm: 5px;
+            --spacing-md: 8px;
+            --spacing-lg: 10px;
+            --spacing-xl: 20px;
+            --border-radius: 4px;
+        }
+
+        body {
+            font-family: var(--font-family), sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: var(--spacing-xl);
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-bottom: var(--spacing-xl);
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: var(--spacing-md);
+            text-align: left;
+        }
+
+        button {
+            padding: var(--spacing-lg) var(--spacing-xl);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            border: none;
+            cursor: pointer;
+        }
+
+        dialog {
+            min-width: 250px;
+            padding: var(--spacing-xl)
+        }
+
+        dialog::backdrop {
+            background-color: var(--backdrop-color);
+        }
+
+        label {
+            display: block;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        #closeDialog {
+            display: block;
+            margin-top: var(--spacing-lg);
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 5px var(--shadow-color);
+        }
+    </style>
+</head>
+
+<body>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Age</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>John Doe</td>
+                <td>30</td>
+            </tr>
+            <tr>
+                <td>Jane Smith</td>
+                <td>25</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <button id="openDialog">Open Dialog</button>
+
+    <dialog id="myDialog">
+        <label for="input1">Input 1:</label>
+        <input type="text" id="input1" />
+
+        <label for="select1">Select 1:</label>
+        <select id="select1">
+            <option value="option1">Option 1</option>
+            <option value="option2">Option 2</option>
+        </select>
+
+        <label for="input2">Input 2 (Target Focus):</label>
+        <input type="text" id="input2" autofocus>
+
+        <label for="select2">Select 2:</label>
+        <select id="select2">
+            <option value="option3">Option 3</option>
+            <option value="option4">Option 4</option>
+        </select>
+
+        <button id="closeDialog">Close</button>
+    </dialog>
+
+    <script>
+        const openDialogButton = document.getElementById("openDialog");
+        const closeDialogButton = document.getElementById("closeDialog");
+        const dialog = document.getElementById("myDialog");
+
+        openDialogButton.addEventListener("click", () => dialog.showModal());
+        closeDialogButton.addEventListener("click", () => dialog.close());
+        
+        dialog.addEventListener("close", () => console.log("Dialog closed"));
+    </script>
+</body>
+
+</html>
