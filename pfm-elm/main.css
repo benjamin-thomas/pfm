@@ -502,14 +502,24 @@ a:hover {
 
 /* Dialog */
 dialog.transaction {
-    min-width: 500px;
+    min-width: 420px;
     background-color: var(--color-card-bg);
     border-radius: 8px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    border-width: 1px;
+    border-color: var(--color-border);
+}
+
+.dark-theme dialog.transaction {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8);
 }
 
 dialog.transaction::backdrop {
     background-color: rgba(0, 0, 0, 0.7);
+}
+
+.dark-theme dialog.transaction::backdrop {
+    background-color: rgba(0, 0, 0, 0.2);
 }
 
 .dialog-content {
@@ -650,12 +660,12 @@ dialog.transaction::backdrop {
     transition: transform 0.2s, background-color 0.2s;
 }
 
-.toggle__input:checked+.toggle__label::before {
+.toggle__input:checked + .toggle__label::before {
     background-color: var(--color-primary);
     border-color: var(--color-primary);
 }
 
-.toggle__input:checked+.toggle__label::after {
+.toggle__input:checked + .toggle__label::after {
     transform: translateX(18px) translateY(-50%);
     background-color: white;
 }
