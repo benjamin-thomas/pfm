@@ -880,21 +880,11 @@ init () url key =
       , now = Time.millisToPosix 0
       , zone = Time.utc
       , book = book
-      , dialog =
-            Just <|
-                CreateDialog
-                    { descr = ""
-                    , from = ""
-                    , to = ""
-                    , amount = ""
-                    , date = ""
-                    , showTime = False
-                    }
+      , dialog = Nothing
       , isDarkTheme = False
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
-        , showDialog ()
         , consoleLog "Booting up..." E.null
         ]
     )

@@ -3,6 +3,12 @@ import {Elm} from './Main.elm';
 
 import '../main.css';
 
+const die = (msg) => {
+    throw new Error(msg);
+}
+
+const getDialogExn = () => document.getElementById("transaction-dialog") || die("Dialog not found");
+
 document.addEventListener('DOMContentLoaded', function () {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
@@ -47,18 +53,10 @@ app.ports["showDialog"].subscribe(() => {
      * trying to show it.
      */
     requestAnimationFrame(() => {
-        const dialog = document.getElementById("transaction-dialog");
-        if (dialog) {
-            dialog.showModal();
-        } else {
-            console.error("Dialog not found");
-        }
+        getDialogExn().showModal();
     });
 });
 
 app.ports["closeDialog"].subscribe(() => {
-    const dialog = document.getElementById("transaction-dialog");
-    if (dialog) {
-        dialog.close();
-    }
+    getDialogExn().close();
 });

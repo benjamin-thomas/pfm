@@ -188,13 +188,13 @@ view model =
     H.div []
         [ viewTable model.tableData
         , H.div [ HA.style "margin" "10px 0" ]
-            [ H.button 
+            [ H.button
                 [ HE.onClick ShowDialog1
-                , HA.style "margin-right" "10px" 
-                ] 
+                , HA.style "margin-right" "10px"
+                ]
                 [ H.text "Open Dialog 1" ]
-            , H.button 
-                [ HE.onClick ShowDialog2 ] 
+            , H.button
+                [ HE.onClick ShowDialog2 ]
                 [ H.text "Open Dialog 2" ]
             ]
         , case model.dialog of
@@ -271,13 +271,14 @@ viewDialog2 form =
             , H.label [ HA.for "email" ] [ H.text "Email:" ]
             , H.input [ HA.type_ "email", HA.id "email", HE.onInput (Dialog2FormMsg << EmailChanged), HA.value form.email, HA.attribute "autofocus" "" ] []
             , H.label [ HA.for "comment" ] [ H.text "Comment:" ]
-            , H.textarea 
+            , H.textarea
                 [ HA.id "comment"
                 , HE.onInput (Dialog2FormMsg << CommentChanged)
                 , HA.value form.comment
                 , HA.style "width" "100%"
                 , HA.style "min-height" "100px"
-                ] []
+                ]
+                []
             , H.button
                 [ HA.id "closeDialog"
                 , HE.onClick CloseDialog
