@@ -5,11 +5,115 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Elm Dialog Focus Example</title>
+    <script src="dist/main2.js"></script>
+    <style>
+        :root {
+            --font-family: -apple-system, Ubuntu, "Open Sans", "Helvetica Neue";
+            --bg-color: #f0f0f0;
+            --primary-color: #4caf50;
+            --border-color: #ccc;
+            --text-color: white;
+            --shadow-color: rgba(76, 175, 80, 0.5);
+            --backdrop-color: rgba(0, 0, 0, 0.5);
+            --spacing-sm: 5px;
+            --spacing-md: 8px;
+            --spacing-lg: 10px;
+            --spacing-xl: 20px;
+            --border-radius: 4px;
+        }
+
+        body {
+            font-family: var(--font-family), sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: var(--spacing-xl);
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-bottom: var(--spacing-xl);
+        }
+
+        th,
+        td {
+            border: 1px solid var(--border-color);
+            padding: var(--spacing-md);
+            text-align: left;
+        }
+
+        button {
+            padding: var(--spacing-lg) var(--spacing-xl);
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            border: none;
+            cursor: pointer;
+            border-radius: var(--border-radius);
+        }
+
+        dialog {
+            min-width: 300px;
+            padding: var(--spacing-xl);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--border-color);
+        }
+
+        dialog::backdrop {
+            background-color: var(--backdrop-color);
+        }
+
+        label {
+            display: block;
+            margin-bottom: var(--spacing-sm);
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+        }
+
+        input:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 5px var(--shadow-color);
+        }
+    </style>
 </head>
 
 <body>
 <div id="app"></div>
-    <script type="module" src="/src/main2.js"></script>
+<script>
+    const die = (msg) => {
+        throw new Error(msg);
+    }
+
+    const getDialogExn = () => document.getElementById("myDialog") || die("Dialog not found");
+
+    const app = Elm.Main2.init({
+        node: document.getElementById("app")
+    });
+
+    app.ports["showDialog"].subscribe(() => {
+        /*
+         * We use requestAnimationFrame because we must wait for the dialog from the Elm app to be rendered before
+         * trying to show it.
+         * 
+         * Change `showModal()` to `show()` if you want to use the Elm debugger while having the dialog open.
+         */
+        requestAnimationFrame(() => {
+            getDialogExn().showModal()
+        });
+    });
+
+    app.ports["closeDialog"].subscribe(() => {
+        getDialogExn().close();
+    });
+</script>
 </body>
 
 </html>
