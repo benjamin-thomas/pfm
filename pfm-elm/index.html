@@ -5,62 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Finance Manager</title>
-    <script src="dist/main.js"></script>
-    <script src="theme-toggle.js"></script>
-    <link rel="stylesheet" href="/main.css">
 </head>
 
 <body>
 <div id="app"></div>
-<script>
-    const die = (msg) => {
-        throw new Error(msg);
-    }
-
-    const getDialogExn = () => document.getElementById("transaction-dialog") || die("Dialog not found");
-
-    const app = Elm.Main.init({
-        node: document.getElementById("app")
-    });
-
-    document.addEventListener("keyup", (event) => {
-        if (event.key === "Escape") {
-            app.ports.escapePressed.send(null);
-        } else if (event.key === "Enter") {
-            app.ports.enterPressed.send(null);
-        }
-    });
-
-    app.ports.consoleLogRaw.subscribe((x) => {
-        if (!x.title) {
-            console.log(`[APP]`, x);
-        } else {
-            if (x.data === null) {
-                console.log(`[APP] ${x.title}`);
-            } else {
-                console.log(`[APP] ${x.title}`, x.data);
-            }
-        }
-    });
-
-    // Set up theme toggle functionality
-    setupThemeToggle(app);
-
-    // Dialog handling
-    app.ports.showDialog.subscribe(() => {
-        /*
-         * We use requestAnimationFrame because we must wait for the dialog from the Elm app to be rendered before
-         * trying to show it.
-         */
-        requestAnimationFrame(() => {
-            getDialogExn().showModal();
-        });
-    });
-
-    app.ports.closeDialog.subscribe(() => {
-        getDialogExn().close();
-    });
-</script>
+<script type="module" src="/src/main.js"></script>
 </body>
 
 </html>
