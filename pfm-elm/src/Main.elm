@@ -325,15 +325,6 @@ view model =
             ]
             [ themeToggleButton model.isDarkTheme
             , viewPage
-            , case model.dialog of
-                Nothing ->
-                    H.text ""
-
-                Just (EditDialog data) ->
-                    viewEditDialog data
-
-                Just (CreateDialog data) ->
-                    viewCreateDialog data
             ]
         ]
     }
@@ -542,18 +533,10 @@ viewHome model =
                 H.text ""
 
             Just (EditDialog data) ->
-                dialog
-                    [ HA.class "transaction"
-                    , HA.attribute "open" ""
-                    ]
-                    [ viewEditDialog data ]
+                viewEditDialog data
 
             Just (CreateDialog data) ->
-                dialog
-                    [ HA.class "transaction"
-                    , HA.attribute "open" ""
-                    ]
-                    [ viewCreateDialog data ]
+                viewCreateDialog data
         ]
 
 
