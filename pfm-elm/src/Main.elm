@@ -19,9 +19,6 @@ import Url exposing (Url)
 import Utils exposing (formatDateForInput)
 
 
-port escapePressed : (() -> msg) -> Sub msg
-
-
 port enterPressed : (() -> msg) -> Sub msg
 
 
@@ -258,9 +255,9 @@ type Msg
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
+    | OpenCreateDialog Time.Posix
     | EscapedPressed
     | EnterPressed
-    | GotTime Time.Posix
     | GotZone Time.Zone
     | ToggleTheme
 
@@ -609,7 +606,7 @@ viewCreateDialog data =
                 { text = "Description"
                 , value = data.descr
                 , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
-                , autofocus = True
+                , autofocus = False
                 }
             , accountSelect
                 { text = "From"
@@ -665,6 +662,7 @@ makeField { text, value, onInput, autofocus } =
             [ H.text text ]
         , H.input
             ([ HA.type_ "text"
+             , HA.autocomplete autofocus
              , HA.id fieldId
              , HA.class "field__input"
              , HA.value value
@@ -1006,18 +1004,23 @@ update msg model =
                     )
 
         AddTransactionClicked ->
-            ( { model
-                | dialog =
-                    Just <|
-                        CreateDialog
-                            { descr = ""
-                            , from = ""
-                            , to = ""
-                            , amount = ""
-                            , date = ""
-                            , showTime = False
-                            }
-              }
+            ( model
+            , Task.perform OpenCreateDialog Time.now
+            )
+
+        OpenCreateDialog now ->
+            let
+                dialog_ =
+                    CreateDialog
+                        { descr = ""
+                        , from = ""
+                        , to = ""
+                        , amount = ""
+                        , date = Utils.formatDateTimeLocal model.zone now
+                        , showTime = True
+                        }
+            in
+            ( { model | dialog = Just dialog_ }
             , showDialog ()
             )
 
@@ -1068,6 +1071,7 @@ update msg model =
                                             Dict.get data.to allAccounts
                                                 |> Maybe.withDefault spar
 
+                                        parsedDate : Time.Posix
                                         parsedDate =
                                             Iso8601.toTime data.date
                                                 |> Result.toMaybe
@@ -1110,11 +1114,6 @@ update msg model =
                     , Cmd.none
                     )
 
-        GotTime now ->
-            ( { model | now = now }
-            , Cmd.none
-            )
-
         GotZone zone ->
             ( { model | zone = zone }
             , Cmd.none
@@ -1131,7 +1130,6 @@ handleEditDialog id model =
     case Dict.get id model.book of
         Just tx ->
             let
-                -- Check if the date has time information (not just 00:00:00)
                 dateString =
                     Iso8601.fromTime tx.date
 
@@ -1165,8 +1163,7 @@ handleEditDialog id model =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ escapePressed (\() -> EscapedPressed)
-        , enterPressed (\() -> EnterPressed)
+        [ enterPressed (\() -> EnterPressed)
         ]
 
 

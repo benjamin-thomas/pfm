@@ -21,15 +21,6 @@ const app = Elm.Main.init({
     node: document.getElementById('app')
 });
 
-// Set up event listeners
-document.addEventListener("keyup", (event) => {
-    if (event.key === "Escape") {
-        app.ports["escapePressed"].send(null);
-    } else if (event.key === "Enter") {
-        app.ports["enterPressed"].send(null);
-    }
-});
-
 app.ports["consoleLogRaw"].subscribe((x) => {
     if (!x.title) {
         console.log(`[APP]`, x);
