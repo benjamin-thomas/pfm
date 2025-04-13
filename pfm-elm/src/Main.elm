@@ -13,10 +13,10 @@ import Json.Encode as E
 import Page.UI as UI_Page
 import Route exposing (Route)
 import Set
-import Task exposing (Task)
+import Task
 import Time
 import Url exposing (Url)
-import Utils exposing (formatDateForInput)
+import Utils exposing (amountFmt, formatDateForInput)
 
 
 port enterPressed : (() -> msg) -> Sub msg
@@ -256,27 +256,10 @@ type Msg
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
     | OpenCreateDialog Time.Posix
-    | EscapedPressed
+    | CloseDialogPressed
     | EnterPressed
     | GotZone Time.Zone
     | ToggleTheme
-
-
-amountFmt : Decimal -> String
-amountFmt amount =
-    let
-        str =
-            case Decimal.toString amount |> String.split "." of
-                [ euros, cents ] ->
-                    euros ++ "." ++ String.padRight 2 '0' cents
-
-                [ euros ] ->
-                    euros ++ ".00"
-
-                _ ->
-                    "IMPOSSIBLE"
-    in
-    str ++ "\u{00A0}€"
 
 
 uniqueBy : (a -> comparable) -> List a -> List a
@@ -299,6 +282,7 @@ dateFmt =
         << Iso8601.fromTime
 
 
+view : Model -> Browser.Document Msg
 view model =
     let
         viewPage =
@@ -373,8 +357,8 @@ viewHome model =
                 (\( _, tx ) -> Time.posixToMillis tx.date)
                 (Dict.toList model.book)
 
-        transactions2 : List ( Int, TransactionViewWithBalance )
-        transactions2 =
+        transactionsWithBalance : List ( Int, TransactionViewWithBalance )
+        transactionsWithBalance =
             let
                 f :
                     ( Int, TransactionView )
@@ -521,7 +505,7 @@ viewHome model =
                                     ]
                                 ]
                         )
-                        transactions2
+                        transactionsWithBalance
                     )
                 ]
             ]
@@ -581,7 +565,7 @@ viewEditDialog data =
             , H.div [ HA.class "dialog-actions" ]
                 [ H.button
                     [ HA.class "button button--secondary"
-                    , HE.onClick EscapedPressed
+                    , HE.onClick CloseDialogPressed
                     ]
                     [ H.text "Cancel" ]
                 , H.button
@@ -638,7 +622,7 @@ viewCreateDialog data =
             , H.div [ HA.class "dialog-actions" ]
                 [ H.button
                     [ HA.class "button button--secondary"
-                    , HE.onClick EscapedPressed
+                    , HE.onClick CloseDialogPressed
                     ]
                     [ H.text "Cancel" ]
                 , H.button
@@ -1122,7 +1106,7 @@ update msg model =
                     , Cmd.none
                     )
 
-        EscapedPressed ->
+        CloseDialogPressed ->
             ( { model | dialog = Nothing }
             , closeDialog ()
             )

@@ -1,5 +1,5 @@
 module Utils exposing
-    ( formatAmount
+    ( amountFmt
     , formatDate
     , formatDateForInput
     , formatDateTimeLocal
@@ -9,14 +9,11 @@ import Decimal exposing (Decimal)
 import Time
 
 
-formatAmount : Decimal -> String
-formatAmount amount =
+amountFmt : Decimal -> String
+amountFmt amount =
     let
-        absAmount =
-            Decimal.abs amount
-
         str =
-            case Decimal.toString absAmount |> String.split "." of
+            case Decimal.toString amount |> String.split "." of
                 [ euros, cents ] ->
                     euros ++ "." ++ String.padRight 2 '0' cents
 
@@ -26,7 +23,7 @@ formatAmount amount =
                 _ ->
                     "IMPOSSIBLE"
     in
-    str ++ " €"
+    str ++ "\u{00A0}€"
 
 
 formatDate : Time.Posix -> String

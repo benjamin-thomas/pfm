@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // Listen for changes to the system preference
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
             // Don't change if user has set a preference manually during running session. 
-            if (localStorage.getItem(COLOR_SCHEME_OVERRIDE)) return; 
+            if (localStorage.getItem(COLOR_SCHEME_OVERRIDE)) return;
 
             if (event.matches) {
                 document.documentElement.classList.add('dark-theme');
@@ -90,4 +90,10 @@ app.ports["showDialog"].subscribe(() => {
 
 app.ports["closeDialog"].subscribe(() => {
     getDialogExn().close();
+});
+
+document.addEventListener("keyup", (event) => {
+    if (event.key === "Enter") {
+        app.ports["enterPressed"].send(null);
+    }
 });

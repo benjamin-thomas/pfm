@@ -5,7 +5,7 @@ import Domain exposing (TransactionViewWithBalance)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Time
-import Utils exposing (formatAmount, formatDate)
+import Utils exposing (amountFmt, formatDate)
 
 
 
@@ -207,7 +207,7 @@ viewBalanceCard balance =
         , H.div [ HA.class "balance-card__account" ]
             [ H.text balance.account ]
         , H.div [ HA.class "balance-card__amount" ]
-            [ H.text (formatAmount balance.amount) ]
+            [ H.text (amountFmt balance.amount) ]
         ]
 
 
@@ -258,7 +258,7 @@ viewTransactionItem ( id, transaction ) =
         , H.div [ HA.class "transaction-item__date" ]
             [ H.text (formatDate transaction.date) ]
         , H.div [ HA.class amountClass ]
-            [ H.text (amountSign ++ formatAmount transaction.amount) ]
+            [ H.text (amountSign ++ amountFmt transaction.amount) ]
         ]
 
 
