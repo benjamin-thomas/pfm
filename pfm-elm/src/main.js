@@ -6,13 +6,13 @@ if (import.meta.env.DEV) {
      There's no need to track the loaded state of the registry here either, there's no "double registry".
     */
     import('elm-debug-transformer').then((transformer) => {
-        transformer.register({theme: "dark"});
+        transformer.register({ theme: "dark" });
         console.log('[BOOT] Elm debugger transformer activated');
     });
 }
 
 // noinspection JSUnresolvedReference
-import {Elm} from './Main.elm';
+import { Elm } from './Main.elm';
 
 import '../main.css';
 
@@ -23,9 +23,29 @@ const die = (msg) => {
 const getDialogExn = () => document.getElementById("transaction-dialog") || die("Dialog not found");
 
 document.addEventListener('DOMContentLoaded', function () {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme === 'dark') {
+    // Check for user's manual preference first
+    const userThemePreference = localStorage.getItem('theme-preference');
+
+    if (userThemePreference === 'dark') {
         document.documentElement.classList.add('dark-theme');
+    } else if (userThemePreference === 'light') {
+        document.documentElement.classList.remove('dark-theme');
+    } else {
+        // If no manual preference, use system preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark-theme');
+        }
+
+        // Listen for changes to the system preference
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (localStorage.getItem('theme-preference')) return; // don't change if user has set a preference manually 
+            
+            if (event.matches) {
+                document.documentElement.classList.add('dark-theme');
+            } else {
+                document.documentElement.classList.remove('dark-theme');
+            }
+        });
     }
 });
 
@@ -47,7 +67,8 @@ app.ports["consoleLogRaw"].subscribe((x) => {
 
 app.ports["toggleTheme"].subscribe(function () {
     const isDarkTheme = document.documentElement.classList.toggle('dark-theme');
-    localStorage.setItem('theme', isDarkTheme ? 'dark' : 'light');
+    // Store user's manual preference
+    localStorage.setItem('theme-preference', isDarkTheme ? 'dark' : 'light');
 });
 
 app.ports["showDialog"].subscribe(() => {
