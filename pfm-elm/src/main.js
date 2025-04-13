@@ -1,3 +1,12 @@
+const COLOR_SCHEME_OVERRIDE = 'prefers-color-scheme-override';
+
+const getSysColorScheme = () => {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? "dark" : "light";
+};
+
+const sysColorScheme = getSysColorScheme();
+const userColorScheme = localStorage.getItem(COLOR_SCHEME_OVERRIDE);
+
 if (import.meta.env.DEV) {
     /*
      NOTE
@@ -6,13 +15,13 @@ if (import.meta.env.DEV) {
      There's no need to track the loaded state of the registry here either, there's no "double registry".
     */
     import('elm-debug-transformer').then((transformer) => {
-        transformer.register({ theme: "dark" });
+        transformer.register({theme: sysColorScheme}); // must always use the system color scheme to match chrome devtools
         console.log('[BOOT] Elm debugger transformer activated');
     });
 }
 
 // noinspection JSUnresolvedReference
-import { Elm } from './Main.elm';
+import {Elm} from './Main.elm';
 
 import '../main.css';
 
@@ -23,23 +32,21 @@ const die = (msg) => {
 const getDialogExn = () => document.getElementById("transaction-dialog") || die("Dialog not found");
 
 document.addEventListener('DOMContentLoaded', function () {
-    // Check for user's manual preference first
-    const userThemePreference = localStorage.getItem('theme-preference');
-
-    if (userThemePreference === 'dark') {
+    if (userColorScheme === 'dark') {
         document.documentElement.classList.add('dark-theme');
-    } else if (userThemePreference === 'light') {
+    } else if (userColorScheme === 'light') {
         document.documentElement.classList.remove('dark-theme');
     } else {
         // If no manual preference, use system preference
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        if (sysColorScheme === 'dark') {
             document.documentElement.classList.add('dark-theme');
         }
 
         // Listen for changes to the system preference
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
-            if (localStorage.getItem('theme-preference')) return; // don't change if user has set a preference manually 
-            
+            // Don't change if user has set a preference manually during running session. 
+            if (localStorage.getItem(COLOR_SCHEME_OVERRIDE)) return; 
+
             if (event.matches) {
                 document.documentElement.classList.add('dark-theme');
             } else {
@@ -68,7 +75,7 @@ app.ports["consoleLogRaw"].subscribe((x) => {
 app.ports["toggleTheme"].subscribe(function () {
     const isDarkTheme = document.documentElement.classList.toggle('dark-theme');
     // Store user's manual preference
-    localStorage.setItem('theme-preference', isDarkTheme ? 'dark' : 'light');
+    localStorage.setItem(COLOR_SCHEME_OVERRIDE, isDarkTheme ? 'dark' : 'light');
 });
 
 app.ports["showDialog"].subscribe(() => {
