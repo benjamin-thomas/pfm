@@ -1,15 +1,20 @@
 if (import.meta.env.DEV) {
-    import('elm-debug-transformer').then(ElmDebugger => {
-        ElmDebugger.register({theme: "dark"});
+    /*
+     NOTE
+     There's a dedicated vite plugin, but capped at vite v4 currently.
+     So, there doesn't seem to be an advantage to using that plugin, apart from not having to define this code block.
+     There's no need to track the loaded state of the registry here either, there's no "double registry".
+    */
+    import('elm-debug-transformer').then((transformer) => {
+        transformer.register({theme: "dark"});
         console.log('[BOOT] Elm debugger transformer activated');
     });
 }
 
 // noinspection JSUnresolvedReference
-import { Elm } from './Main.elm';
+import {Elm} from './Main.elm';
 
 import '../main.css';
-
 
 const die = (msg) => {
     throw new Error(msg);
@@ -24,7 +29,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-// Initialize the Elm application
 const app = Elm.Main.init({
     node: document.getElementById('app')
 });
