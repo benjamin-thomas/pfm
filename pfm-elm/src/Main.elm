@@ -548,34 +548,34 @@ viewEditDialog data =
             , makeField
                 { text = "Description"
                 , value = data.descr
-                , onInput = \str -> EditDialogChanged (EditDescrChanged str)
+                , onInput = EditDialogChanged << EditDescrChanged
                 , autofocus = False
                 }
             , accountSelect
                 { text = "From"
                 , value = data.from
-                , onInput = \str -> EditDialogChanged (EditFromChanged str)
+                , onInput = EditDialogChanged << EditFromChanged
                 , accounts = allAccounts_
                 , excludeAccount = Just data.to
                 }
             , accountSelect
                 { text = "To"
                 , value = data.to
-                , onInput = \str -> EditDialogChanged (EditToChanged str)
+                , onInput = EditDialogChanged << EditToChanged
                 , accounts = allAccounts_
                 , excludeAccount = Just data.from
                 }
             , makeField
                 { text = "Amount"
                 , value = data.amount
-                , onInput = \str -> EditDialogChanged (EditAmountChanged str)
+                , onInput = EditDialogChanged << EditAmountChanged
                 , autofocus = True
                 }
             , dateField
                 { text = "Date"
                 , date = data.date
                 , showTime = data.showTime
-                , onDateInput = \str -> EditDialogChanged (EditDateChanged str)
+                , onDateInput = EditDialogChanged << EditDateChanged
                 , onToggleTime = EditDialogChanged EditToggleTimeDisplay
                 }
             , H.div [ HA.class "dialog-actions" ]
@@ -605,34 +605,34 @@ viewCreateDialog data =
             , makeField
                 { text = "Description"
                 , value = data.descr
-                , onInput = \str -> CreateDialogChanged (CreateDescrChanged str)
+                , onInput = CreateDialogChanged << CreateDescrChanged
                 , autofocus = False
                 }
             , accountSelect
                 { text = "From"
                 , value = data.from
-                , onInput = \str -> CreateDialogChanged (CreateFromChanged str)
+                , onInput = CreateDialogChanged << CreateFromChanged
                 , accounts = allAccounts_
                 , excludeAccount = Just data.to
                 }
             , accountSelect
                 { text = "To"
                 , value = data.to
-                , onInput = \str -> CreateDialogChanged (CreateToChanged str)
+                , onInput = CreateDialogChanged << CreateToChanged
                 , accounts = allAccounts_
                 , excludeAccount = Just data.from
                 }
             , makeField
                 { text = "Amount"
                 , value = data.amount
-                , onInput = \str -> CreateDialogChanged (CreateAmountChanged str)
+                , onInput = CreateDialogChanged << CreateAmountChanged
                 , autofocus = False
                 }
             , dateField
                 { text = "Date"
                 , date = data.date
                 , showTime = data.showTime
-                , onDateInput = \str -> CreateDialogChanged (CreateDateChanged str)
+                , onDateInput = CreateDialogChanged << CreateDateChanged
                 , onToggleTime = CreateDialogChanged CreateToggleTimeDisplay
                 }
             , H.div [ HA.class "dialog-actions" ]
@@ -661,19 +661,20 @@ makeField { text, value, onInput, autofocus } =
         [ H.label [ HA.class "field__label", HA.for fieldId ]
             [ H.text text ]
         , H.input
-            ([ HA.type_ "text"
-             , HA.autocomplete autofocus
-             , HA.id fieldId
-             , HA.class "field__input"
-             , HA.value value
-             , HE.onInput onInput
-             ]
-                ++ (if autofocus then
-                        [ HA.attribute "autofocus" "" ]
+            (List.filterMap identity
+                [ Just <| HA.type_ "text"
+                , Just <| HA.id fieldId
+                , Just <| HA.class "field__input"
+                , Just <| HA.value value
+                , Just <| HE.onInput onInput
 
-                    else
-                        []
-                   )
+                -- Don't use Elm's autofocus, we need to trigger HTML-native functionality for the dialog handling.
+                , if autofocus then
+                    Just <| HA.attribute "autofocus" ""
+
+                  else
+                    Nothing
+                ]
             )
             []
         ]
