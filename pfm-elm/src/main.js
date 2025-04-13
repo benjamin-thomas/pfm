@@ -1,7 +1,15 @@
+if (import.meta.env.DEV) {
+    import('elm-debug-transformer').then(ElmDebugger => {
+        ElmDebugger.register({theme: "dark"});
+        console.log('[BOOT] Elm debugger transformer activated');
+    });
+}
+
 // noinspection JSUnresolvedReference
-import {Elm} from './Main.elm';
+import { Elm } from './Main.elm';
 
 import '../main.css';
+
 
 const die = (msg) => {
     throw new Error(msg);

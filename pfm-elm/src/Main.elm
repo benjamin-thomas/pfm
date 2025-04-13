@@ -890,6 +890,10 @@ init () url key =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        _ =
+            Debug.log "(msg, model)" ( msg, model )
+    in
     case msg of
         UrlRequested urlRequest ->
             case urlRequest of

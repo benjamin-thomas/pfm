@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "elm-debug-transformer": "^1.2.1",
     "vite": "^6.2.6",
     "vite-plugin-elm": "^3.0.1"
   }
