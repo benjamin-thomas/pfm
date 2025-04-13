@@ -545,7 +545,7 @@ viewEditDialog data =
         ]
         [ H.div [ HA.class "dialog-content" ]
             [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
-            , makeField
+            , makeTextField
                 { text = "Description"
                 , value = data.descr
                 , onInput = EditDialogChanged << EditDescrChanged
@@ -565,7 +565,7 @@ viewEditDialog data =
                 , accounts = allAccounts_
                 , excludeAccount = Just data.from
                 }
-            , makeField
+            , makeTextField
                 { text = "Amount"
                 , value = data.amount
                 , onInput = EditDialogChanged << EditAmountChanged
@@ -602,7 +602,7 @@ viewCreateDialog data =
         ]
         [ H.div [ HA.class "dialog-content" ]
             [ H.h3 [ HA.class "dialog-title" ] [ H.text "Add Transaction" ]
-            , makeField
+            , makeTextField
                 { text = "Description"
                 , value = data.descr
                 , onInput = CreateDialogChanged << CreateDescrChanged
@@ -622,7 +622,7 @@ viewCreateDialog data =
                 , accounts = allAccounts_
                 , excludeAccount = Just data.from
                 }
-            , makeField
+            , makeTextField
                 { text = "Amount"
                 , value = data.amount
                 , onInput = CreateDialogChanged << CreateAmountChanged
@@ -651,11 +651,11 @@ viewCreateDialog data =
         ]
 
 
-makeField : { text : String, value : String, onInput : String -> msg, autofocus : Bool } -> Html msg
-makeField { text, value, onInput, autofocus } =
+makeTextField : { text : String, value : String, onInput : String -> msg, autofocus : Bool } -> Html msg
+makeTextField { text, value, onInput, autofocus } =
     let
         fieldId =
-            String.toLower text |> String.replace " " "-" |> (\s -> s ++ "-field")
+            makeFieldId text
     in
     H.div [ HA.class "field" ]
         [ H.label [ HA.class "field__label", HA.for fieldId ]
@@ -680,9 +680,19 @@ makeField { text, value, onInput, autofocus } =
         ]
 
 
+makeFieldId : String -> String
+makeFieldId =
+    (\s -> s ++ "-field")
+        << String.replace " " "-"
+        << String.toLower
+
+
 dateField : { text : String, date : String, showTime : Bool, onDateInput : String -> msg, onToggleTime : msg } -> Html msg
 dateField { text, date, showTime, onDateInput, onToggleTime } =
     let
+        fieldId =
+            makeFieldId text
+
         -- Parse the current date string
         dateOnly =
             if String.contains "T" date then
@@ -721,7 +731,10 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
     in
     H.div [ HA.class "field" ]
         [ H.div [ HA.class "field__header" ]
-            [ H.label [ HA.class "field__label" ]
+            [ H.label
+                [ HA.class "field__label"
+                , HA.for fieldId
+                ]
                 [ H.text text ]
             , H.div [ HA.class "field__toggle" ]
                 [ H.label [ HA.class "toggle" ]
@@ -738,6 +751,7 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
             ]
         , H.input
             [ HA.class "field__input"
+            , HA.id fieldId
             , HA.type_ inputType
             , HA.value inputValue
             , HE.onInput
@@ -763,6 +777,9 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
 accountSelect : { a | onInput : String -> msg, text : String, value : String, accounts : List Account, excludeAccount : Maybe String } -> Html msg
 accountSelect { onInput, text, value, accounts, excludeAccount } =
     let
+        fieldId =
+            makeFieldId text
+
         filteredAccounts =
             case excludeAccount of
                 Just excludeName ->
@@ -776,10 +793,14 @@ accountSelect { onInput, text, value, accounts, excludeAccount } =
                     accounts
     in
     H.div [ HA.class "field" ]
-        [ H.label [ HA.class "field__label" ]
+        [ H.label
+            [ HA.class "field__label"
+            , HA.for fieldId
+            ]
             [ H.text text ]
         , H.select
             [ HA.class "field__select"
+            , HA.id fieldId
             , HE.onInput onInput
             , HA.value value
             ]
