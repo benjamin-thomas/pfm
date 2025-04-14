@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "dev": "parcel dev/index.html"
+    "dev": "parcel dev/index.html",
+    "dev2": "parcel dev/index2.html"
   },
   "devDependencies": {
     "parcel": "^2.14.4"
