@@ -20,3 +20,11 @@ export const dialogClose = (id) => () => {
 export const padRight = (n) => (char) => (str) => {
     return str.padEnd(n, char);
 };
+
+export const dateFmt = (instant) => {
+    // return new Date(instant).toISOString()
+    return new Intl.DateTimeFormat("fr", {
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(instant);
+};
