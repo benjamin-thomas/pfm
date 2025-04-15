@@ -1,1 +1,1 @@
-require("../output/Main/index.js").main();
+require("../output/Main2/index.js").main();

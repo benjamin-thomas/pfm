@@ -1,4 +1,4 @@
-module Main
+module Main2
   ( Dialog1FormMsg(..)
   , main
   ) where
@@ -170,7 +170,7 @@ component =
     --   _ = spy "render" state
     -- in
     HH.div [ HP.id "app" ]
-      [ HH.h1_ [ HH.text "Counter example" ]
+      [ HH.h1_ [ HH.text "Dialog handling example" ]
       -- , HH.pre
       --     [ HP.style "white-space: pre-wrap" ]
       --     [ HH.text $ unsafeStringify state ]
