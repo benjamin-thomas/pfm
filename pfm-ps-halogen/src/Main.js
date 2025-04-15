@@ -16,3 +16,7 @@ export const dialogShow = (id) => () => {
 export const dialogClose = (id) => () => {
     getElementByIdExn(id).close();
 };
+
+export const padRight = (n) => (char) => (str) => {
+    return str.padEnd(n, char);
+};

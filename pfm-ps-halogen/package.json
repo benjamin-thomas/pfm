@@ -5,5 +5,8 @@
   },
   "devDependencies": {
     "parcel": "^2.14.4"
+  },
+  "dependencies": {
+    "decimal.js": "^10.5.0"
   }
 }
