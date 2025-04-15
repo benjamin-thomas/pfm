@@ -381,28 +381,26 @@ component refTS =
       H.modify_ \state -> state { dialog = Just (CreateDialog $ emptyCreateDialog n) }
       H.liftEffect $ dialogShow myDialog1Id
     EditTransactionClicked transactionId -> do
-      H.modify_ \state ->
-        let
-          mtx = Map.lookup transactionId state.book
-        in
-          case mtx of
-            Nothing -> state
-            Just tx ->
-              state
-                { dialog =
-                  Just
-                    ( EditDialog
-                        ( { transactionId: transactionId
-                          , descr: tx.descr
-                          , from: tx.from.name
-                          , to: tx.to.name
-                          , amount: Decimal.toString tx.amount
-                          , date: dateFmt tx.date
-                          , showTime: false
-                          }
-                        )
-                    )
-                }
+      state <- H.get
+      case Map.lookup transactionId state.book of
+        Nothing -> H.liftEffect $ throw $ "Could not find transaction with id: " <> show transactionId
+        Just tx ->
+          H.modify_ \st ->
+            st
+              { dialog =
+                Just
+                  ( EditDialog
+                      ( { transactionId: transactionId
+                        , descr: tx.descr
+                        , from: tx.from.name
+                        , to: tx.to.name
+                        , amount: Decimal.toString tx.amount
+                        , date: dateFmt tx.date
+                        , showTime: false
+                        }
+                      )
+                  )
+              }
       H.liftEffect $ dialogShow myDialog2Id
     CloseDialog { dialogId } -> do
       H.liftEffect $ dialogClose dialogId
