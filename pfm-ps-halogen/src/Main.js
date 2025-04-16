@@ -14,6 +14,7 @@ export const dialogShow = (id) => () => {
 };
 
 export const dialogClose = (id) => () => {
+    console.log("Closing dialog...", { id });
     getElementByIdExn(id).close();
 };
 

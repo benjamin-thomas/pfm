@@ -1,9 +1,9 @@
 -- ( Dialog1FormMsg(..) -- , main -- ) where
 module Main where
 
-import Effect.Now (now, nowDateTime)
 import Prelude
-import Data.Array (cons, nubBy)
+import DOM.HTML.Indexed.AutocompleteType (AutocompleteType(..))
+import Data.Array (catMaybes, cons, nubBy, (:))
 import Data.Array as Array
 import Data.Char (fromCharCode)
 import Data.DateTime (DateTime, adjust)
@@ -18,20 +18,21 @@ import Data.Int as Int
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, fromMaybe)
-import Data.String (Pattern(..), split)
+import Data.String (Pattern(..), Replacement(..), split)
 import Data.String as String
 import Data.Time.Duration as Duration
 import Data.Tuple (Tuple(..), snd)
 import Effect (Effect)
 import Effect.Class (class MonadEffect)
 import Effect.Exception (throw)
+import Effect.Now (now, nowDateTime)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import Partial.Unsafe (unsafePartial)
+import Partial.Unsafe (unsafeCrashWith, unsafePartial)
 
 foreign import unsafeStringify :: forall a. a -> String
 
@@ -56,17 +57,17 @@ main = do
     body <- HA.awaitBody
     runUI (component refDate) unit body
 
-type Person
-  = { name :: String
-    , age :: Int
-    }
+type Person =
+  { name :: String
+  , age :: Int
+  }
 
-type Dialog1
-  = { input1 :: String
-    , select1 :: String
-    , input2 :: String
-    , select2 :: String
-    }
+type Dialog1 =
+  { input1 :: String
+  , select1 :: String
+  , input2 :: String
+  , select2 :: String
+  }
 
 emptyCreateDialog :: Instant -> MkCreateDialog
 emptyCreateDialog inst =
@@ -78,11 +79,11 @@ emptyCreateDialog inst =
   , showTime: false
   }
 
-type Dialog2
-  = { name :: String
-    , email :: String
-    , comment :: String
-    }
+type Dialog2 =
+  { name :: String
+  , email :: String
+  , comment :: String
+  }
 
 emptyForm2 :: Dialog2
 emptyForm2 =
@@ -91,68 +92,77 @@ emptyForm2 =
   , comment: ""
   }
 
-type MkEditDialog
-  = { transactionId :: Int
-    , descr :: String
-    , from :: String
-    , to :: String
-    , amount :: String
-    , date :: String
-    , showTime :: Boolean
-    }
+type MkEditDialog =
+  { transactionId :: Int
+  , descr :: String
+  , from :: String
+  , to :: String
+  , amount :: String
+  , date :: String
+  , showTime :: Boolean
+  }
 
-type MkCreateDialog
-  = { descr :: String
-    , from :: String
-    , to :: String
-    , amount :: String
-    , date :: String
-    , showTime :: Boolean
-    }
+type MkCreateDialog =
+  { descr :: String
+  , from :: String
+  , to :: String
+  , amount :: String
+  , date :: String
+  , showTime :: Boolean
+  }
 
 data Dialog
   = EditDialog MkEditDialog
   | CreateDialog MkCreateDialog
 
-type Category
-  = { name :: String
-    }
+type Category =
+  { name :: String
+  }
 
-type Account
-  = { name :: String
-    , category :: Category
-    }
+type Account =
+  { name :: String
+  , category :: Category
+  }
 
-type TransactionView
-  = { date :: Instant
-    , descr :: String
-    , from :: Account
-    , to :: Account
-    , amount :: Decimal
-    }
+type TransactionView =
+  { date :: Instant
+  , descr :: String
+  , from :: Account
+  , to :: Account
+  , amount :: Decimal
+  }
 
-type TransactionViewWithBalance
-  = { date :: Instant
-    , descr :: String
-    , from :: Account
-    , to :: Account
-    , amount :: Decimal
-    , balanceMovement :: { from :: Decimal, to :: Decimal }
-    }
+type TransactionViewWithBalance =
+  { date :: Instant
+  , descr :: String
+  , from :: Account
+  , to :: Account
+  , amount :: Decimal
+  , balanceMovement :: { from :: Decimal, to :: Decimal }
+  }
 
-type State
-  = { dialog :: Maybe Dialog
-    , book :: Map Int TransactionView
-    }
+type State =
+  { dialog :: Maybe Dialog
+  , book :: Map Int TransactionView
+  }
 
--- derive instance Generic State _
--- instance Show State where
---   show = genericShow
-data Dialog1FormMsg
-  = Input1Changed String
-  | Select1Changed String
-  | Input2Changed String
-  | Select2Changed String
+data EditDialogAction
+  = EditDescrChanged String
+  | EditFromChanged String
+  | EditToChanged String
+  | EditAmountChanged String
+  | EditDateChanged String
+  | EditToggleTimeDisplay
+  | EditDialogSave
+
+data CreateDialogAction
+  = CreateDescrChanged String
+  | CreateFromChanged String
+  | CreateToChanged String
+  | CreateAmountChanged String
+  | CreateDateChanged String
+  | CreateToggleTimeDisplay
+  | CreateDialogSave
 
 data Dialog2FormMsg
   = NameChanged String
@@ -160,9 +170,11 @@ data Dialog2FormMsg
   | CommentChanged String
 
 data Action
-  = CloseDialog { dialogId :: String }
-  | AddTransactionClicked
+  = AddTransactionClicked
   | EditTransactionClicked Int
+  | EditDialogChanged EditDialogAction
+  | CreateDialogChanged CreateDialogAction
+  | CloseDialogPressed { dialogId :: String }
 
 daysAgo :: Int -> Effect Instant
 daysAgo d = do
@@ -388,23 +400,61 @@ component refTS =
           H.modify_ \st ->
             st
               { dialog =
-                Just
-                  ( EditDialog
-                      ( { transactionId: transactionId
-                        , descr: tx.descr
-                        , from: tx.from.name
-                        , to: tx.to.name
-                        , amount: Decimal.toString tx.amount
-                        , date: dateFmt tx.date
-                        , showTime: false
-                        }
-                      )
-                  )
+                  Just
+                    ( EditDialog
+                        ( { transactionId: transactionId
+                          , descr: tx.descr
+                          , from: tx.from.name
+                          , to: tx.to.name
+                          , amount: Decimal.toString tx.amount
+                          , date: dateFmt tx.date
+                          , showTime: false
+                          }
+                        )
+                    )
               }
       H.liftEffect $ dialogShow myDialog2Id
-    CloseDialog { dialogId } -> do
+    CloseDialogPressed { dialogId } -> do
       H.liftEffect $ dialogClose dialogId
       H.modify_ \state -> state { dialog = Nothing }
+    EditDialogChanged subAction -> do
+      let
+        updateDialog fn st = case st.dialog of
+          Just (EditDialog diag) -> st { dialog = Just (EditDialog (fn diag)) }
+          _ -> st
+      case subAction of
+        EditDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
+        EditFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
+        EditToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
+        EditAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
+        EditDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
+        EditToggleTimeDisplay -> H.modify_ $ updateDialog \diag -> diag { showTime = not diag.showTime }
+        EditDialogSave -> do
+          H.liftEffect $ dialogClose myDialog2Id
+          -- TODO: update state.book now
+          H.modify_ \st -> st { dialog = Nothing }
+
+    -- when
+    --   ( case subAction of
+    --       EditDialogSave -> true
+    --       _ -> false
+    --   )
+    --   $ H.liftEffect
+    --   $ dialogClose myDialog2Id
+    -- H.modify_
+    --   $ \st -> do
+    --       case st.dialog of
+    --         Just (EditDialog diag) -> case subAction of
+    --           EditDescrChanged str -> st { dialog = Just (EditDialog diag { descr = str }) }
+    --           EditFromChanged str -> st { dialog = Just (EditDialog diag { from = str }) }
+    --           EditToChanged str -> st { dialog = Just (EditDialog diag { to = str }) }
+    --           EditAmountChanged str -> st { dialog = Just (EditDialog diag { amount = str }) }
+    --           EditDateChanged str -> st { dialog = Just (EditDialog diag { date = str }) }
+    --           EditToggleTimeDisplay -> st { dialog = Just (EditDialog diag { showTime = not diag.showTime }) }
+    --           EditDialogSave -> st { dialog = Nothing }
+    --         _ -> st
+
+    CreateDialogChanged _ -> unsafeCrashWith "TODO"
 
   -- Dialog1FormMsg msg ->
   --   H.modify_ \state ->
@@ -442,15 +492,16 @@ component refTS =
       transactionsWithBalance :: Array (Tuple Int TransactionViewWithBalance)
       transactionsWithBalance =
         let
-          f ::
-            (Tuple Decimal (Array (Tuple Int TransactionViewWithBalance))) ->
-            (Tuple Int TransactionView) ->
-            (Tuple Decimal (Array (Tuple Int TransactionViewWithBalance)))
+          f
+            :: (Tuple Decimal (Array (Tuple Int TransactionViewWithBalance)))
+            -> (Tuple Int TransactionView)
+            -> (Tuple Decimal (Array (Tuple Int TransactionViewWithBalance)))
           f (Tuple prevBalance txs) (Tuple transactionId o) =
             let
               newBalance =
                 prevBalance
-                  + ( if o.to.name == checkingAccount.name then
+                  +
+                    ( if o.to.name == checkingAccount.name then
                         o.amount
                       else if o.from.name == checkingAccount.name then
                         -o.amount
@@ -601,12 +652,198 @@ component refTS =
             ]
         ]
 
-  -- viewEditDialog :: EditDialog -> H.ComponentHTML Action () m
+  viewEditDialog :: MkEditDialog -> H.ComponentHTML Action () m
   viewEditDialog form =
     HH.dialog [ HP.id myDialog2Id ]
-      [ HH.text "TODO edit" ]
+      [ HH.div [ HP.class_ $ HH.ClassName "dialog-content" ]
+          [ HH.h3 [ HP.class_ $ HH.ClassName "dialog-title" ] [ HH.text "Edit Transaction" ]
+          , makeTextField
+              { text: "Description"
+              , value: form.descr
+              , onInput: EditDialogChanged <<< EditDescrChanged
+              , autofocus: false
+              }
+          , accountSelect
+              { text: "From"
+              , value: form.from
+              , onInput: EditDialogChanged <<< EditFromChanged
+              , accounts: allAccounts_
+              , excludeAccount: Just form.to
+              }
+          , accountSelect
+              { text: "To"
+              , value: form.to
+              , onInput: EditDialogChanged <<< EditToChanged
+              , accounts: allAccounts_
+              , excludeAccount: Just form.from
+              }
+          , makeTextField
+              { text: "Amount"
+              , value: form.amount
+              , onInput: EditDialogChanged <<< EditAmountChanged
+              , autofocus: true
+              }
+          , dateField
+              { text: "Date"
+              , date: form.date
+              , showTime: form.showTime
+              , onDateInput: EditDialogChanged <<< EditDateChanged
+              , onToggleTime: EditDialogChanged EditToggleTimeDisplay
+              }
+          , HH.div [ HP.class_ $ HH.ClassName "dialog-actions" ]
+              [ HH.button
+                  [ HP.class_ $ HH.ClassName "button button--secondary"
+                  , HE.onClick $ const $ CloseDialogPressed { dialogId: myDialog2Id }
+                  ]
+                  [ HH.text "Cancel" ]
+              , HH.button
+                  [ HP.class_ $ HH.ClassName "button button--primary"
+                  , HE.onClick (\_ -> EditDialogChanged EditDialogSave)
+                  ]
+                  [ HH.text "Save" ]
+              ]
+          ]
+      ]
 
-  -- viewCreateDialog :: CreateDialog -> H.ComponentHTML Action () m
-  viewCreateDialog form =
+  viewCreateDialog :: MkCreateDialog -> H.ComponentHTML Action () m
+  viewCreateDialog _form =
     HH.dialog [ HP.id myDialog1Id ]
       [ HH.text "TODO create" ]
+
+makeFieldId :: String -> String
+makeFieldId =
+  (\s -> s <> "-field")
+    <<< String.replace (Pattern " ") (Replacement "-")
+    <<< String.toLower
+
+makeTextField :: forall action m. { text :: String, value :: String, onInput :: String -> action, autofocus :: Boolean } -> H.ComponentHTML action () m
+makeTextField { text, value, onInput, autofocus } =
+  let
+    fieldId = makeFieldId text
+  in
+    HH.div [ HP.class_ $ HH.ClassName "field" ]
+      [ HH.label [ HP.class_ $ HH.ClassName "field__label", HP.for fieldId ] [ HH.text text ]
+      , HH.input
+          ( catMaybes
+              [ Just $ HP.type_ HP.InputText
+              , Just $ HP.id fieldId
+              , Just $ HP.class_ $ HH.ClassName "field__input"
+              , Just $ HP.value value
+              , Just $ HE.onValueInput onInput
+              -- Don't use PureScript's autofocus, we need to trigger HTML-native functionality for the dialog handling.
+              , if autofocus then
+                  Just $ HP.autocomplete AutocompleteOn
+                else
+                  Nothing
+              ]
+          )
+      ]
+
+accountSelect :: forall action m. { onInput :: String -> action, text :: String, value :: String, accounts :: Array Account, excludeAccount :: Maybe String } -> H.ComponentHTML action () m
+accountSelect { onInput, text, value, accounts, excludeAccount } =
+  let
+    fieldId = makeFieldId text
+
+    filteredAccounts = case excludeAccount of
+      Just excludeName ->
+        if String.null excludeName then
+          accounts
+        else
+          Array.filter (\account -> account.name /= excludeName) accounts
+      Nothing -> accounts
+  in
+    HH.div [ HP.class_ $ HH.ClassName "field" ]
+      [ HH.label
+          [ HP.class_ $ HH.ClassName "field__label"
+          , HP.for fieldId
+          ]
+          [ HH.text text ]
+      , HH.select
+          [ HP.class_ $ HH.ClassName "field__select"
+          , HP.id fieldId
+          , HE.onValueInput onInput
+          , HP.value value
+          ]
+          ( HH.option [ HP.value "" ] [ HH.text "-- Select an account --" ]
+              : map
+                  ( \account ->
+                      HH.option
+                        [ HP.value account.name
+                        , HP.selected (account.name == value)
+                        ]
+                        [ HH.text (account.category.name <> ": " <> account.name) ]
+                  )
+                  filteredAccounts
+          )
+      ]
+
+dateField :: forall action m. { text :: String, date :: String, showTime :: Boolean, onDateInput :: String -> action, onToggleTime :: action } -> H.ComponentHTML action () m
+dateField { text, date, showTime, onDateInput, onToggleTime } =
+  let
+    fieldId = makeFieldId text
+
+    inputType =
+      if showTime then
+        HP.InputDatetimeLocal
+      else
+        HP.InputDate
+
+    dateOnly =
+      if String.contains (Pattern "T") date then
+        String.split (Pattern "T") date # Array.drop 1 # Array.head # fromMaybe date
+      else
+        date
+
+    timeOnly =
+      if String.contains (Pattern "T") date then
+        String.split (Pattern "T") date
+          # Array.drop 1
+          # Array.head
+          # fromMaybe "00:00"
+      else
+        "00:00"
+
+    inputValue =
+      if true then
+        if String.contains (Pattern "T") date then
+          date
+        else
+          date <> "T" <> timeOnly
+      else
+        dateOnly
+  in
+    HH.div [ HP.class_ $ HH.ClassName "field" ]
+      [ HH.div [ HP.class_ $ HH.ClassName "field__header" ]
+          [ HH.label
+              [ HP.class_ $ HH.ClassName "field__label"
+              , HP.for $ fieldId
+              ]
+              [ HH.text text ]
+          , HH.div [ HP.class_ $ HH.ClassName "field__toggle" ]
+              [ HH.label [ HP.class_ $ HH.ClassName "toggle" ]
+                  [ HH.input
+                      [ HP.type_ $ HP.InputCheckbox
+                      , HP.checked showTime
+                      , HE.onClick (const onToggleTime)
+                      , HP.class_ $ HH.ClassName "toggle__input"
+                      ]
+                  , HH.span [ HP.class_ $ HH.ClassName "toggle__label" ] [ HH.text "Include time" ]
+                  ]
+              ]
+          ]
+      , HH.input
+          [ HP.class_ $ HH.ClassName "field__input"
+          , HP.id fieldId
+          , HP.type_ inputType
+          , HP.value inputValue
+          , HE.onValueInput
+              ( \newValue ->
+                  if showTime then
+                    onDateInput newValue
+                  else if String.contains (Pattern "T") date then
+                    onDateInput (newValue <> "T" <> timeOnly)
+                  else
+                    onDateInput newValue
+              )
+          ]
+      ]
