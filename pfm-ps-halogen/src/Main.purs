@@ -32,7 +32,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import Partial.Unsafe (unsafeCrashWith, unsafePartial)
+import Partial.Unsafe (unsafePartial)
 
 foreign import unsafeStringify :: forall a. a -> String
 
@@ -42,7 +42,9 @@ foreign import dialogClose :: String -> Effect Unit
 
 foreign import padRight :: Int -> Char -> String -> String
 
-foreign import dateFmt :: Instant -> String
+foreign import dateFmtForUser :: Instant -> String
+foreign import dateFmtForInput :: Instant -> String
+foreign import dateFmtForSave :: String -> Instant
 
 dialogCreateId :: String
 dialogCreateId = "dialog-create"
@@ -75,8 +77,7 @@ emptyCreateDialog inst =
   , from: ""
   , to: ""
   , amount: ""
-  , date: dateFmt inst
-  , showTime: false
+  , date: dateFmtForInput inst
   }
 
 type Dialog2 =
@@ -99,7 +100,6 @@ type MkEditDialog =
   , to :: String
   , amount :: String
   , date :: String
-  , showTime :: Boolean
   }
 
 type MkCreateDialog =
@@ -108,7 +108,6 @@ type MkCreateDialog =
   , to :: String
   , amount :: String
   , date :: String
-  , showTime :: Boolean
   }
 
 data Dialog
@@ -152,7 +151,6 @@ data EditDialogAction
   | EditToChanged String
   | EditAmountChanged String
   | EditDateChanged String
-  | EditToggleTimeDisplay
   | EditDialogSave
 
 data CreateDialogAction
@@ -406,8 +404,7 @@ component refTS =
                           , from: tx.from.name
                           , to: tx.to.name
                           , amount: Decimal.toString tx.amount
-                          , date: dateFmt tx.date
-                          , showTime: false
+                          , date: dateFmtForInput tx.date
                           }
                         )
                     )
@@ -416,87 +413,95 @@ component refTS =
     CloseDialogPressed { dialogId } -> do
       H.liftEffect $ dialogClose dialogId
       H.modify_ \state -> state { dialog = Nothing }
-    EditDialogChanged subAction -> do
-      case subAction of
-        EditDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
-        EditFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
-        EditToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
-        EditAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
-        EditDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
-        EditToggleTimeDisplay -> H.modify_ $ updateDialog \diag -> diag { showTime = not diag.showTime }
-        EditDialogSave -> do
-          H.liftEffect $ dialogClose dialogEditId
-          H.modify_ \st ->
-            ( case st.dialog of
-                Just (EditDialog diag) ->
-                  st
-                    { dialog = Nothing
-                    , book =
-                        ( Map.update
-                            ( \(old :: TransactionView) ->
-                                Just
-                                  ( old
-                                      { descr = diag.descr
-                                      , amount =
-                                          fromMaybe old.amount
-                                            (Decimal.fromString diag.amount)
-                                      }
+    EditDialogChanged subAction ->
+      let
+        updateDialog fn st = case st.dialog of
+          Just (EditDialog diag) -> st { dialog = Just (EditDialog (fn diag)) }
+          _ -> st
+      in
+        do
+          case subAction of
+            EditDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
+            EditFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
+            EditToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
+            EditAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
+            EditDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
+            -- EditToggleTimeDisplay -> H.modify_ $ updateDialog \diag -> diag { showTime = not diag.showTime }
+            EditDialogSave ->
+              do
+                H.liftEffect $ dialogClose dialogEditId
+                H.modify_ \st ->
+                  ( case st.dialog of
+                      Just (EditDialog diag) ->
+                        st
+                          { dialog = Nothing
+                          , book =
+                              ( Map.update
+                                  ( \(old :: TransactionView) ->
+                                      Just
+                                        ( old
+                                            { descr = diag.descr
+                                            , date = dateFmtForSave diag.date
+                                            , amount =
+                                                fromMaybe old.amount
+                                                  (Decimal.fromString diag.amount)
+                                            }
+                                        )
                                   )
-                            )
-                            diag.transactionId
-                            st.book
-                        )
-                    }
-                _ -> st { dialog = Nothing }
-            )
-    CreateDialogChanged subAction -> do
-      case subAction of
-        CreateDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
-        CreateFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
-        CreateToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
-        CreateAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
-        CreateDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
-        CreateDialogSave -> do
-          H.liftEffect $ dialogClose dialogCreateId
-          now' <- H.liftEffect now
-          H.modify_ \st ->
-            ( case st.dialog of
-                Just (CreateDialog diag) ->
-                  let
-                    furthest = case Map.findMax st.book of
-                      Nothing -> 0
-                      Just { key } -> key
-
-                    fromAccount :: Account
-                    fromAccount = fromMaybe checkingAccount $ Map.lookup diag.from allAccounts
-
-                    toAccount :: Account
-                    toAccount = fromMaybe spar $ Map.lookup diag.to allAccounts
-                  in
-                    st
-                      { dialog = Nothing
-                      , book =
-                          ( Map.insert
-                              (furthest + 1)
-                              ( { date: now'
-                                , descr: diag.descr
-                                , from: fromAccount
-                                , to: toAccount
-                                , amount:
-                                    fromMaybe (Decimal.fromInt 0)
-                                      (Decimal.fromString diag.amount)
-                                }
+                                  diag.transactionId
+                                  st.book
                               )
-                              st.book
-                          )
-                      }
-                _ -> st { dialog = Nothing }
-            )
+                          }
+                      _ -> st { dialog = Nothing }
+                  )
+    CreateDialogChanged subAction ->
+      let
+        updateDialog fn st = case st.dialog of
+          Just (CreateDialog diag) -> st { dialog = Just (CreateDialog (fn diag)) }
+          _ -> st
+      in
+        do
+          case subAction of
+            CreateDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
+            CreateFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
+            CreateToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
+            CreateAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
+            CreateDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
+            CreateDialogSave -> do
+              H.liftEffect $ dialogClose dialogCreateId
+              H.modify_ \st ->
+                ( case st.dialog of
+                    Just (CreateDialog diag) ->
+                      let
+                        furthest = case Map.findMax st.book of
+                          Nothing -> 0
+                          Just { key } -> key
 
-    where
-    updateDialog fn st = case st.dialog of
-      Just (EditDialog diag) -> st { dialog = Just (EditDialog (fn diag)) }
-      _ -> st
+                        fromAccount :: Account
+                        fromAccount = fromMaybe checkingAccount $ Map.lookup diag.from allAccounts
+
+                        toAccount :: Account
+                        toAccount = fromMaybe spar $ Map.lookup diag.to allAccounts
+                      in
+                        st
+                          { dialog = Nothing
+                          , book =
+                              ( Map.insert
+                                  (furthest + 1)
+                                  ( { date: dateFmtForSave diag.date
+                                    , descr: diag.descr
+                                    , from: fromAccount
+                                    , to: toAccount
+                                    , amount:
+                                        fromMaybe (Decimal.fromInt 0)
+                                          (Decimal.fromString diag.amount)
+                                    }
+                                  )
+                                  st.book
+                              )
+                          }
+                    _ -> st { dialog = Nothing }
+                )
 
   -- Dialog1FormMsg msg ->
   --   H.modify_ \state ->
@@ -668,7 +673,7 @@ component refTS =
                                                         [ HH.text (tx.from.name <> " → " <> tx.to.name) ]
                                                     ]
                                                 , HH.div [ HP.class_ $ HH.ClassName "transaction-item__date" ]
-                                                    [ HH.text (dateFmt tx.date) ]
+                                                    [ HH.text (dateFmtForUser tx.date) ]
                                                 , HH.div [ HP.class_ $ HH.ClassName amountClass ]
                                                     [ HH.text $ amountSign <> amountFmt tx.amount ]
                                                 ]
@@ -731,9 +736,7 @@ component refTS =
           , dateField
               { text: "Date"
               , date: form.date
-              , showTime: form.showTime
               , onDateInput: EditDialogChanged <<< EditDateChanged
-              -- , onToggleTime: EditDialogChanged EditToggleTimeDisplay
               }
           , HH.div [ HP.class_ $ HH.ClassName "dialog-actions" ]
               [ HH.button
@@ -756,7 +759,6 @@ component refTS =
       [ HP.id dialogCreateId
       , HP.class_ $ HH.ClassName "transaction"
       ]
-
       [ HH.div [ HP.class_ $ HH.ClassName "dialog-content" ]
           [ HH.h3 [ HP.class_ $ HH.ClassName "dialog-title" ] [ HH.text "Add Transaction" ]
           , makeTextField
@@ -788,7 +790,6 @@ component refTS =
           , dateField
               { text: "Date"
               , date: form.date
-              , showTime: form.showTime
               , onDateInput: CreateDialogChanged <<< CreateDateChanged
               }
           , HH.div [ HP.class_ $ HH.ClassName "dialog-actions" ]
@@ -873,40 +874,11 @@ accountSelect { onInput, text, value, accounts, excludeAccount } =
           )
       ]
 
-dateField :: forall action m. { text :: String, date :: String, showTime :: Boolean, onDateInput :: String -> action } -> H.ComponentHTML action () m
-dateField { text, date, showTime, onDateInput } =
+dateField :: forall action m. { text :: String, date :: String, onDateInput :: String -> action } -> H.ComponentHTML action () m
+dateField { text, date, onDateInput } =
   let
     fieldId = makeFieldId text
 
-    inputType =
-      if showTime then
-        HP.InputDatetimeLocal
-      else
-        HP.InputDate
-
-    dateOnly =
-      if String.contains (Pattern "T") date then
-        String.split (Pattern "T") date # Array.drop 1 # Array.head # fromMaybe date
-      else
-        date
-
-    timeOnly =
-      if String.contains (Pattern "T") date then
-        String.split (Pattern "T") date
-          # Array.drop 1
-          # Array.head
-          # fromMaybe "00:00"
-      else
-        "00:00"
-
-    inputValue =
-      if true then
-        if String.contains (Pattern "T") date then
-          date
-        else
-          date <> "T" <> timeOnly
-      else
-        dateOnly
   in
     HH.div [ HP.class_ $ HH.ClassName "field" ]
       [ HH.div [ HP.class_ $ HH.ClassName "field__header" ]
@@ -919,7 +891,6 @@ dateField { text, date, showTime, onDateInput } =
               [ HH.label [ HP.class_ $ HH.ClassName "toggle" ]
                   [ HH.input
                       [ HP.type_ $ HP.InputCheckbox
-                      , HP.checked showTime
                       -- , HE.onClick (const onToggleTime)
                       , HP.class_ $ HH.ClassName "toggle__input"
                       ]
@@ -930,16 +901,8 @@ dateField { text, date, showTime, onDateInput } =
       , HH.input
           [ HP.class_ $ HH.ClassName "field__input"
           , HP.id fieldId
-          , HP.type_ inputType
-          , HP.value inputValue
-          , HE.onValueInput
-              ( \newValue ->
-                  if showTime then
-                    onDateInput newValue
-                  else if String.contains (Pattern "T") date then
-                    onDateInput (newValue <> "T" <> timeOnly)
-                  else
-                    onDateInput newValue
-              )
+          , HP.type_ HP.InputDatetimeLocal
+          , HP.value date
+          , HE.onValueInput onDateInput
           ]
       ]

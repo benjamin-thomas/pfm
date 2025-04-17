@@ -22,10 +22,21 @@ export const padRight = (n) => (char) => (str) => {
     return str.padEnd(n, char);
 };
 
-export const dateFmt = (instant) => {
-    // return new Date(instant).toISOString()
+export const dateFmtForUser = (instant) => {
     return new Intl.DateTimeFormat("fr", {
         dateStyle: "medium",
         timeStyle: "short",
     }).format(instant);
+};
+
+export const dateFmtForSave = (str) => {
+    const local = new Date(str);
+    return local.getTime();
+};
+
+export const dateFmtForInput = (instant) => {
+    const date = new Date(instant);
+    const offset = date.getTimezoneOffset() * 60000;
+    const localDate = new Date(instant - offset);
+    return localDate.toISOString().slice(0, 16);
 };
