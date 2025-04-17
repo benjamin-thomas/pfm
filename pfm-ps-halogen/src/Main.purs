@@ -431,29 +431,29 @@ component refTS =
         EditToggleTimeDisplay -> H.modify_ $ updateDialog \diag -> diag { showTime = not diag.showTime }
         EditDialogSave -> do
           H.liftEffect $ dialogClose myDialog2Id
-          -- TODO: update state.book now
-          H.modify_ \st -> st { dialog = Nothing }
-
-    -- when
-    --   ( case subAction of
-    --       EditDialogSave -> true
-    --       _ -> false
-    --   )
-    --   $ H.liftEffect
-    --   $ dialogClose myDialog2Id
-    -- H.modify_
-    --   $ \st -> do
-    --       case st.dialog of
-    --         Just (EditDialog diag) -> case subAction of
-    --           EditDescrChanged str -> st { dialog = Just (EditDialog diag { descr = str }) }
-    --           EditFromChanged str -> st { dialog = Just (EditDialog diag { from = str }) }
-    --           EditToChanged str -> st { dialog = Just (EditDialog diag { to = str }) }
-    --           EditAmountChanged str -> st { dialog = Just (EditDialog diag { amount = str }) }
-    --           EditDateChanged str -> st { dialog = Just (EditDialog diag { date = str }) }
-    --           EditToggleTimeDisplay -> st { dialog = Just (EditDialog diag { showTime = not diag.showTime }) }
-    --           EditDialogSave -> st { dialog = Nothing }
-    --         _ -> st
-
+          H.modify_ \st ->
+            ( case st.dialog of
+                Just (EditDialog diag) ->
+                  st
+                    { dialog = Nothing
+                    , book =
+                        ( Map.update
+                            ( \(old :: TransactionView) ->
+                                Just
+                                  ( old
+                                      { descr = diag.descr
+                                      , amount =
+                                          fromMaybe old.amount
+                                            (Decimal.fromString diag.amount)
+                                      }
+                                  )
+                            )
+                            diag.transactionId
+                            st.book
+                        )
+                    }
+                _ -> st { dialog = Nothing }
+            )
     CreateDialogChanged _ -> unsafeCrashWith "TODO"
 
   -- Dialog1FormMsg msg ->
