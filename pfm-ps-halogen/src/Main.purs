@@ -2,7 +2,7 @@
 module Main where
 
 import Prelude
-import DOM.HTML.Indexed.AutocompleteType (AutocompleteType(..))
+
 import Data.Array (catMaybes, cons, nubBy, (:))
 import Data.Array as Array
 import Data.Char (fromCharCode)
@@ -44,11 +44,11 @@ foreign import padRight :: Int -> Char -> String -> String
 
 foreign import dateFmt :: Instant -> String
 
-myDialog1Id :: String
-myDialog1Id = "myDialog1"
+dialogCreateId :: String
+dialogCreateId = "dialog-create"
 
-myDialog2Id :: String
-myDialog2Id = "myDialog2"
+dialogEditId :: String
+dialogEditId = "dialog-edit"
 
 main :: Effect Unit
 main = do
@@ -161,7 +161,6 @@ data CreateDialogAction
   | CreateToChanged String
   | CreateAmountChanged String
   | CreateDateChanged String
-  | CreateToggleTimeDisplay
   | CreateDialogSave
 
 data Dialog2FormMsg
@@ -391,7 +390,7 @@ component refTS =
     AddTransactionClicked -> do
       n <- H.liftEffect now
       H.modify_ \state -> state { dialog = Just (CreateDialog $ emptyCreateDialog n) }
-      H.liftEffect $ dialogShow myDialog1Id
+      H.liftEffect $ dialogShow dialogCreateId
     EditTransactionClicked transactionId -> do
       state <- H.get
       case Map.lookup transactionId state.book of
@@ -413,15 +412,11 @@ component refTS =
                         )
                     )
               }
-      H.liftEffect $ dialogShow myDialog2Id
+      H.liftEffect $ dialogShow dialogEditId
     CloseDialogPressed { dialogId } -> do
       H.liftEffect $ dialogClose dialogId
       H.modify_ \state -> state { dialog = Nothing }
     EditDialogChanged subAction -> do
-      let
-        updateDialog fn st = case st.dialog of
-          Just (EditDialog diag) -> st { dialog = Just (EditDialog (fn diag)) }
-          _ -> st
       case subAction of
         EditDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
         EditFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
@@ -430,7 +425,7 @@ component refTS =
         EditDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
         EditToggleTimeDisplay -> H.modify_ $ updateDialog \diag -> diag { showTime = not diag.showTime }
         EditDialogSave -> do
-          H.liftEffect $ dialogClose myDialog2Id
+          H.liftEffect $ dialogClose dialogEditId
           H.modify_ \st ->
             ( case st.dialog of
                 Just (EditDialog diag) ->
@@ -454,7 +449,54 @@ component refTS =
                     }
                 _ -> st { dialog = Nothing }
             )
-    CreateDialogChanged _ -> unsafeCrashWith "TODO"
+    CreateDialogChanged subAction -> do
+      case subAction of
+        CreateDescrChanged str -> H.modify_ $ updateDialog \diag -> diag { descr = str }
+        CreateFromChanged str -> H.modify_ $ updateDialog \diag -> diag { from = str }
+        CreateToChanged str -> H.modify_ $ updateDialog \diag -> diag { to = str }
+        CreateAmountChanged str -> H.modify_ $ updateDialog \diag -> diag { amount = str }
+        CreateDateChanged str -> H.modify_ $ updateDialog \diag -> diag { date = str }
+        CreateDialogSave -> do
+          H.liftEffect $ dialogClose dialogCreateId
+          now' <- H.liftEffect now
+          H.modify_ \st ->
+            ( case st.dialog of
+                Just (CreateDialog diag) ->
+                  let
+                    furthest = case Map.findMax st.book of
+                      Nothing -> 0
+                      Just { key } -> key
+
+                    fromAccount :: Account
+                    fromAccount = fromMaybe checkingAccount $ Map.lookup diag.from allAccounts
+
+                    toAccount :: Account
+                    toAccount = fromMaybe spar $ Map.lookup diag.to allAccounts
+                  in
+                    st
+                      { dialog = Nothing
+                      , book =
+                          ( Map.insert
+                              (furthest + 1)
+                              ( { date: now'
+                                , descr: diag.descr
+                                , from: fromAccount
+                                , to: toAccount
+                                , amount:
+                                    fromMaybe (Decimal.fromInt 0)
+                                      (Decimal.fromString diag.amount)
+                                }
+                              )
+                              st.book
+                          )
+                      }
+                _ -> st { dialog = Nothing }
+            )
+
+    where
+    updateDialog fn st = case st.dialog of
+      Just (EditDialog diag) -> st { dialog = Just (EditDialog (fn diag)) }
+      _ -> st
 
   -- Dialog1FormMsg msg ->
   --   H.modify_ \state ->
@@ -654,7 +696,10 @@ component refTS =
 
   viewEditDialog :: MkEditDialog -> H.ComponentHTML Action () m
   viewEditDialog form =
-    HH.dialog [ HP.id myDialog2Id ]
+    HH.dialog
+      [ HP.id dialogEditId
+      , HP.class_ $ HH.ClassName "transaction"
+      ]
       [ HH.div [ HP.class_ $ HH.ClassName "dialog-content" ]
           [ HH.h3 [ HP.class_ $ HH.ClassName "dialog-title" ] [ HH.text "Edit Transaction" ]
           , makeTextField
@@ -688,12 +733,12 @@ component refTS =
               , date: form.date
               , showTime: form.showTime
               , onDateInput: EditDialogChanged <<< EditDateChanged
-              , onToggleTime: EditDialogChanged EditToggleTimeDisplay
+              -- , onToggleTime: EditDialogChanged EditToggleTimeDisplay
               }
           , HH.div [ HP.class_ $ HH.ClassName "dialog-actions" ]
               [ HH.button
                   [ HP.class_ $ HH.ClassName "button button--secondary"
-                  , HE.onClick $ const $ CloseDialogPressed { dialogId: myDialog2Id }
+                  , HE.onClick $ const $ CloseDialogPressed { dialogId: dialogEditId }
                   ]
                   [ HH.text "Cancel" ]
               , HH.button
@@ -706,9 +751,60 @@ component refTS =
       ]
 
   viewCreateDialog :: MkCreateDialog -> H.ComponentHTML Action () m
-  viewCreateDialog _form =
-    HH.dialog [ HP.id myDialog1Id ]
-      [ HH.text "TODO create" ]
+  viewCreateDialog form =
+    HH.dialog
+      [ HP.id dialogCreateId
+      , HP.class_ $ HH.ClassName "transaction"
+      ]
+
+      [ HH.div [ HP.class_ $ HH.ClassName "dialog-content" ]
+          [ HH.h3 [ HP.class_ $ HH.ClassName "dialog-title" ] [ HH.text "Add Transaction" ]
+          , makeTextField
+              { text: "Description"
+              , value: form.descr
+              , onInput: CreateDialogChanged <<< CreateDescrChanged
+              , autofocus: false
+              }
+          , accountSelect
+              { text: "From"
+              , value: form.from
+              , onInput: CreateDialogChanged <<< CreateFromChanged
+              , accounts: allAccounts_
+              , excludeAccount: Just form.to
+              }
+          , accountSelect
+              { text: "To"
+              , value: form.to
+              , onInput: CreateDialogChanged <<< CreateToChanged
+              , accounts: allAccounts_
+              , excludeAccount: Just form.from
+              }
+          , makeTextField
+              { text: "Amount"
+              , value: form.amount
+              , onInput: CreateDialogChanged <<< CreateAmountChanged
+              , autofocus: false
+              }
+          , dateField
+              { text: "Date"
+              , date: form.date
+              , showTime: form.showTime
+              , onDateInput: CreateDialogChanged <<< CreateDateChanged
+              }
+          , HH.div [ HP.class_ $ HH.ClassName "dialog-actions" ]
+              [ HH.button
+                  [ HP.class_ $ HH.ClassName "button button--secondary"
+                  , HE.onClick (const $ CloseDialogPressed { dialogId: dialogCreateId })
+                  ]
+                  [ HH.text "Cancel" ]
+              , HH.button
+                  [ HP.class_ $ HH.ClassName "button button--primary"
+                  , HE.onClick (const $ CreateDialogChanged CreateDialogSave)
+                  ]
+                  [ HH.text "Add" ]
+              ]
+          ]
+      ]
 
 makeFieldId :: String -> String
 makeFieldId =
@@ -732,7 +828,7 @@ makeTextField { text, value, onInput, autofocus } =
               , Just $ HE.onValueInput onInput
               -- Don't use PureScript's autofocus, we need to trigger HTML-native functionality for the dialog handling.
               , if autofocus then
-                  Just $ HP.autocomplete AutocompleteOn
+                  Just $ HP.autofocus true
                 else
                   Nothing
               ]
@@ -777,8 +873,8 @@ accountSelect { onInput, text, value, accounts, excludeAccount } =
           )
       ]
 
-dateField :: forall action m. { text :: String, date :: String, showTime :: Boolean, onDateInput :: String -> action, onToggleTime :: action } -> H.ComponentHTML action () m
-dateField { text, date, showTime, onDateInput, onToggleTime } =
+dateField :: forall action m. { text :: String, date :: String, showTime :: Boolean, onDateInput :: String -> action } -> H.ComponentHTML action () m
+dateField { text, date, showTime, onDateInput } =
   let
     fieldId = makeFieldId text
 
@@ -824,7 +920,7 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
                   [ HH.input
                       [ HP.type_ $ HP.InputCheckbox
                       , HP.checked showTime
-                      , HE.onClick (const onToggleTime)
+                      -- , HE.onClick (const onToggleTime)
                       , HP.class_ $ HH.ClassName "toggle__input"
                       ]
                   , HH.span [ HP.class_ $ HH.ClassName "toggle__label" ] [ HH.text "Include time" ]
