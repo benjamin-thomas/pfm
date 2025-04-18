@@ -1,0 +1,49 @@
+cabal-version:      3.0
+
+name:               pfm-haskell-hyperbole
+version:            0.1.0.0
+license:            NONE
+build-type:         Simple
+
+common warnings
+    ghc-options: -Wall
+
+library dev-reload
+    ghc-options:    -Wall
+    build-depends:   base
+                   , text
+                   , file-embed
+                   , template-haskell
+                   , filepath
+    hs-source-dirs:  lib/dev-reload
+    exposed-modules: DevReload
+
+executable pfm-haskell-hyperbole
+    ghc-options:     -Wall
+    main-is:          Main.hs
+    hs-source-dirs:   app
+    default-language: GHC2021
+    default-extensions:
+      OverloadedStrings
+      OverloadedRecordDot
+      DuplicateRecordFields
+      DataKinds
+      DeriveAnyClass
+      TypeFamilies
+      LambdaCase
+      QuasiQuotes
+      DerivingStrategies
+      UndecidableInstances
+      TemplateHaskell
+    build-depends:    base
+                    , hyperbole
+                    , dev-reload
+                    , text
+                    , bytestring
+                    , aeson
+                    , web-view
+                    , wai-middleware-static
+                    , effectful
+                    , string-interpolate
+                    , string-conversions
+                    , containers
