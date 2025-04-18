@@ -20,7 +20,7 @@ import System.Environment qualified as SE
 import Text.Read (readMaybe)
 
 {-
-ghcid -c 'cabal repl pfm-haskell-hyperbole' -T :main --warnings --reload=./assets/css/main.css
+PORT=1234 ghcid -c 'cabal repl pfm-haskell-hyperbole' -T :main --warnings --reload=./assets/css/main.css
 -}
 
 main :: IO ()
@@ -29,11 +29,13 @@ main = do
     let port = fromMaybe 4321 $ readMaybe =<< mStr
     let staticMiddleware = staticPolicy (addBase "assets")
     putStrLn $ "Running on port: " <> show port
-    run port $ staticMiddleware app
+    run port $ staticMiddleware (app port)
 
-document :: Text -> BSL.ByteString -> BSL.ByteString
-document title cnt =
-    [i|<html class="dark-theme">
+document :: Int -> Text -> BSL.ByteString -> BSL.ByteString
+document port title cnt =
+    [i|
+    <!DOCTYPE html>
+    <html class="dark-theme">
       <head>
         <title>#{title}</title>
         <script type="text/javascript">#{scriptEmbed}</script>
@@ -42,17 +44,17 @@ document title cnt =
               rel="stylesheet">
 
         <script>
-          #{devReloadPageJs}
+          #{devReloadPageJs port}
         </script>
 
       </head>
       <body>#{cnt}</body>
   </html>|]
 
-app :: Application
-app = do
+app :: Int -> Application
+app port = do
     liveApp
-        (document "Counter")
+        (document port "Counter")
         (runCookieSession $ runPage page)
 
 page ::

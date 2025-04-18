@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const reloadWs = new WebSocket('ws://localhost:4321/ws-reload');
+    const reloadWs = new WebSocket('ws://localhost:__PORT__/ws-reload');
 
     function showNotification(message) {
 
