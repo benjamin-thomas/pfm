@@ -50,6 +50,30 @@ data Transaction = Transaction
 instance ToJSON Transaction
 instance FromJSON Transaction
 
+-- UI Component Types
+data BalanceCardData = BalanceCardData
+    { balanceCardCategory :: Text
+    , balanceCardAccount :: Text
+    , balanceCardAmount :: Text
+    }
+    deriving (Show, Eq, Generic)
+
+data BalanceMovementData = BalanceMovementData
+    { balanceMovementBefore :: Text
+    , balanceMovementAfter :: Text
+    }
+    deriving (Show, Eq, Generic)
+
+data TransactionItemData = TransactionItemData
+    { transactionItemDescription :: Text
+    , transactionItemAccounts :: Text
+    , transactionItemDate :: Text
+    , transactionItemAmount :: Text
+    , transactionItemIsPositive :: Bool
+    , transactionItemBalanceMovement :: BalanceMovementData
+    }
+    deriving (Show, Eq, Generic)
+
 -- Main Application
 main :: IO ()
 main = do
@@ -142,60 +166,81 @@ pfmView = do
 viewBalances :: View PfmView ()
 viewBalances = do
     -- Fake balances for now
-    div (extClass "balance-card") $ do
-        div (extClass "balance-card__category") $ do
-            text "Assets"
-        div (extClass "balance-card__account") $ do
-            text "Checking account"
-        div (extClass "balance-card__amount") $ do
-            text "1.234,56 €"
+    balanceCard $ BalanceCardData 
+        { balanceCardCategory = "Assets"
+        , balanceCardAccount = "Checking account"
+        , balanceCardAmount = "1.234,56 €"
+        }
+    
+    balanceCard $ BalanceCardData 
+        { balanceCardCategory = "Assets"
+        , balanceCardAccount = "Savings account"
+        , balanceCardAmount = "5.678,90 €"
+        }
 
+balanceCard :: BalanceCardData -> View PfmView ()
+balanceCard data_ = 
     div (extClass "balance-card") $ do
         div (extClass "balance-card__category") $ do
-            text "Assets"
+            text data_.balanceCardCategory
         div (extClass "balance-card__account") $ do
-            text "Savings account"
+            text data_.balanceCardAccount
         div (extClass "balance-card__amount") $ do
-            text "5.678,90 €"
+            text data_.balanceCardAmount
 
 viewTransactions :: View PfmView ()
 viewTransactions = do
     -- Fake transactions for now
-    div (extClass "transaction-item") $ do
-        div (extClass "transaction-item__row") $ do
-            div (extClass "transaction-item__main-content") $ do
-                div (extClass "transaction-item__details") $ do
-                    div (extClass "transaction-item__description") $ do
-                        text "Salary"
-                    div (extClass "transaction-item__accounts") $ do
-                        text "EmployerABC → Checking account"
-                div (extClass "transaction-item__date") $ do
-                    text "2025-04-15"
-                div (extClass "transaction-item__amount transaction-item__amount--positive") $ do
-                    text "+3.000,00 €"
-            div (extClass "transaction-item__balance-column") $ do
-                div (extClass "transaction-item__balance-movement") $ do
-                    span (extClass "balance-before") $ text "0,00 €"
-                    span (extClass "arrow-icon") $ text " → "
-                    span (extClass "balance-after") $ text "3.000,00 €"
+    transactionItem $ TransactionItemData
+        { transactionItemDescription = "Salary"
+        , transactionItemAccounts = "EmployerABC → Checking account"
+        , transactionItemDate = "2025-04-15"
+        , transactionItemAmount = "+3.000,00 €"
+        , transactionItemIsPositive = True
+        , transactionItemBalanceMovement = BalanceMovementData
+            { balanceMovementBefore = "0,00 €"
+            , balanceMovementAfter = "3.000,00 €"
+            }
+        }
+        
+    transactionItem $ TransactionItemData
+        { transactionItemDescription = "Groceries"
+        , transactionItemAccounts = "Checking account → Tesco"
+        , transactionItemDate = "2025-04-18"
+        , transactionItemAmount = "-75,50 €"
+        , transactionItemIsPositive = False
+        , transactionItemBalanceMovement = BalanceMovementData
+            { balanceMovementBefore = "3.000,00 €"
+            , balanceMovementAfter = "2.924,50 €"
+            }
+        }
 
+transactionItem :: TransactionItemData -> View PfmView ()
+transactionItem data_ =
     div (extClass "transaction-item") $ do
         div (extClass "transaction-item__row") $ do
             div (extClass "transaction-item__main-content") $ do
                 div (extClass "transaction-item__details") $ do
                     div (extClass "transaction-item__description") $ do
-                        text "Groceries"
+                        text data_.transactionItemDescription
                     div (extClass "transaction-item__accounts") $ do
-                        text "Checking account → Tesco"
+                        text data_.transactionItemAccounts
                 div (extClass "transaction-item__date") $ do
-                    text "2025-04-18"
-                div (extClass "transaction-item__amount transaction-item__amount--negative") $ do
-                    text "-75,50 €"
-            div (extClass "transaction-item__balance-column") $ do
-                div (extClass "transaction-item__balance-movement") $ do
-                    span (extClass "balance-before") $ text "3.000,00 €"
-                    span (extClass "arrow-icon") $ text " → "
-                    span (extClass "balance-after") $ text "2.924,50 €"
+                    text data_.transactionItemDate
+                let amountClass = if data_.transactionItemIsPositive 
+                                  then "transaction-item__amount transaction-item__amount--positive"
+                                  else "transaction-item__amount transaction-item__amount--negative"
+                div (extClass amountClass) $ do
+                    text data_.transactionItemAmount
+            transactionBalanceMovement data_.transactionItemBalanceMovement
+
+transactionBalanceMovement :: BalanceMovementData -> View PfmView ()
+transactionBalanceMovement data_ =
+    div (extClass "transaction-item__balance-column") $ do
+        div (extClass "transaction-item__balance-movement") $ do
+            span (extClass "balance-before") $ text data_.balanceMovementBefore
+            span (extClass "arrow-icon") $ text " → "
+            span (extClass "balance-after") $ text data_.balanceMovementAfter
 
 -- HTML Helpers
 h1 :: Mod c -> View c () -> View c ()
