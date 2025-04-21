@@ -68,13 +68,11 @@ data Transaction = Transaction
 instance ToJSON Transaction
 instance FromJSON Transaction
 
--- Application State
 data AppState = AppState
     { stateBook :: Map Int Transaction
     }
     deriving (Show, Eq, Generic)
 
--- UI Component Types
 data BalanceCardData = BalanceCardData
     { balanceCardCategory :: Text
     , balanceCardAccount :: Text
@@ -126,11 +124,13 @@ amazon = Account{accountName = "Amazon", accountCategory = categoryExpenses}
 employerABC :: Account
 employerABC = Account{accountName = "Employer ABC", accountCategory = categoryIncome}
 
--- All categories in the system
 allCategories :: [Category]
-allCategories = [categoryAssets, categoryExpenses, categoryIncome]
+allCategories =
+    [ categoryAssets
+    , categoryExpenses
+    , categoryIncome
+    ]
 
--- All accounts in the system
 allAccounts :: [Account]
 allAccounts =
     [ checkingAccount
@@ -141,138 +141,131 @@ allAccounts =
     , openingBalance
     ]
 
--- Filter accounts by category
 accountsByCategory :: Category -> [Account]
 accountsByCategory category = filter (\acc -> acc.accountCategory == category) allAccounts
 
--- Assets accounts
 assetsAccounts :: [Account]
 assetsAccounts = accountsByCategory categoryAssets
 
--- Expenses accounts
 expensesAccounts :: [Account]
 expensesAccounts = accountsByCategory categoryExpenses
 
--- Income accounts
 incomeAccounts :: [Account]
 incomeAccounts = accountsByCategory categoryIncome
 
--- Helper function to create dates relative to today
-onDay :: Integer -> IO UTCTime
-onDay daysAgo = do
-    now <- getCurrentTime
-    let dayInSeconds = 24 * 60 * 60
-    pure $ addUTCTime (fromIntegral $ -daysAgo * dayInSeconds) now
+dec2 :: Double -> Decimal
+dec2 = realFracToDecimal 2
 
--- Helper function to create Decimal values
-dec :: Double -> Decimal
-dec = realFracToDecimal 2
-
--- Initial state
 initialState :: IO AppState
 initialState = do
-    today <- getCurrentTime
-    yesterday <- onDay 1
-    twoDaysAgo <- onDay 2
-    threeDaysAgo <- onDay 3
-    fourDaysAgo <- onDay 4
-
-    pure $
-        AppState
-            { stateBook =
-                Map.fromList
-                    [
-                        ( 1
-                        , Transaction
-                            { transactionDate = today
-                            , transactionDescr = "Opening balance"
-                            , transactionFrom = openingBalance
-                            , transactionTo = checkingAccount
-                            , transactionAmount = dec 1000.00
-                            }
-                        )
-                    ,
-                        ( 2
-                        , Transaction
-                            { transactionDate = yesterday
-                            , transactionDescr = "Groceries"
-                            , transactionFrom = checkingAccount
-                            , transactionTo = spar
-                            , transactionAmount = dec 9.99
-                            }
-                        )
-                    ,
-                        ( 3
-                        , Transaction
-                            { transactionDate = twoDaysAgo
-                            , transactionDescr = "Book purchase"
-                            , transactionFrom = checkingAccount
-                            , transactionTo = amazon
-                            , transactionAmount = dec 54.99
-                            }
-                        )
-                    ,
-                        ( 4
-                        , Transaction
-                            { transactionDate = threeDaysAgo
-                            , transactionDescr = "Groceries, again"
-                            , transactionFrom = checkingAccount
-                            , transactionTo = spar
-                            , transactionAmount = dec 37.42
-                            }
-                        )
-                    ,
-                        ( 5
-                        , Transaction
-                            { transactionDate = fourDaysAgo
-                            , transactionDescr = "Salary"
-                            , transactionFrom = employerABC
-                            , transactionTo = checkingAccount
-                            , transactionAmount = dec 100.00
-                            }
-                        )
-                    ]
-            }
-
--- Helper functions for formatting
-formatAmount :: Decimal -> Text
-formatAmount amount =
-    let sign = if amount >= 0 then "+" else ""
-        -- Format with 2 decimal places and thousands separator
-        amountStr = formatDecimal amount
-     in sign <> amountStr <> " €"
-
--- Format decimal with thousands separator and 2 decimal places
-formatDecimal :: Decimal -> Text
-formatDecimal d =
+    now <- getCurrentTime
     let
-        -- Convert to string with 2 decimal places
-        str = show d
-        -- Split into parts before and after decimal point
-        (intPart, decPart) = case T.splitOn "." (T.pack str) of
-            [i, d] -> (i, d)
-            [i] -> (i, "00")
-            _ -> ("0", "00")
-        -- Ensure 2 decimal places
-        decPart' = T.take 2 (decPart <> "00")
-        -- Add thousands separator to integer part
-        intPart' = addThousandsSeparator intPart
-     in
-        intPart' <> "," <> decPart'
+        oneDay :: NominalDiffTime
+        oneDay = 24 * 60 * 60
 
--- Add thousands separator to integer part
-addThousandsSeparator :: Text -> Text
-addThousandsSeparator t =
-    let len = T.length t
-        chunks = reverse [T.take 3 (T.drop i t) | i <- [0, 3 .. len - 1]]
-     in if len <= 3
-            then t
-            else T.intercalate "." (reverse chunks)
+        refDate :: UTCTime
+        refDate = addUTCTime (-7 * oneDay) now
+
+        onDay :: Integer -> UTCTime
+        onDay offset' = addUTCTime (fromIntegral offset' * oneDay) refDate
+     in
+        pure $
+            AppState
+                { stateBook =
+                    Map.fromList
+                        [
+                            ( 1
+                            , Transaction
+                                { transactionDate = onDay 0
+                                , transactionDescr = "Opening balance"
+                                , transactionFrom = openingBalance
+                                , transactionTo = checkingAccount
+                                , transactionAmount = dec2 1000
+                                }
+                            )
+                        ,
+                            ( 2
+                            , Transaction
+                                { transactionDate = onDay 1
+                                , transactionDescr = "Groceries"
+                                , transactionFrom = checkingAccount
+                                , transactionTo = spar
+                                , transactionAmount = dec2 9.99
+                                }
+                            )
+                        ,
+                            ( 3
+                            , Transaction
+                                { transactionDate = onDay 2
+                                , transactionDescr = "Book purchase"
+                                , transactionFrom = checkingAccount
+                                , transactionTo = amazon
+                                , transactionAmount = dec2 54.99
+                                }
+                            )
+                        ,
+                            ( 4
+                            , Transaction
+                                { transactionDate = onDay 3
+                                , transactionDescr = "Groceries, again"
+                                , transactionFrom = checkingAccount
+                                , transactionTo = spar
+                                , transactionAmount = dec2 37.42
+                                }
+                            )
+                        ,
+                            ( 5
+                            , Transaction
+                                { transactionDate = onDay 4
+                                , transactionDescr = "Salary"
+                                , transactionFrom = employerABC
+                                , transactionTo = checkingAccount
+                                , transactionAmount = dec2 100
+                                }
+                            )
+                        ]
+                }
+
+formatAmountFR :: Decimal -> Text
+formatAmountFR amount =
+    sign <> amount' <> " €"
+  where
+    sign = if amount >= 0 then "+" else ""
+    amount' =
+        T.pack $ insertSeparator ' ' [if x == '.' then ',' else x | x <- show amount]
+
+{-
+
+>>> insertSeparator '.' ""
+""
+
+>>> insertSeparator '.' "1"
+"1"
+
+>>> insertSeparator '.' "1234"
+"1.234"
+
+>>> insertSeparator '.' "123456789"
+"123.456.789"
+
+ -}
+
+insertSeparator :: Char -> String -> String
+insertSeparator sep str =
+    snd $ foldr step (0, []) str
+  where
+    len :: Int
+    len = length str
+
+    step :: Char -> (Int, String) -> (Int, String)
+    step c (n, acc) =
+        if n /= len - 1 && n `mod` 3 == 2
+            then (n + 1, sep : c : acc)
+            else (n + 1, c : acc)
 
 formatDate :: UTCTime -> Text
 formatDate = T.pack . formatTime defaultTimeLocale "%Y-%m-%d"
 
--- Main Application
 main :: IO ()
 main = do
     mStr <- SE.lookupEnv "PORT"
@@ -334,10 +327,8 @@ instance HyperView PfmView es where
         dummyState = AppState{stateBook = Map.empty}
 
 page :: AppState -> Eff es (Page '[PfmView])
-page state = pure $ col attClass $ do
+page state = pure $ col id $ do
     hyper MkPfmView (pfmView state)
-  where
-    attClass = extClass "" -- Empty class, just to satisfy the type
 
 pfmView :: AppState -> View PfmView ()
 pfmView state = do
@@ -366,7 +357,6 @@ pfmView state = do
                     div (extClass "transaction-list__body") $ do
                         viewTransactions state
 
--- Calculate balances based on transactions
 calculateBalances :: AppState -> Map Account Decimal
 calculateBalances AppState{stateBook} =
     foldr updateBalances Map.empty (Map.elems stateBook)
@@ -380,16 +370,15 @@ viewBalances :: AppState -> View PfmView ()
 viewBalances state = do
     let balances = calculateBalances state
 
-    -- Display only asset accounts, like in the Elm version
     forM_ assetsAccounts $ \account -> do
         when (Map.member account balances) $ do
-            let amount = Map.findWithDefault (dec 0) account balances
+            let amount = Map.findWithDefault (dec2 0) account balances
 
             balanceCard $
                 BalanceCardData
                     { balanceCardCategory = account.accountCategory.categoryName
                     , balanceCardAccount = account.accountName
-                    , balanceCardAmount = formatAmount amount
+                    , balanceCardAmount = formatAmountFR amount
                     }
 
 balanceCard :: BalanceCardData -> View PfmView ()
@@ -430,12 +419,12 @@ viewTransactions state = do
                 { transactionItemDescription = transaction.transactionDescr
                 , transactionItemAccounts = accountFlow
                 , transactionItemDate = formatDate transaction.transactionDate
-                , transactionItemAmount = formatAmount (if isPositive then transaction.transactionAmount else -transaction.transactionAmount)
+                , transactionItemAmount = formatAmountFR (if isPositive then transaction.transactionAmount else -transaction.transactionAmount)
                 , transactionItemIsPositive = isPositive
                 , transactionItemBalanceMovement =
                     BalanceMovementData
-                        { balanceMovementBefore = formatAmount balanceBefore
-                        , balanceMovementAfter = formatAmount balanceAfter
+                        { balanceMovementBefore = formatAmountFR balanceBefore
+                        , balanceMovementAfter = formatAmountFR balanceAfter
                         }
                 }
 
@@ -455,7 +444,7 @@ calculateBalanceMovements transactions =
                         else
                             if tx.transactionFrom == checkingAccount
                                 then -tx.transactionAmount
-                                else dec 0
+                                else dec2 0
                 newBalance = currentBalance - adjustment
                 entry = (tid, tx, newBalance, currentBalance)
              in calcBalances txs newBalance (entry : acc)
@@ -471,7 +460,7 @@ calculateBalanceMovements transactions =
                                     then bal - tx.transactionAmount
                                     else bal
                     )
-                    (dec 0)
+                    (dec2 0)
                     transactions
          in calcBalances sortedTransactions initialBalance []
 
@@ -521,17 +510,3 @@ div = tag "div"
 
 span :: Mod c -> View c () -> View c ()
 span = tag "span"
-
--- Pure functions for testing
-calculateAccountBalance :: Map Int Transaction -> Account -> Decimal
-calculateAccountBalance transactions account =
-    foldr updateBalance (dec 0) (Map.elems transactions)
-  where
-    updateBalance tx acc
-        | tx.transactionTo == account = acc + tx.transactionAmount
-        | tx.transactionFrom == account = acc - tx.transactionAmount
-        | otherwise = acc
-
--- Test function for formatting
-testFormatAmount :: Decimal -> Text
-testFormatAmount = formatAmount
