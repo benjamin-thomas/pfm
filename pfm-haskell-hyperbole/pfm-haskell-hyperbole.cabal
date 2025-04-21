@@ -47,3 +47,5 @@ executable pfm-haskell-hyperbole
                     , string-interpolate
                     , string-conversions
                     , containers
+                    , time
+                    , scientific

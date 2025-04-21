@@ -4,15 +4,11 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.String.Interpolate (i)
 import Data.Text (Text)
 
-import Effectful (Dispatch (Dynamic), DispatchOf, Effect)
-import Effectful.Dispatch.Dynamic (interpret, send)
-
 import Network.Wai.Middleware.Static (addBase, staticPolicy)
 
-import Data.Text qualified as T
 import Web.Hyperbole hiding (input)
 import Web.View.Style (extClass)
-import Prelude hiding (div)
+import Prelude hiding (div, span)
 
 import Data.Aeson
 import Data.Maybe (fromMaybe)
@@ -24,6 +20,37 @@ import Text.Read (readMaybe)
 PORT=1234 ghcid -c 'cabal repl pfm-haskell-hyperbole' -T :main --warnings --reload=./assets/css/main.css
 -}
 
+-- Domain Types
+data Category = Category
+    { categoryName :: Text
+    }
+    deriving (Show, Eq, Ord, Generic)
+
+instance ToJSON Category
+instance FromJSON Category
+
+data Account = Account
+    { accountName :: Text
+    , accountCategory :: Category
+    }
+    deriving (Show, Eq, Ord, Generic)
+
+instance ToJSON Account
+instance FromJSON Account
+
+data Transaction = Transaction
+    { transactionDate :: Text
+    , transactionDescr :: Text
+    , transactionFrom :: Account
+    , transactionTo :: Account
+    , transactionAmount :: Double
+    }
+    deriving (Show, Eq, Generic)
+
+instance ToJSON Transaction
+instance FromJSON Transaction
+
+-- Main Application
 main :: IO ()
 main = do
     mStr <- SE.lookupEnv "PORT"
@@ -56,60 +83,10 @@ app :: Int -> Application
 app port = do
     liveApp
         (document port "PFM - Haskell/Hyperbole")
-        (runCookieSession $ runPage page)
+        (runPage page)
 
-page ::
-    ( Hyperbole :> es
-    , CounterEff :> es
-    ) =>
-    Eff es (Page '[CounterView])
-page = do
-    n <- load
-    pure $ col id $ do
-        hyper MkCounterView $ counterView n
-
-newtype Counter = MkCounter Int
-    deriving newtype
-        ( Show
-        , Read
-        , ToParam
-        , FromParam
-        , ToJSON
-        , FromJSON
-        )
-
-instance Session Counter where
-    sessionKey = "counter"
-
-instance DefaultParam Counter where
-    defaultParam = MkCounter 0
-
-data CounterEff :: Effect where
-    Load :: CounterEff m Int
-    Save :: Int -> CounterEff m ()
-
-type instance DispatchOf CounterEff = 'Dynamic
-
-load :: (CounterEff :> es) => Eff es Int
-load = send Load
-
-save :: (CounterEff :> es) => Int -> Eff es ()
-save = send . Save
-
-runCookieSession ::
-    forall es a.
-    (Hyperbole :> es) =>
-    Eff (CounterEff : es) a ->
-    Eff es a
-runCookieSession = interpret $ \_ -> \case
-    Load -> do
-        MkCounter n <- session
-        pure n
-    Save n -> do
-        modifySession_ $
-            \_oldCounter -> MkCounter n
-
-data CounterView = MkCounterView
+-- Views
+data PfmView = MkPfmView
     deriving
         ( Show
         , Read
@@ -117,9 +94,11 @@ data CounterView = MkCounterView
         , ViewId
         )
 
-instance (CounterEff :> es) => HyperView CounterView es where
-    data Action CounterView
-        = Inc Int
+instance HyperView PfmView es where
+    data Action PfmView
+        = AddTransaction
+        | EditTransaction Int
+        | NoOp
         deriving
             ( Show
             , Read
@@ -127,39 +106,106 @@ instance (CounterEff :> es) => HyperView CounterView es where
             , ViewAction
             )
 
-    update action = do
-        case action of
-            Inc curr -> do
-                let n = curr + 1
-                save n
-                pure $ counterView n
+    update _ = pure pfmView
 
-counterView :: Int -> View CounterView ()
-counterView cnt = do
-    div (extClass "container") $ do
-        h1 (att "style" "margin-bottom:0") "PFM"
-        h4 (att "style" "margin-top:3px;margin-bottom:8px") "In Haskell/Hyperbole"
+page :: Eff es (Page '[PfmView])
+page = pure $ col id $ do
+    hyper MkPfmView pfmView
 
-        div (extClass "section") $ do
-            h2 (extClass "section-title") "Balances"
-        div (extClass "section") $ do
-            text "WIP"    
+pfmView :: View PfmView ()
+pfmView = do
+    div (extClass "app") $ do
+        div (extClass "container") $ do
+            div (extClass "section") $ do
+                div (extClass "debug-info") $ do
+                    text "Haskell/Hyperbole Version"
 
-                --div id $ do
-                --    input
-                --        ( disabled
-                --            . value (T.pack $ show cnt)
-                --        )
-                --    button
-                --        (Inc cnt)
-                --        (att "style" "cursor: pointer")
-                --        "Count"
+            h1 (att "style" "margin-bottom:0") "PFM"
+            h4 (att "style" "margin-top:3px;margin-bottom:8px") "In Haskell/Hyperbole"
 
+            div (extClass "section") $ do
+                h2 (extClass "section-title") "Balances"
+                div (extClass "balances") $ do
+                    viewBalances
+
+            div (extClass "section") $ do
+                div (extClass "transaction-list") $ do
+                    div (extClass "transaction-list__header") $ do
+                        h3 id "Transactions"
+                        button
+                            AddTransaction
+                            (extClass "button button--primary")
+                            "Add Transaction"
+                    div (extClass "transaction-list__body") $ do
+                        viewTransactions
+
+viewBalances :: View PfmView ()
+viewBalances = do
+    -- Fake balances for now
+    div (extClass "balance-card") $ do
+        div (extClass "balance-card__category") $ do
+            text "Assets"
+        div (extClass "balance-card__account") $ do
+            text "Checking account"
+        div (extClass "balance-card__amount") $ do
+            text "1.234,56 €"
+
+    div (extClass "balance-card") $ do
+        div (extClass "balance-card__category") $ do
+            text "Assets"
+        div (extClass "balance-card__account") $ do
+            text "Savings account"
+        div (extClass "balance-card__amount") $ do
+            text "5.678,90 €"
+
+viewTransactions :: View PfmView ()
+viewTransactions = do
+    -- Fake transactions for now
+    div (extClass "transaction-item") $ do
+        div (extClass "transaction-item__row") $ do
+            div (extClass "transaction-item__main-content") $ do
+                div (extClass "transaction-item__details") $ do
+                    div (extClass "transaction-item__description") $ do
+                        text "Salary"
+                    div (extClass "transaction-item__accounts") $ do
+                        text "EmployerABC → Checking account"
+                div (extClass "transaction-item__date") $ do
+                    text "2025-04-15"
+                div (extClass "transaction-item__amount transaction-item__amount--positive") $ do
+                    text "+3.000,00 €"
+            div (extClass "transaction-item__balance-column") $ do
+                div (extClass "transaction-item__balance-movement") $ do
+                    span (extClass "balance-before") $ text "0,00 €"
+                    span (extClass "arrow-icon") $ text " → "
+                    span (extClass "balance-after") $ text "3.000,00 €"
+
+    div (extClass "transaction-item") $ do
+        div (extClass "transaction-item__row") $ do
+            div (extClass "transaction-item__main-content") $ do
+                div (extClass "transaction-item__details") $ do
+                    div (extClass "transaction-item__description") $ do
+                        text "Groceries"
+                    div (extClass "transaction-item__accounts") $ do
+                        text "Checking account → Tesco"
+                div (extClass "transaction-item__date") $ do
+                    text "2025-04-18"
+                div (extClass "transaction-item__amount transaction-item__amount--negative") $ do
+                    text "-75,50 €"
+            div (extClass "transaction-item__balance-column") $ do
+                div (extClass "transaction-item__balance-movement") $ do
+                    span (extClass "balance-before") $ text "3.000,00 €"
+                    span (extClass "arrow-icon") $ text " → "
+                    span (extClass "balance-after") $ text "2.924,50 €"
+
+-- HTML Helpers
 h1 :: Mod c -> View c () -> View c ()
 h1 = tag "h1"
 
 h2 :: Mod c -> View c () -> View c ()
 h2 = tag "h2"
+
+h3 :: Mod c -> View c () -> View c ()
+h3 = tag "h3"
 
 h4 :: Mod c -> View c () -> View c ()
 h4 = tag "h4"
@@ -167,8 +213,5 @@ h4 = tag "h4"
 div :: Mod c -> View c () -> View c ()
 div = tag "div"
 
-input :: Mod c -> View c ()
-input m = tag "input" m ""
-
-disabled :: Mod c
-disabled = att "disabled" ""
+span :: Mod c -> View c () -> View c ()
+span = tag "span"
