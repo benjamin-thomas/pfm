@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "pfm-elm"
+		},
+		{
+			"path": "pfm-ps-halogen"
+		},
+		{
+			"path": "pfm-haskell-hyperbole"
+		}
+	],
+	"settings": {}
+}
