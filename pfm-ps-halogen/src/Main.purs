@@ -581,7 +581,9 @@ component refTS =
     in
       HH.div
         [ HP.class_ $ HH.ClassName "container" ]
-        [ HH.div [ HP.class_ $ HH.ClassName "section" ]
+        [ HH.h1 [ HP.style "margin-bottom:0" ] [ HH.text "PFM" ]
+        , HH.h4 [ HP.style "margin-top:3px;margin-bottom:8px" ] [ HH.text "In PureScript/Halogen" ]
+        , HH.div [ HP.class_ $ HH.ClassName "section" ]
             [ HH.div [ HP.class_ $ HH.ClassName "debug-info" ]
                 [ HH.div [ HP.class_ $ HH.ClassName "section" ]
                     [ HH.h2 [ HP.class_ $ HH.ClassName "section-title" ] [ HH.text "Balances" ]
@@ -887,16 +889,16 @@ dateField { text, date, onDateInput } =
               , HP.for $ fieldId
               ]
               [ HH.text text ]
-          , HH.div [ HP.class_ $ HH.ClassName "field__toggle" ]
-              [ HH.label [ HP.class_ $ HH.ClassName "toggle" ]
-                  [ HH.input
-                      [ HP.type_ $ HP.InputCheckbox
-                      -- , HE.onClick (const onToggleTime)
-                      , HP.class_ $ HH.ClassName "toggle__input"
-                      ]
-                  , HH.span [ HP.class_ $ HH.ClassName "toggle__label" ] [ HH.text "Include time" ]
-                  ]
-              ]
+          --, HH.div [ HP.class_ $ HH.ClassName "field__toggle" ]
+          --    [ HH.label [ HP.class_ $ HH.ClassName "toggle" ]
+          --        [ HH.input
+          --            [ HP.type_ $ HP.InputCheckbox
+          --            -- , HE.onClick (const onToggleTime)
+          --            , HP.class_ $ HH.ClassName "toggle__input"
+          --            ]
+          --        , HH.span [ HP.class_ $ HH.ClassName "toggle__label" ] [ HH.text "Include time" ]
+          --        ]
+          --    ]
           ]
       , HH.input
           [ HP.class_ $ HH.ClassName "field__input"

@@ -11,6 +11,7 @@ import Network.Wai.Middleware.Static (addBase, staticPolicy)
 
 import Data.Text qualified as T
 import Web.Hyperbole hiding (input)
+import Web.View.Style (extClass)
 import Prelude hiding (div)
 
 import Data.Aeson
@@ -54,7 +55,7 @@ document port title cnt =
 app :: Int -> Application
 app port = do
     liveApp
-        (document port "Counter")
+        (document port "PFM - Haskell/Hyperbole")
         (runCookieSession $ runPage page)
 
 page ::
@@ -135,20 +136,33 @@ instance (CounterEff :> es) => HyperView CounterView es where
 
 counterView :: Int -> View CounterView ()
 counterView cnt = do
-    h1 id "Counter"
+    div (extClass "container") $ do
+        h1 (att "style" "margin-bottom:0") "PFM"
+        h4 (att "style" "margin-top:3px;margin-bottom:8px") "In Haskell/Hyperbole"
 
-    div id $ do
-        input
-            ( disabled
-                . value (T.pack $ show cnt)
-            )
-        button
-            (Inc cnt)
-            (att "style" "cursor: pointer")
-            "Count"
+        div (extClass "section") $ do
+            h2 (extClass "section-title") "Balances"
+        div (extClass "section") $ do
+            text "WIP"    
+
+                --div id $ do
+                --    input
+                --        ( disabled
+                --            . value (T.pack $ show cnt)
+                --        )
+                --    button
+                --        (Inc cnt)
+                --        (att "style" "cursor: pointer")
+                --        "Count"
 
 h1 :: Mod c -> View c () -> View c ()
 h1 = tag "h1"
+
+h2 :: Mod c -> View c () -> View c ()
+h2 = tag "h2"
+
+h4 :: Mod c -> View c () -> View c ()
+h4 = tag "h4"
 
 div :: Mod c -> View c () -> View c ()
 div = tag "div"

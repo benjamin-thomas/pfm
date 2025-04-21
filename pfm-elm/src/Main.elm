@@ -404,6 +404,8 @@ viewHome model =
             [ H.div [ HA.class "debug-info" ]
                 [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
             ]
+        , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
+        , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
         , H.div [ HA.class "section" ]
             [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
             , H.div [ HA.class "balances" ]
