@@ -49,3 +49,5 @@ executable pfm-haskell-hyperbole
                     , containers
                     , time
                     , scientific
+                    , time
+                    , Decimal
