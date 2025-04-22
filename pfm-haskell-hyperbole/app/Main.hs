@@ -409,7 +409,6 @@ viewTransactions state = do
     let transactions = Map.toList state.stateBook
     let sortedTransactions = sortBy (\(_, a) (_, b) -> compare b.transactionDate a.transactionDate) transactions
 
-    -- Filter transactions related to checking account
     let checkingTransactions =
             filter
                 ( \(_, tx) ->
@@ -444,10 +443,8 @@ viewTransactions state = do
 calculateBalanceMovements :: [(Int, Transaction)] -> [(Int, Transaction, Decimal, Decimal)]
 calculateBalanceMovements transactions =
     let
-        -- Start with the most recent transaction and work backwards
         sortedTransactions = sortBy (\(_, a) (_, b) -> compare b.transactionDate a.transactionDate) transactions
 
-        -- Calculate running balance for checking account
         calcBalances [] _ acc = acc
         calcBalances ((tid, tx) : txs) currentBalance acc =
             let adjustment =
@@ -461,7 +458,6 @@ calculateBalanceMovements transactions =
                 entry = (tid, tx, newBalance, currentBalance)
              in calcBalances txs newBalance (entry : acc)
      in
-        -- Start with balance after all transactions
         let initialBalance =
                 foldr
                     ( \(_, tx) bal ->
