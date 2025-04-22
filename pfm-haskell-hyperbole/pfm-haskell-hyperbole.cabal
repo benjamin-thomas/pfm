@@ -24,18 +24,20 @@ executable pfm-haskell-hyperbole
     hs-source-dirs:   app
     default-language: GHC2021
     default-extensions:
-      OverloadedStrings
-      OverloadedRecordDot
-      DuplicateRecordFields
+      BlockArguments
       DataKinds
       DeriveAnyClass
-      TypeFamilies
-      LambdaCase
-      QuasiQuotes
       DerivingStrategies
-      UndecidableInstances
+      DuplicateRecordFields
+      LambdaCase
+      OverloadedRecordDot
+      OverloadedStrings
+      QuasiQuotes
       TemplateHaskell
+      TypeFamilies
+      UndecidableInstances
     build-depends:    base
+                    , pretty-simple
                     , hyperbole
                     , dev-reload
                     , text

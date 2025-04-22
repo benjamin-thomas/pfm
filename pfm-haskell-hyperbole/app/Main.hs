@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Control.Monad (forM_, when)
+import Control.Monad (forM_)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Decimal (Decimal, realFracToDecimal)
 import Data.List (sortBy)
@@ -19,24 +19,22 @@ import Prelude hiding (div, span)
 
 import Data.Aeson
 import Data.Maybe (fromMaybe)
+
 import DevReload (devReloadPageJs)
 import System.Environment qualified as SE
 import Text.Read (readMaybe)
 
 {-
+
 PORT=1234 ghcid -c 'cabal repl pfm-haskell-hyperbole' -T :main --warnings --reload=./assets/css/main.css
+
+====== TO DEBUG ======
+import Debug.Pretty.Simple (pTrace, pTraceShowWith)
+
+dbg msg x = pTrace (msg <> ": " <> show x) x
+======================
+
 -}
-
--- Custom JSON instances for Decimal
-instance ToJSON Decimal where
-    toJSON d = toJSON (show d)
-
-instance FromJSON Decimal where
-    parseJSON v = do
-        s <- parseJSON v
-        case readMaybe s of
-            Just d -> pure d
-            Nothing -> fail $ "Could not parse Decimal from: " ++ s
 
 -- Domain Types
 data Category = Category
@@ -65,8 +63,34 @@ data Transaction = Transaction
     }
     deriving (Show, Eq, Generic)
 
-instance ToJSON Transaction
-instance FromJSON Transaction
+instance ToJSON Transaction where
+    toJSON t =
+        object
+            [ "transactionDate" .= transactionDate t
+            , "transactionDescr" .= transactionDescr t
+            , "transactionFrom" .= transactionFrom t
+            , "transactionTo" .= transactionTo t
+            , "transactionAmount" .= show (transactionAmount t)
+            ]
+
+instance FromJSON Transaction where
+    parseJSON = withObject "Transaction" $ \v -> do
+        date <- v .: "transactionDate"
+        descr <- v .: "transactionDescr"
+        from <- v .: "transactionFrom"
+        to <- v .: "transactionTo"
+        amountStr <- v .: "transactionAmount"
+        case readMaybe amountStr of
+            Just amount ->
+                pure $
+                    Transaction
+                        { transactionDate = date
+                        , transactionDescr = descr
+                        , transactionFrom = from
+                        , transactionTo = to
+                        , transactionAmount = amount
+                        }
+            Nothing -> fail $ "Could not parse Decimal from: " ++ amountStr
 
 data AppState = AppState
     { stateBook :: Map Int Transaction
@@ -226,11 +250,11 @@ initialState = do
                         ]
                 }
 
-formatAmountFR :: Decimal -> Text
-formatAmountFR amount =
+formatAmountFR :: Bool -> Decimal -> Text
+formatAmountFR posSign amount =
     sign <> amount' <> " €"
   where
-    sign = if amount >= 0 then "+" else ""
+    sign = if amount >= 0 && posSign then "+" else ""
     amount' =
         T.pack $ insertSeparator ' ' [if x == '.' then ',' else x | x <- show amount]
 
@@ -332,29 +356,26 @@ page state = pure $ col id $ do
 
 pfmView :: AppState -> View PfmView ()
 pfmView state = do
-    div (extClass "app") $ do
-        div (extClass "container") $ do
-            div (extClass "section") $ do
-                div (extClass "debug-info") $ do
-                    text "Haskell/Hyperbole Version"
-
+    let balances = calculateBalances state
+    div (extClass "app") do
+        div (extClass "container") do
             h1 (att "style" "margin-bottom:0") "PFM"
             h4 (att "style" "margin-top:3px;margin-bottom:8px") "In Haskell/Hyperbole"
 
-            div (extClass "section") $ do
+            div (extClass "section") do
                 h2 (extClass "section-title") "Balances"
-                div (extClass "balances") $ do
-                    viewBalances state
+                div (extClass "balances") do
+                    viewBalances balances
 
-            div (extClass "section") $ do
-                div (extClass "transaction-list") $ do
-                    div (extClass "transaction-list__header") $ do
+            div (extClass "section") do
+                div (extClass "transaction-list") do
+                    div (extClass "transaction-list__header") do
                         h3 (att "id" "transactions") "Transactions"
                         button
                             AddTransaction
                             (extClass "button button--primary")
                             "Add Transaction"
-                    div (extClass "transaction-list__body") $ do
+                    div (extClass "transaction-list__body") do
                         viewTransactions state
 
 calculateBalances :: AppState -> Map Account Decimal
@@ -366,30 +387,22 @@ calculateBalances AppState{stateBook} =
             toAdjustment = Map.insertWith (+) tx.transactionTo tx.transactionAmount fromAdjustment
          in toAdjustment
 
-viewBalances :: AppState -> View PfmView ()
-viewBalances state = do
-    let balances = calculateBalances state
-
+viewBalances :: Map Account Decimal -> View PfmView ()
+viewBalances balances = do
     forM_ assetsAccounts $ \account -> do
-        when (Map.member account balances) $ do
-            let amount = Map.findWithDefault (dec2 0) account balances
+        let amount = Map.findWithDefault (dec2 0) account balances
 
-            balanceCard $
-                BalanceCardData
-                    { balanceCardCategory = account.accountCategory.categoryName
-                    , balanceCardAccount = account.accountName
-                    , balanceCardAmount = formatAmountFR amount
-                    }
+        balanceCard account amount
 
-balanceCard :: BalanceCardData -> View PfmView ()
-balanceCard data_ =
-    div (extClass "balance-card") $ do
-        div (extClass "balance-card__category") $ do
-            text data_.balanceCardCategory
-        div (extClass "balance-card__account") $ do
-            text data_.balanceCardAccount
-        div (extClass "balance-card__amount") $ do
-            text data_.balanceCardAmount
+balanceCard :: Account -> Decimal -> View PfmView ()
+balanceCard account amount =
+    div (extClass "balance-card") do
+        div (extClass "balance-card__category") do
+            text account.accountCategory.categoryName
+        div (extClass "balance-card__account") do
+            text account.accountName
+        div (extClass "balance-card__amount") do
+            text $ formatAmountFR True amount
 
 viewTransactions :: AppState -> View PfmView ()
 viewTransactions state = do
@@ -419,16 +432,15 @@ viewTransactions state = do
                 { transactionItemDescription = transaction.transactionDescr
                 , transactionItemAccounts = accountFlow
                 , transactionItemDate = formatDate transaction.transactionDate
-                , transactionItemAmount = formatAmountFR (if isPositive then transaction.transactionAmount else -transaction.transactionAmount)
+                , transactionItemAmount = formatAmountFR True (if isPositive then transaction.transactionAmount else -transaction.transactionAmount)
                 , transactionItemIsPositive = isPositive
                 , transactionItemBalanceMovement =
                     BalanceMovementData
-                        { balanceMovementBefore = formatAmountFR balanceBefore
-                        , balanceMovementAfter = formatAmountFR balanceAfter
+                        { balanceMovementBefore = formatAmountFR False balanceBefore
+                        , balanceMovementAfter = formatAmountFR False balanceAfter
                         }
                 }
 
--- Calculate balance movements for each transaction
 calculateBalanceMovements :: [(Int, Transaction)] -> [(Int, Transaction, Decimal, Decimal)]
 calculateBalanceMovements transactions =
     let
@@ -466,31 +478,31 @@ calculateBalanceMovements transactions =
 
 transactionItem :: TransactionItemData -> View PfmView ()
 transactionItem data_ =
-    div (extClass "transaction-item") $ do
-        div (extClass "transaction-item__row") $ do
-            div (extClass "transaction-item__main-content") $ do
-                div (extClass "transaction-item__details") $ do
-                    div (extClass "transaction-item__description") $ do
+    div (extClass "transaction-item") do
+        div (extClass "transaction-item__row") do
+            div (extClass "transaction-item__main-content") do
+                div (extClass "transaction-item__details") do
+                    div (extClass "transaction-item__description") do
                         text data_.transactionItemDescription
-                    div (extClass "transaction-item__accounts") $ do
+                    div (extClass "transaction-item__accounts") do
                         text data_.transactionItemAccounts
-                div (extClass "transaction-item__date") $ do
+                div (extClass "transaction-item__date") do
                     text data_.transactionItemDate
                 let amountClass =
                         if data_.transactionItemIsPositive
                             then "transaction-item__amount transaction-item__amount--positive"
                             else "transaction-item__amount transaction-item__amount--negative"
-                div (extClass amountClass) $ do
+                div (extClass amountClass) do
                     text data_.transactionItemAmount
             transactionBalanceMovement data_.transactionItemBalanceMovement
 
 transactionBalanceMovement :: BalanceMovementData -> View PfmView ()
 transactionBalanceMovement data_ =
-    div (extClass "transaction-item__balance-column") $ do
-        div (extClass "transaction-item__balance-movement") $ do
-            span (extClass "balance-before") $ text data_.balanceMovementBefore
-            span (extClass "arrow-icon") $ text " → "
-            span (extClass "balance-after") $ text data_.balanceMovementAfter
+    div (extClass "transaction-item__balance-column") do
+        div (extClass "transaction-item__balance-movement") do
+            span (extClass "balance-before") (text data_.balanceMovementBefore)
+            span (extClass "arrow-icon") (text " → ")
+            span (extClass "balance-after") (text data_.balanceMovementAfter)
 
 -- HTML Helpers
 h1 :: Mod c -> View c () -> View c ()

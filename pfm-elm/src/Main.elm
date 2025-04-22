@@ -341,16 +341,38 @@ dialog =
     H.node "dialog"
 
 
+accountsForBalances : List Account
+accountsForBalances =
+    List.sortBy (\o -> o.name) <|
+        List.filter
+            (\o -> o.category == assets)
+            allAccounts_
+
+
+balanceCard : Account -> Decimal -> Html Msg
+balanceCard account accountBalance =
+    let
+        colorAccent =
+            if account.category.name == "Assets" then
+                "#3498db"
+
+            else if account.category.name == "Expenses" then
+                "#e74c3c"
+
+            else
+                "#9b59b6"
+    in
+    H.div
+        [ HA.class "balance-card", HA.style "border-left-color" colorAccent ]
+        [ H.div [ HA.class "balance-card__category" ] [ H.text account.category.name ]
+        , H.div [ HA.class "balance-card__account" ] [ H.text account.name ]
+        , H.div [ HA.class "balance-card__amount" ] [ H.text (amountFmt accountBalance) ]
+        ]
+
+
 viewHome : Model -> Html Msg
 viewHome model =
     let
-        allCategories : List Category
-        allCategories =
-            model.book
-                |> Dict.values
-                |> List.concatMap (\tx -> [ tx.from.category, tx.to.category ])
-                |> uniqueBy .name
-
         transactions : List ( Int, TransactionView )
         transactions =
             List.sortBy
@@ -409,44 +431,11 @@ viewHome model =
         , H.div [ HA.class "section" ]
             [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
             , H.div [ HA.class "balances" ]
-                (List.concatMap
-                    (\category ->
-                        List.map
-                            (\account ->
-                                let
-                                    accountBalance =
-                                        balance model.book account
-
-                                    colorAccent =
-                                        if category.name == "Assets" then
-                                            "#3498db"
-
-                                        else if category.name == "Expenses" then
-                                            "#e74c3c"
-
-                                        else
-                                            "#9b59b6"
-                                in
-                                H.div [ HA.class "balance-card", HA.style "border-left-color" colorAccent ]
-                                    [ H.div [ HA.class "balance-card__category" ] [ H.text category.name ]
-                                    , H.div [ HA.class "balance-card__account" ] [ H.text account.name ]
-                                    , H.div [ HA.class "balance-card__amount" ] [ H.text (amountFmt accountBalance) ]
-                                    ]
-                            )
-                            (List.filter (\o -> o.category == category) allAccounts_)
+                (List.map
+                    (\account ->
+                        balanceCard account (balance model.book account)
                     )
-                    (List.sortBy (\c -> c.name) <|
-                        List.filter
-                            (\c ->
-                                List.member c
-                                    [ assets
-
-                                    -- , expenses
-                                    -- , income
-                                    ]
-                            )
-                            allCategories
-                    )
+                    accountsForBalances
                 )
             ]
         , H.div [ HA.class "section" ]
