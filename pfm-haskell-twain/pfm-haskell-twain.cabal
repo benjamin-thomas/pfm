@@ -21,9 +21,10 @@ executable pfm-haskell-twain
     other-modules:    Server
 
     build-depends:    base ^>=4.18.3.0
+                    , text
                     , twain
                     , warp
-                    , text
+                    , http-types
 
     hs-source-dirs:   app
     default-language: Haskell2010
