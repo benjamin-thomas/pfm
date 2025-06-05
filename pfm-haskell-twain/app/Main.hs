@@ -1,6 +1,6 @@
 module Main where
 
-import Server
+import Server (runServer)
 
 main :: IO ()
-main = putStrLn Server.hello
+main = runServer 8080
