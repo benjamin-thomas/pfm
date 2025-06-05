@@ -4,10 +4,7 @@
 			"path": "pfm-elm"
 		},
 		{
-			"path": "pfm-ps-halogen"
-		},
-		{
-			"path": "pfm-haskell-hyperbole"
+			"path": "pfm-haskell-twain"
 		}
 	],
 	"settings": {}

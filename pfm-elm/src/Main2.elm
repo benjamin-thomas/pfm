@@ -1,7 +1,7 @@
 port module Main2 exposing (main)
 
 import Browser
-import Html as H exposing (Attribute, Html)
+import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
 
@@ -176,11 +176,6 @@ updateDialog2Form msg form =
 
 
 -- VIEW
-
-
-whenJust : Maybe a -> (a -> Html msg) -> Html msg
-whenJust x f =
-    Maybe.withDefault (H.text "") <| Maybe.map f x
 
 
 view : Model -> Html Msg
