@@ -1,6 +1,12 @@
 module Main where
 
-import Server (runServer)
+import Server qualified
+import Server2 qualified
 
 main :: IO ()
-main = runServer 8080
+main =
+    if False
+        then
+            Server2.start 8080
+        else
+            Server.runServer 8080
