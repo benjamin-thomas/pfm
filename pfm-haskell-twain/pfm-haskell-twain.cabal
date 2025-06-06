@@ -31,6 +31,8 @@ executable pfm-haskell-twain
                     , warp
                     , http-types
                     , happstack-server
+                    , sqlite-simple
+                    , aeson
 
     hs-source-dirs:   app
     default-language: Haskell2010
