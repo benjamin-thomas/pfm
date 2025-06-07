@@ -33,6 +33,7 @@ executable pfm-haskell-twain
                     , happstack-server
                     , sqlite-simple
                     , aeson
+                    , raw-strings-qq
 
     hs-source-dirs:   app
     default-language: Haskell2010

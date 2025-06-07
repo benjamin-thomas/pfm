@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Server where
@@ -9,6 +10,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, FromRow, field, fromRow, open, query, query_)
 import Network.Wai.Handler.Warp (Port, run)
+import Text.RawString.QQ (r)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
 
@@ -44,8 +46,14 @@ routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi"
     , Twain.get "/categories" $ do
+        -- http -v localhost:8080/categories
         categories <- liftIO $ getCategories conn
         Twain.send $ Twain.json categories
+    , Twain.get "/transactions/:accountId" $ do
+        -- http -v localhost:8080/transactions/ accountId==2
+        accountId <- Twain.queryParam "accountId"
+        transactions <- liftIO $ getTransactionsWithRunningBalance conn (MkAccountId accountId)
+        Twain.send $ Twain.json transactions
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do
         name <- Twain.param "name"
@@ -99,13 +107,105 @@ instance ToJSON Category where
             ]
 
 getCategories :: Connection -> IO [Category]
-getCategories conn = query_ conn "SELECT * FROM category"
+getCategories conn = query_ conn "SELECT * FROM categories"
+
+{-
+
+Represents the ledger entries from an account's point of view.
+
+Most of the times, we want to observer the list of transactions for a given
+account (let's say "Checking account").
+
+And we also want to see how each transaction affected the balance of that
+account, so we show a running balance on each row.
+
+ -}
+data WithRunningBalance = MkWithRunningBalance
+    { xTransactionId :: Int
+    , xFromAccountName :: String
+    , xToAccountName :: String
+    , xDate :: Int
+    , xDescr :: String
+    , xFlow :: Int
+    , xRunningBalance :: Int
+    }
+    deriving (Show)
+
+instance FromRow WithRunningBalance where
+    fromRow =
+        MkWithRunningBalance
+            <$> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+
+instance ToJSON WithRunningBalance where
+    toJSON
+        ( MkWithRunningBalance
+                { xTransactionId = xTransactionId'
+                , xFromAccountName = xFromAccountName'
+                , xToAccountName = xToAccountName'
+                , xDate = xDate'
+                , xDescr = xDescr'
+                , xFlow = xFlow'
+                , xRunningBalance = xRunningBalance'
+                }
+            ) =
+            object
+                [ ("transactionId", toJSON xTransactionId')
+                , ("fromAccountName", toJSON xFromAccountName')
+                , ("toAccountName", toJSON xToAccountName')
+                , ("date", toJSON xDate')
+                , ("descr", toJSON xDescr')
+                , ("flow", toJSON xFlow')
+                , ("runningBalance", toJSON xRunningBalance')
+                ]
+
+newtype AccountId = MkAccountId Int
+
+getTransactionsWithRunningBalance :: Connection -> AccountId -> IO [WithRunningBalance]
+getTransactionsWithRunningBalance conn (MkAccountId accountId) =
+    query
+        conn
+        sql
+        (accountId, accountId, accountId)
+  where
+    sql =
+        [r|
+SELECT x.*
+     , SUM(x.flow) OVER (ORDER BY x.transaction_id) AS running_balance
+FROM (
+    SELECT t.transaction_id
+         , a.name AS from_account
+         , b.name AS to_account
+         , t.date
+         , t.descr
+         , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow
+    FROM transactions AS t
+
+    INNER JOIN accounts AS a
+            ON t.from_account_id = a.account_id
+
+    INNER JOIN accounts AS b
+            ON t.to_account_id = b.account_id
+
+    WHERE t.to_account_id = ? OR t.from_account_id = ?
+)x
+
+ORDER BY x.transaction_id
+;
+|]
 
 runServer :: Port -> IO ()
 runServer port = do
     conn <- open "./db.sqlite3"
     categories <- getCategories conn
     mapM_ print categories
+    transactions <- getTransactionsWithRunningBalance conn (MkAccountId 2)
+    mapM_ print transactions
     putStrLn $
         unwords
             [ "Running twain app at"
