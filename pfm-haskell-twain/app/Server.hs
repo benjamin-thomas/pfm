@@ -11,11 +11,9 @@ module Server (runServer) where
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (ToJSON (toJSON), object)
 import Data.ByteString.Lazy (ByteString)
-import Data.Text (Text)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, FromRow, field, fromRow, open, query, query_)
 import Network.Wai.Handler.Warp (Port, run)
-import Text.Printf (printf)
 import Text.RawString.QQ (r)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
@@ -46,7 +44,8 @@ routes conn =
         -- http -v localhost:8080/transactions/ accountId==2
         accountId <- Twain.queryParam "accountId"
         transactions <- liftIO $ getTransactionsWithRunningBalance conn (MkAccountId accountId)
-        Twain.send $ Twain.json $ map toWithRunningBalanceDTO transactions
+        -- Twain.send $ Twain.json $ map toWithRunningBalanceDTO transactions
+        Twain.send $ Twain.json transactions
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do
         name <- Twain.param "name"
@@ -83,6 +82,8 @@ routes conn =
 data Category = MkCategory
     { categoryId :: Int
     , categoryName :: String
+    , categoryCreatedAt :: Int
+    , categoryUpdatedAt :: Int
     }
     deriving (Show)
 
@@ -91,16 +92,20 @@ instance FromRow Category where
         MkCategory
             <$> field
             <*> field
+            <*> field
+            <*> field
 
 instance ToJSON Category where
-    toJSON (MkCategory{categoryId = categoryId', categoryName = categoryName'}) =
+    toJSON (MkCategory{categoryId = categoryId', categoryName = categoryName', categoryCreatedAt = categoryCreatedAt', categoryUpdatedAt = categoryUpdatedAt'}) =
         object
             [ ("categoryId", toJSON categoryId')
             , ("name", toJSON categoryName')
+            , ("createdAt", toJSON categoryCreatedAt')
+            , ("updatedAt", toJSON categoryUpdatedAt')
             ]
 
 getCategories :: Connection -> IO [Category]
-getCategories conn = query_ conn "SELECT * FROM categories"
+getCategories conn = query_ conn "SELECT category_id, name, created_at, updated_at FROM categories"
 
 {-
 
@@ -115,12 +120,23 @@ account, so we show a running balance on each row.
  -}
 data WithRunningBalanceEntity = MkWithRunningBalanceEntity
     { transactionId :: Int
+    , fromAccountId :: Int
     , fromAccountName :: String
+    , toAccountId :: Int
     , toAccountName :: String
-    , date :: Int
+    , dateUnix :: Int
+    , date :: String
     , descr :: String
     , flowCents :: Int
+    , flow :: String
     , runningBalanceCents :: Int
+    , runningBalance :: String
+    , createdAtUnix :: Int
+    , createdAtUtc :: String
+    , createdAtTz :: String
+    , updatedAtUnix :: Int
+    , updatedAtUtc :: String
+    , updatedAtTz :: String
     }
     deriving (Show)
 
@@ -134,50 +150,77 @@ instance FromRow WithRunningBalanceEntity where
             <*> field
             <*> field
             <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
+            <*> field
 
-data WithRunningBalanceDTO = MkWithRunningBalanceDTO
-    { transactionId :: Int
-    , fromAccountName :: String
-    , toAccountName :: String
-    , date :: Int
-    , descr :: String
-    , flowCents :: Int
-    , flow :: String
-    , runningBalanceCents :: Int
-    , runningBalance :: String
-    }
-    deriving (Show)
+-- data WithRunningBalanceDTO = MkWithRunningBalanceDTO
+--     { transactionId :: Int
+--     , fromAccountId :: Int
+--     , fromAccountName :: String
+--     , toAccountId :: Int
+--     , toAccountName :: String
+--     , date :: Int
+--     , dateFmt :: UTCTime
+--     , descr :: String
+--     , flowCents :: Int
+--     , flow :: String
+--     , runningBalanceCents :: Int
+--     , runningBalance :: String
+--     }
+--     deriving (Show)
 
-toWithRunningBalanceDTO :: WithRunningBalanceEntity -> WithRunningBalanceDTO
-toWithRunningBalanceDTO (MkWithRunningBalanceEntity{..}) =
-    MkWithRunningBalanceDTO
-        { transactionId = transactionId
-        , fromAccountName = fromAccountName
-        , toAccountName = toAccountName
-        , date = date
-        , descr = descr
-        , flowCents = flowCents
-        , flow = formatCents flowCents
-        , runningBalanceCents = runningBalanceCents
-        , runningBalance = formatCents runningBalanceCents
-        }
-  where
-    formatCents :: Int -> String
-    formatCents n = printf "%0.2f" (fromIntegral n / 100.0 :: Double)
+-- toWithRunningBalanceDTO :: WithRunningBalanceEntity -> WithRunningBalanceDTO
+-- toWithRunningBalanceDTO (MkWithRunningBalanceEntity{..}) =
+--     MkWithRunningBalanceDTO
+--         { transactionId = transactionId
+--         , fromAccountName = fromAccountName
+--         , toAccountName = toAccountName
+--         , date = date
+--         , dateFmt = posixSecondsToUTCTime $ fromIntegral date
+--         , descr = descr
+--         , flowCents = flowCents
+--         , flow = formatCents flowCents
+--         , runningBalanceCents = runningBalanceCents
+--         , runningBalance = formatCents runningBalanceCents
+--         }
+--   where
+--     formatCents :: Int -> String
+--     formatCents n = printf "%0.2f" (fromIntegral n / 100.0 :: Double)
 
-instance ToJSON WithRunningBalanceDTO where
+-- formatDate :: Int -> Date
+-- formatDate n = posixSecondsToUTCTime n
+
+instance ToJSON WithRunningBalanceEntity where
     toJSON
-        (MkWithRunningBalanceDTO{..}) =
+        (MkWithRunningBalanceEntity{..}) =
             object
                 [ ("transactionId", toJSON transactionId)
+                , ("fromAccountId", toJSON fromAccountId)
                 , ("fromAccountName", toJSON fromAccountName)
+                , ("toAccountId", toJSON toAccountId)
                 , ("toAccountName", toJSON toAccountName)
+                , ("dateUnix", toJSON dateUnix)
                 , ("date", toJSON date)
                 , ("descr", toJSON descr)
                 , ("flowCents", toJSON flowCents)
                 , ("flow", toJSON flow)
                 , ("runningBalanceCents", toJSON runningBalanceCents)
                 , ("runningBalance", toJSON runningBalance)
+                , ("createdAtUnix", toJSON createdAtUnix)
+                , ("createdAtUtc", toJSON createdAtUtc)
+                , ("createdAtTz", toJSON createdAtTz)
+                , ("updatedAtUnix", toJSON updatedAtUnix)
+                , ("updatedAtUtc", toJSON updatedAtUtc)
+                , ("updatedAtTz", toJSON updatedAtTz)
                 ]
 
 newtype AccountId = MkAccountId Int
@@ -191,27 +234,51 @@ getTransactionsWithRunningBalance conn (MkAccountId accountId) =
   where
     sql =
         [r|
-SELECT x.*
-     , SUM(x.flow_cents) OVER (ORDER BY x.transaction_id) AS running_balance_cents
+SELECT y.transaction_id
+     , y.from_account_id
+     , y.from_account_name
+     , y.to_account_id
+     , y.to_account_name
+     , y.date AS date_unix
+     , date(y.date, 'unixepoch') AS date
+     , y.descr
+     , y.flow_cents
+     , printf("%.2f", y.flow_cents / 100.0) AS flow
+     , y.running_balance_cents
+     , printf("%.2f", y.running_balance_cents / 100.0) AS running_balance
+     , y.created_at AS created_at_unix
+     , datetime(y.created_at, 'unixepoch') AS created_at_utc
+     , datetime(y.created_at, 'unixepoch', 'localtime') AS created_at_tz
+     , y.updated_at AS updated_at_unix
+     , datetime(y.updated_at, 'unixepoch') AS updated_at_utc
+     , datetime(y.updated_at, 'unixepoch', 'localtime') AS updated_at_tz
 FROM (
-    SELECT t.transaction_id
-         , a.name AS from_account
-         , b.name AS to_account
-         , t.date
-         , t.descr
-         , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow_cents
-    FROM transactions AS t
+        SELECT x.*
+      , SUM(x.flow_cents) OVER (ORDER BY x.transaction_id) AS running_balance_cents
+        FROM (
+        SELECT t.transaction_id
+                , a.name AS from_account_name
+                , a.account_id AS from_account_id
+                , b.name AS to_account_name
+                , b.account_id AS to_account_id
+                , t.date
+                , t.descr
+                , t.created_at
+                , t.updated_at
+                , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow_cents
+        FROM transactions AS t
 
-    INNER JOIN accounts AS a
-            ON t.from_account_id = a.account_id
+        INNER JOIN accounts AS a
+                ON t.from_account_id = a.account_id
 
-    INNER JOIN accounts AS b
-            ON t.to_account_id = b.account_id
+        INNER JOIN accounts AS b
+                ON t.to_account_id = b.account_id
 
-    WHERE t.to_account_id = ? OR t.from_account_id = ?
-)x
+        WHERE t.to_account_id = ? OR t.from_account_id = ?
+        )x
+)y
 
-ORDER BY x.transaction_id
+ORDER BY y.transaction_id
 ;
 |]
 

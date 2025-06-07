@@ -16,8 +16,19 @@ DROP TABLE IF EXISTS categories;
 CREATE TABLE categories
     ( category_id INTEGER PRIMARY KEY
     , name        TEXT    NOT NULL UNIQUE CHECK (TRIM(name) <> '')
+    , created_at  INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at  INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
     )
     ;
+
+CREATE TRIGGER update_categories_updated_at
+AFTER UPDATE ON categories
+FOR EACH ROW
+BEGIN
+    UPDATE categories
+    SET updated_at = strftime('%s', current_timestamp)
+    WHERE category_id = NEW.category_id;
+END;
 
 INSERT INTO categories (name)
 VALUES ('Equity')
@@ -30,8 +41,19 @@ CREATE TABLE accounts
     ( account_id  INTEGER PRIMARY KEY
     , category_id INTEGER NOT NULL REFERENCES categories(category_id)
     , name        TEXT    NOT NULL UNIQUE CHECK (TRIM(name) <> '')
+    , created_at  INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at  INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
     )
     ;
+
+CREATE TRIGGER update_accounts_updated_at
+AFTER UPDATE ON accounts
+FOR EACH ROW
+BEGIN
+    UPDATE accounts
+    SET updated_at = strftime('%s', current_timestamp)
+    WHERE account_id = NEW.account_id;
+END;
 
 INSERT INTO accounts (category_id, name)
 VALUES (1, 'OpeningBalance')      -- account_id = 1
@@ -55,6 +77,8 @@ CREATE TABLE transactions
     , date            INTEGER        NOT NULL
     , descr           TEXT           NOT NULL
     , cents           INTEGER        NOT NULL CHECK (cents > 0)
+    , created_at      INTEGER        NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at      INTEGER        NOT NULL DEFAULT (strftime('%s', current_timestamp))
     , CHECK (from_account_id <> to_account_id)
     )
     ;
@@ -62,6 +86,15 @@ CREATE TABLE transactions
 CREATE INDEX idx_transactions_from_account_id ON transactions(from_account_id);
 CREATE INDEX idx_transactions_to_account_id   ON transactions(to_account_id);
 CREATE INDEX idx_transactions_date            ON transactions(date);
+
+CREATE TRIGGER  update_transactions_updated_at
+AFTER UPDATE ON transactions
+FOR EACH ROW
+BEGIN
+    UPDATE transactions
+       SET updated_at = strftime('%s', current_timestamp)
+     WHERE transaction_id = NEW.transaction_id;
+END;
 
 INSERT INTO transactions (from_account_id, to_account_id, date, descr, cents)
 VALUES (1, 2, (SELECT strftime('%s', date(current_date, '+0 days'))), 'Opening balance', 100000) -- Opening balance to Checking account

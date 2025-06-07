@@ -34,6 +34,7 @@ executable pfm-haskell-twain
                     , sqlite-simple
                     , aeson
                     , raw-strings-qq
+                    , time
 
     hs-source-dirs:   app
     default-language: Haskell2010
