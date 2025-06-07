@@ -1,15 +1,21 @@
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE OverloadedRecordDot #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Server where
+module Server (runServer) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Data.Aeson (ToJSON (toJSON), object)
 import Data.ByteString.Lazy (ByteString)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, FromRow, field, fromRow, open, query, query_)
 import Network.Wai.Handler.Warp (Port, run)
+import Text.Printf (printf)
 import Text.RawString.QQ (r)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
@@ -21,26 +27,13 @@ mkApp conn =
         (Twain.notFound $ Twain.send $ Twain.text "Error: not found.")
         (routes conn)
 
-hello1 :: String
-hello1 = "hello1"
-
-hello2 :: String
-hello2 = error "oops"
-
 echoName :: Twain.ResponderM ()
 echoName = do
     name <- Twain.param "name"
     Twain.send $ Twain.html $ "Hello, " <> name
 
-echoName2 :: Twain.ResponderM a
-echoName2 = do
-    Twain.send $ Twain.html $ "Hello, " <> "Ben"
-
 greeting :: ByteString -> Twain.Response
 greeting name = Twain.html $ "Hello, " <> name
-
-wat :: Twain.Middleware
-wat = Twain.get "/echo/:name" echoName
 
 routes :: Connection -> [Twain.Middleware]
 routes conn =
@@ -53,7 +46,7 @@ routes conn =
         -- http -v localhost:8080/transactions/ accountId==2
         accountId <- Twain.queryParam "accountId"
         transactions <- liftIO $ getTransactionsWithRunningBalance conn (MkAccountId accountId)
-        Twain.send $ Twain.json transactions
+        Twain.send $ Twain.json $ map toWithRunningBalanceDTO transactions
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do
         name <- Twain.param "name"
@@ -120,20 +113,20 @@ And we also want to see how each transaction affected the balance of that
 account, so we show a running balance on each row.
 
  -}
-data WithRunningBalance = MkWithRunningBalance
-    { xTransactionId :: Int
-    , xFromAccountName :: String
-    , xToAccountName :: String
-    , xDate :: Int
-    , xDescr :: String
-    , xFlow :: Int
-    , xRunningBalance :: Int
+data WithRunningBalanceEntity = MkWithRunningBalanceEntity
+    { transactionId :: Int
+    , fromAccountName :: String
+    , toAccountName :: String
+    , date :: Int
+    , descr :: String
+    , flowCents :: Int
+    , runningBalanceCents :: Int
     }
     deriving (Show)
 
-instance FromRow WithRunningBalance where
+instance FromRow WithRunningBalanceEntity where
     fromRow =
-        MkWithRunningBalance
+        MkWithRunningBalanceEntity
             <$> field
             <*> field
             <*> field
@@ -142,31 +135,54 @@ instance FromRow WithRunningBalance where
             <*> field
             <*> field
 
-instance ToJSON WithRunningBalance where
+data WithRunningBalanceDTO = MkWithRunningBalanceDTO
+    { transactionId :: Int
+    , fromAccountName :: String
+    , toAccountName :: String
+    , date :: Int
+    , descr :: String
+    , flowCents :: Int
+    , flow :: String
+    , runningBalanceCents :: Int
+    , runningBalance :: String
+    }
+    deriving (Show)
+
+toWithRunningBalanceDTO :: WithRunningBalanceEntity -> WithRunningBalanceDTO
+toWithRunningBalanceDTO (MkWithRunningBalanceEntity{..}) =
+    MkWithRunningBalanceDTO
+        { transactionId = transactionId
+        , fromAccountName = fromAccountName
+        , toAccountName = toAccountName
+        , date = date
+        , descr = descr
+        , flowCents = flowCents
+        , flow = formatCents flowCents
+        , runningBalanceCents = runningBalanceCents
+        , runningBalance = formatCents runningBalanceCents
+        }
+  where
+    formatCents :: Int -> String
+    formatCents n = printf "%0.2f" (fromIntegral n / 100.0 :: Double)
+
+instance ToJSON WithRunningBalanceDTO where
     toJSON
-        ( MkWithRunningBalance
-                { xTransactionId = xTransactionId'
-                , xFromAccountName = xFromAccountName'
-                , xToAccountName = xToAccountName'
-                , xDate = xDate'
-                , xDescr = xDescr'
-                , xFlow = xFlow'
-                , xRunningBalance = xRunningBalance'
-                }
-            ) =
+        (MkWithRunningBalanceDTO{..}) =
             object
-                [ ("transactionId", toJSON xTransactionId')
-                , ("fromAccountName", toJSON xFromAccountName')
-                , ("toAccountName", toJSON xToAccountName')
-                , ("date", toJSON xDate')
-                , ("descr", toJSON xDescr')
-                , ("flow", toJSON xFlow')
-                , ("runningBalance", toJSON xRunningBalance')
+                [ ("transactionId", toJSON transactionId)
+                , ("fromAccountName", toJSON fromAccountName)
+                , ("toAccountName", toJSON toAccountName)
+                , ("date", toJSON date)
+                , ("descr", toJSON descr)
+                , ("flowCents", toJSON flowCents)
+                , ("flow", toJSON flow)
+                , ("runningBalanceCents", toJSON runningBalanceCents)
+                , ("runningBalance", toJSON runningBalance)
                 ]
 
 newtype AccountId = MkAccountId Int
 
-getTransactionsWithRunningBalance :: Connection -> AccountId -> IO [WithRunningBalance]
+getTransactionsWithRunningBalance :: Connection -> AccountId -> IO [WithRunningBalanceEntity]
 getTransactionsWithRunningBalance conn (MkAccountId accountId) =
     query
         conn
@@ -176,14 +192,14 @@ getTransactionsWithRunningBalance conn (MkAccountId accountId) =
     sql =
         [r|
 SELECT x.*
-     , SUM(x.flow) OVER (ORDER BY x.transaction_id) AS running_balance
+     , SUM(x.flow_cents) OVER (ORDER BY x.transaction_id) AS running_balance_cents
 FROM (
     SELECT t.transaction_id
          , a.name AS from_account
          , b.name AS to_account
          , t.date
          , t.descr
-         , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow
+         , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow_cents
     FROM transactions AS t
 
     INNER JOIN accounts AS a
