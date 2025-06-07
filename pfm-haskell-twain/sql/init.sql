@@ -6,6 +6,8 @@ $ litecli ./db.sqlite3
 
  */
 
+BEGIN TRANSACTION;
+
 DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS categories;
@@ -47,21 +49,26 @@ SELECT * FROM account INNER JOIN category USING (category_id);
 */
 
 CREATE TABLE transactions
-    ( transaction_id  INTEGER PRIMARY KEY
-    , from_account_id INTEGER NOT NULL REFERENCES accounts(account_id)
-    , to_account_id   INTEGER NOT NULL REFERENCES accounts(account_id)
-    , date            INTEGER NOT NULL
-    , descr           TEXT    NOT NULL
-    , amount          DECIMAL NOT NULL CHECK (amount > 0)
+    ( transaction_id  INTEGER        PRIMARY KEY
+    , from_account_id INTEGER        NOT NULL REFERENCES accounts(account_id)
+    , to_account_id   INTEGER        NOT NULL REFERENCES accounts(account_id)
+    , date            INTEGER        NOT NULL
+    , descr           TEXT           NOT NULL
+    , cents           INTEGER        NOT NULL CHECK (cents > 0)
+    , CHECK (from_account_id <> to_account_id)
     )
     ;
 
-INSERT INTO transactions (from_account_id, to_account_id, date, descr, amount)
-VALUES (1, 2, (SELECT strftime('%s', date(current_date, '+0 days'))), 'Opening balance', 1000.00) -- Opening balance to Checking account
-     , (2, 6, (SELECT strftime('%s', date(current_date, '+1 days'))), 'Groceries',          9.99) -- Checking account to Spar
-     , (2, 8, (SELECT strftime('%s', date(current_date, '+2 days'))), 'Book purchase',     54.99) -- Checking account to Amazon
-     , (2, 6, (SELECT strftime('%s', date(current_date, '+3 days'))), 'Groceries, again',  37.42) -- Checking account to Spar
-     , (4, 2, (SELECT strftime('%s', date(current_date, '+4 days'))), 'Salary',            12.99) -- EmployerABC to Checking account
+CREATE INDEX idx_transactions_from_account_id ON transactions(from_account_id);
+CREATE INDEX idx_transactions_to_account_id   ON transactions(to_account_id);
+CREATE INDEX idx_transactions_date            ON transactions(date);
+
+INSERT INTO transactions (from_account_id, to_account_id, date, descr, cents)
+VALUES (1, 2, (SELECT strftime('%s', date(current_date, '+0 days'))), 'Opening balance', 100000) -- Opening balance to Checking account
+     , (2, 6, (SELECT strftime('%s', date(current_date, '+1 days'))), 'Groceries',          999) -- Checking account to Spar
+     , (2, 8, (SELECT strftime('%s', date(current_date, '+2 days'))), 'Book purchase',     5499) -- Checking account to Amazon
+     , (2, 6, (SELECT strftime('%s', date(current_date, '+3 days'))), 'Groceries, again',  3742) -- Checking account to Spar
+     , (4, 2, (SELECT strftime('%s', date(current_date, '+4 days'))), 'Salary',           10000) -- EmployerABC to Checking account
      ;
 
 /*
@@ -89,4 +96,15 @@ sqlite> SELECT strftime('%s', date(current_date, '+1 day'));
 sqlite> SELECT strftime('%s', date(current_date, '+2 days'));
 1749427200
 
+
+=== MONEY HANDLING ===
+
+sqlite's type system is underpowered, so I must store cents
+
+sqlite> SELECT CAST(1.234 AS DECIMAL(10,2));
+SELECT CAST(1.234 AS DECIMAL(10,2));
+1.234
+
 */
+
+COMMIT;
