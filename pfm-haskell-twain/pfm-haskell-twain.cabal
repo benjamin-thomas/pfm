@@ -35,6 +35,7 @@ executable pfm-haskell-twain
                     , aeson
                     , raw-strings-qq
                     , time
+                    , elm-street
 
     hs-source-dirs:   app
     default-language: Haskell2010

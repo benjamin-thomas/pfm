@@ -4,11 +4,15 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
-import Domain exposing (Account, Category, TransactionViewWithBalance)
+import Domain exposing (Account, CategoryOld2, TransactionViewWithBalance)
+import Generated.Decoder exposing (decodeCategory)
+import Generated.Types exposing (Category)
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
+import Http
 import Iso8601
+import Json.Decode as D
 import Json.Encode as E
 import Page.UI as UI_Page
 import Route exposing (Route)
@@ -43,14 +47,24 @@ port showDialog : () -> Cmd msg
 port closeDialog : () -> Cmd msg
 
 
-type alias Category =
+{-| http -v localhost:8080/categories
+-}
+fetchCategories : Cmd Msg
+fetchCategories =
+    Http.get
+        { url = "http://localhost:8080/categories"
+        , expect = Http.expectJson GotCategories (D.list decodeCategory)
+        }
+
+
+type alias CategoryOld =
     { name : String
     }
 
 
 type alias Account =
     { name : String
-    , category : Category
+    , category : CategoryOld
     }
 
 
@@ -72,22 +86,22 @@ type alias TransactionView =
     }
 
 
-assets : Category
+assets : CategoryOld
 assets =
     { name = "Assets" }
 
 
-expenses : Category
+expenses : CategoryOld
 expenses =
     { name = "Expenses" }
 
 
-equity : Category
+equity : CategoryOld
 equity =
     { name = "Equity" }
 
 
-income : Category
+income : CategoryOld
 income =
     { name = "Income" }
 
@@ -216,6 +230,12 @@ type Page
     | UI
 
 
+type Status a
+    = Loading
+    | Failed
+    | Loaded a
+
+
 type alias Model =
     { key : Nav.Key
     , url : Url
@@ -225,6 +245,7 @@ type alias Model =
     , book : Dict Int TransactionView
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
+    , tempCategories : Status (List Category)
     }
 
 
@@ -260,6 +281,7 @@ type Msg
     | EnterPressed
     | GotZone Time.Zone
     | ToggleTheme
+    | GotCategories (Result Http.Error (List Category))
 
 
 uniqueBy : (a -> comparable) -> List a -> List a
@@ -437,6 +459,30 @@ viewHome model =
                     )
                     accountsForBalances
                 )
+            ]
+        , H.div []
+            [ H.h2 [] [ H.text "TEMP: testing frontend/backend code-gen interaction" ]
+            , case model.tempCategories of
+                Loading ->
+                    H.div []
+                        [ H.text "Loading categories..." ]
+
+                Failed ->
+                    H.div []
+                        [ H.text "Failed to load categories." ]
+
+                Loaded categories ->
+                    H.div []
+                        [ H.text "Categories loaded."
+                        , H.ul []
+                            (List.map
+                                (\category ->
+                                    H.li []
+                                        [ H.text category.name2 ]
+                                )
+                                categories
+                            )
+                        ]
             ]
         , H.div [ HA.class "section" ]
             [ H.div [ HA.class "transaction-list" ]
@@ -877,10 +923,12 @@ init () url key =
       , book = book
       , dialog = Nothing
       , isDarkTheme = False
+      , tempCategories = Loading
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
+        , fetchCategories
         ]
     )
 
@@ -892,6 +940,18 @@ update msg model =
             Debug.log "(msg, model)" ( msg, model )
     in
     case msg of
+        GotCategories result ->
+            case result of
+                Ok categories ->
+                    ( { model | tempCategories = Loaded categories }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( { model | tempCategories = Failed }
+                    , Cmd.none
+                    )
+
         UrlRequested urlRequest ->
             case urlRequest of
                 Browser.Internal url ->

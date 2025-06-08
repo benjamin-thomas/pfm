@@ -1,0 +1,8 @@
+{
+  "excludedPaths": [
+    "./src/Generated/Decoder.elm",
+    "./src/Generated/Encoder.elm",
+    "./src/Generated/ElmStreet.elm",
+    "./src/Generated/Types.elm"
+  ]
+}

@@ -13,5 +13,6 @@ main =
     if False
         then
             Server2.start 8080
-        else
+        else do
+            Server.exportElm
             Server.runServer 8080

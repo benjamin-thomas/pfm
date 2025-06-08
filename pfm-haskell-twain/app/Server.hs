@@ -1,3 +1,6 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedRecordDot #-}
@@ -5,18 +8,39 @@
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 
-module Server (runServer) where
+module Server (runServer, exportElm) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Data.Aeson (ToJSON (toJSON), object)
+import Data.Aeson (FromJSON, ToJSON (toJSON), object)
 import Data.ByteString.Lazy (ByteString)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, FromRow, field, fromRow, open, query, query_)
+import Elm
+import GHC.Generics
 import Network.Wai.Handler.Warp (Port, run)
 import Text.RawString.QQ (r)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
+
+exportElm :: IO ()
+exportElm = generateElm @Types $ defaultSettings "../pfm-elm/src/" ["Generated"]
+
+type Types =
+    '[ User
+     , Category
+     ]
+
+data User = User
+    { userName :: Text
+    , userAge :: Int
+    }
+    deriving (Generic)
+    deriving
+        (Elm, ToJSON, FromJSON)
+        via ElmStreet User
 
 mkApp :: Connection -> Twain.Application
 mkApp conn =
@@ -39,7 +63,9 @@ routes conn =
     , Twain.get "/categories" $ do
         -- http -v localhost:8080/categories
         categories <- liftIO $ getCategories conn
-        Twain.send $ Twain.json categories
+        Twain.send
+            . Twain.withHeader ("Access-Control-Allow-Origin", "http://localhost:3000")
+            $ Twain.json categories
     , Twain.get "/transactions/:accountId" $ do
         -- http -v localhost:8080/transactions/ accountId==2
         accountId <- Twain.queryParam "accountId"
@@ -81,11 +107,14 @@ routes conn =
 
 data Category = MkCategory
     { categoryId :: Int
-    , categoryName :: String
+    , categoryName2 :: String
     , categoryCreatedAt :: Int
     , categoryUpdatedAt :: Int
     }
-    deriving (Show)
+    deriving (Generic, Show)
+    deriving
+        (Elm, ToJSON, FromJSON)
+        via ElmStreet Category
 
 instance FromRow Category where
     fromRow =
@@ -95,17 +124,27 @@ instance FromRow Category where
             <*> field
             <*> field
 
-instance ToJSON Category where
-    toJSON (MkCategory{categoryId = categoryId', categoryName = categoryName', categoryCreatedAt = categoryCreatedAt', categoryUpdatedAt = categoryUpdatedAt'}) =
-        object
-            [ ("categoryId", toJSON categoryId')
-            , ("name", toJSON categoryName')
-            , ("createdAt", toJSON categoryCreatedAt')
-            , ("updatedAt", toJSON categoryUpdatedAt')
-            ]
+-- instance ToJSON Category where
+--     toJSON (MkCategory{categoryId = categoryId', categoryName = categoryName', categoryCreatedAt = categoryCreatedAt', categoryUpdatedAt = categoryUpdatedAt'}) =
+--         object
+--             [ ("categoryId", toJSON categoryId')
+--             , ("name", toJSON categoryName')
+--             , ("createdAt", toJSON categoryCreatedAt')
+--             , ("updatedAt", toJSON categoryUpdatedAt')
+--             ]
 
 getCategories :: Connection -> IO [Category]
-getCategories conn = query_ conn "SELECT category_id, name, created_at, updated_at FROM categories"
+getCategories conn =
+    query_ conn sql
+  where
+    sql =
+        [r|
+SELECT category_id
+     , name
+     , created_at
+     , updated_at
+  FROM categories
+|]
 
 {-
 

@@ -3,3 +3,4 @@
 /repl.session
 /.tmp
 /node_modules/
+/src/Generated/

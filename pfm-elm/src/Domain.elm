@@ -1,6 +1,6 @@
 module Domain exposing
     ( Account
-    , Category
+    , CategoryOld2
     , TransactionViewWithBalance
     )
 
@@ -8,14 +8,14 @@ import Decimal exposing (Decimal)
 import Time
 
 
-type alias Category =
+type alias CategoryOld2 =
     { name : String
     }
 
 
 type alias Account =
     { name : String
-    , category : Category
+    , category : CategoryOld2
     }
 
 
