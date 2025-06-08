@@ -21,6 +21,7 @@ import Database.SQLite.Simple (Connection, FromRow, field, fromRow, open, query,
 import Elm
 import GHC.Generics
 import Network.Wai.Handler.Warp (Port, run)
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Text.RawString.QQ (r)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
@@ -47,7 +48,16 @@ mkApp conn =
     foldr
         ($)
         (Twain.notFound $ Twain.send $ Twain.text "Error: not found.")
-        (routes conn)
+        (logStdoutDev : corsMiddleware : routes conn)
+
+corsMiddleware :: Twain.Middleware
+corsMiddleware app req respond = do
+    liftIO $ putStrLn $ "Request: " <> show req
+    app
+        req
+        $ respond
+            . Twain.withHeader
+                ("Access-Control-Allow-Origin", "http://localhost:3000")
 
 echoName :: Twain.ResponderM ()
 echoName = do
@@ -63,9 +73,7 @@ routes conn =
     , Twain.get "/categories" $ do
         -- http -v localhost:8080/categories
         categories <- liftIO $ getCategories conn
-        Twain.send
-            . Twain.withHeader ("Access-Control-Allow-Origin", "http://localhost:3000")
-            $ Twain.json categories
+        Twain.send $ Twain.json categories
     , Twain.get "/transactions/:accountId" $ do
         -- http -v localhost:8080/transactions/ accountId==2
         accountId <- Twain.queryParam "accountId"
@@ -107,7 +115,7 @@ routes conn =
 
 data Category = MkCategory
     { categoryId :: Int
-    , categoryName2 :: String
+    , categoryName :: String
     , categoryCreatedAt :: Int
     , categoryUpdatedAt :: Int
     }

@@ -478,7 +478,7 @@ viewHome model =
                             (List.map
                                 (\category ->
                                     H.li []
-                                        [ H.text category.name2 ]
+                                        [ H.text category.name ]
                                 )
                                 categories
                             )

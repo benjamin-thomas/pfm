@@ -29,6 +29,7 @@ executable pfm-haskell-twain
                     , bytestring
                     , twain
                     , warp
+                    ,  wai-extra
                     , http-types
                     , happstack-server
                     , sqlite-simple
