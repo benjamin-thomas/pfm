@@ -32,6 +32,7 @@ exportElm = generateElm @Types $ defaultSettings "../pfm-elm/src/" ["Generated"]
 type Types =
     '[ User
      , Category
+     , WithRunningBalanceEntity
      ]
 
 data User = User
@@ -74,7 +75,7 @@ routes conn =
         -- http -v localhost:8080/categories
         categories <- liftIO $ getCategories conn
         Twain.send $ Twain.json categories
-    , Twain.get "/transactions/:accountId" $ do
+    , Twain.get "/transactions" $ do
         -- http -v localhost:8080/transactions/ accountId==2
         accountId <- Twain.queryParam "accountId"
         transactions <- liftIO $ getTransactionsWithRunningBalance conn (MkAccountId accountId)
@@ -166,26 +167,29 @@ account, so we show a running balance on each row.
 
  -}
 data WithRunningBalanceEntity = MkWithRunningBalanceEntity
-    { transactionId :: Int
-    , fromAccountId :: Int
-    , fromAccountName :: String
-    , toAccountId :: Int
-    , toAccountName :: String
-    , dateUnix :: Int
-    , date :: String
-    , descr :: String
-    , flowCents :: Int
-    , flow :: String
-    , runningBalanceCents :: Int
-    , runningBalance :: String
-    , createdAtUnix :: Int
-    , createdAtUtc :: String
-    , createdAtTz :: String
-    , updatedAtUnix :: Int
-    , updatedAtUtc :: String
-    , updatedAtTz :: String
+    { wrbeTransactionId :: Int
+    , wrbeFromAccountId :: Int
+    , wrbeFromAccountName :: String
+    , wrbeToAccountId :: Int
+    , wrbeToAccountName :: String
+    , wrbeDateUnix :: Int
+    , wrbeDate :: String
+    , wrbeDescr :: String
+    , wrbeFlowCents :: Int
+    , wrbeFlow :: String
+    , wrbeRunningBalanceCents :: Int
+    , wrbeRunningBalance :: String
+    , wrbeCreatedAtUnix :: Int
+    , wrbeCreatedAtUtc :: String
+    , wrbeCreatedAtTz :: String
+    , wrbeUpdatedAtUnix :: Int
+    , wrbeUpdatedAtUtc :: String
+    , wrbeUpdatedAtTz :: String
     }
-    deriving (Show)
+    deriving (Show, Generic)
+    deriving
+        (Elm, ToJSON, FromJSON)
+        via ElmStreet WithRunningBalanceEntity
 
 instance FromRow WithRunningBalanceEntity where
     fromRow =
@@ -246,29 +250,29 @@ instance FromRow WithRunningBalanceEntity where
 -- formatDate :: Int -> Date
 -- formatDate n = posixSecondsToUTCTime n
 
-instance ToJSON WithRunningBalanceEntity where
-    toJSON
-        (MkWithRunningBalanceEntity{..}) =
-            object
-                [ ("transactionId", toJSON transactionId)
-                , ("fromAccountId", toJSON fromAccountId)
-                , ("fromAccountName", toJSON fromAccountName)
-                , ("toAccountId", toJSON toAccountId)
-                , ("toAccountName", toJSON toAccountName)
-                , ("dateUnix", toJSON dateUnix)
-                , ("date", toJSON date)
-                , ("descr", toJSON descr)
-                , ("flowCents", toJSON flowCents)
-                , ("flow", toJSON flow)
-                , ("runningBalanceCents", toJSON runningBalanceCents)
-                , ("runningBalance", toJSON runningBalance)
-                , ("createdAtUnix", toJSON createdAtUnix)
-                , ("createdAtUtc", toJSON createdAtUtc)
-                , ("createdAtTz", toJSON createdAtTz)
-                , ("updatedAtUnix", toJSON updatedAtUnix)
-                , ("updatedAtUtc", toJSON updatedAtUtc)
-                , ("updatedAtTz", toJSON updatedAtTz)
-                ]
+-- instance ToJSON WithRunningBalanceEntity where
+--     toJSON
+--         (MkWithRunningBalanceEntity{..}) =
+--             object
+--                 [ ("transactionId", toJSON transactionId)
+--                 , ("fromAccountId", toJSON fromAccountId)
+--                 , ("fromAccountName", toJSON fromAccountName)
+--                 , ("toAccountId", toJSON toAccountId)
+--                 , ("toAccountName", toJSON toAccountName)
+--                 , ("dateUnix", toJSON dateUnix)
+--                 , ("date", toJSON date)
+--                 , ("descr", toJSON descr)
+--                 , ("flowCents", toJSON flowCents)
+--                 , ("flow", toJSON flow)
+--                 , ("runningBalanceCents", toJSON runningBalanceCents)
+--                 , ("runningBalance", toJSON runningBalance)
+--                 , ("createdAtUnix", toJSON createdAtUnix)
+--                 , ("createdAtUtc", toJSON createdAtUtc)
+--                 , ("createdAtTz", toJSON createdAtTz)
+--                 , ("updatedAtUnix", toJSON updatedAtUnix)
+--                 , ("updatedAtUtc", toJSON updatedAtUtc)
+--                 , ("updatedAtTz", toJSON updatedAtTz)
+--                 ]
 
 newtype AccountId = MkAccountId Int
 

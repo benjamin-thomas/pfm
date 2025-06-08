@@ -5,8 +5,8 @@ import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
 import Domain exposing (Account, CategoryOld2, TransactionViewWithBalance)
-import Generated.Decoder exposing (decodeCategory)
-import Generated.Types exposing (Category)
+import Generated.Decoder exposing (decodeCategory, decodeWithRunningBalanceEntity)
+import Generated.Types exposing (Category, WithRunningBalanceEntity)
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -54,6 +54,20 @@ fetchCategories =
     Http.get
         { url = "http://localhost:8080/categories"
         , expect = Http.expectJson GotCategories (D.list decodeCategory)
+        }
+
+
+
+{- | http -v localhost:8080/transactions/ accountId==2
+
+-}
+
+
+fetchWithRunningBalanceEntity : Cmd Msg
+fetchWithRunningBalanceEntity =
+    Http.get
+        { url = "http://localhost:8080/transactions?accountId=2"
+        , expect = Http.expectJson GotWithRunningBalanceEntity (D.list decodeWithRunningBalanceEntity)
         }
 
 
@@ -243,6 +257,7 @@ type alias Model =
     , now : Time.Posix
     , zone : Time.Zone
     , book : Dict Int TransactionView
+    , book2 : Status (List WithRunningBalanceEntity)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , tempCategories : Status (List Category)
@@ -282,6 +297,7 @@ type Msg
     | GotZone Time.Zone
     | ToggleTheme
     | GotCategories (Result Http.Error (List Category))
+    | GotWithRunningBalanceEntity (Result Http.Error (List WithRunningBalanceEntity))
 
 
 uniqueBy : (a -> comparable) -> List a -> List a
@@ -392,8 +408,98 @@ balanceCard account accountBalance =
         ]
 
 
-viewHome : Model -> Html Msg
-viewHome model =
+withPriorBalance : List WithRunningBalanceEntity -> List ( WithRunningBalanceEntity, ( Int, String ) )
+withPriorBalance transactions =
+    case transactions of
+        [] ->
+            []
+
+        first :: rest ->
+            ( first, ( 0, "0.00" ) )
+                :: List.map2
+                    (\tx prevTx ->
+                        ( tx
+                        , ( prevTx.runningBalanceCents
+                          , prevTx.runningBalance
+                          )
+                        )
+                    )
+                    rest
+                    transactions
+
+
+viewOneTransaction : ( WithRunningBalanceEntity, ( Int, String ) ) -> Html Msg
+viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
+    let
+        isPositive =
+            --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
+            tx.flowCents > 0
+
+        amountClass =
+            if isPositive then
+                "transaction-item__amount transaction-item__amount--positive"
+
+            else
+                "transaction-item__amount transaction-item__amount--negative"
+
+        amountSign =
+            if isPositive then
+                "+"
+
+            else
+                ""
+    in
+    H.li
+        [ HA.class "transaction-item"
+        , HE.onClick (EditTransactionClicked tx.transactionId)
+        ]
+        [ H.div [ HA.class "transaction-item__row" ]
+            [ H.div [ HA.class "transaction-item__main-content" ]
+                [ H.div [ HA.class "transaction-item__details" ]
+                    [ H.div [ HA.class "transaction-item__description" ]
+                        [ H.text tx.descr ]
+                    , H.div [ HA.class "transaction-item__accounts" ]
+                        [ H.text (tx.fromAccountName ++ " → " ++ tx.toAccountName) ]
+                    ]
+                , H.div [ HA.class "transaction-item__date" ]
+                    [ H.text (dateFmt <| Time.millisToPosix <| tx.dateUnix * 1000) ]
+                , H.div [ HA.class amountClass ]
+                    [ H.text (amountSign ++ tx.flow ++ "\u{00A0}€") ]
+                ]
+            , H.div [ HA.class "transaction-item__balance-column" ]
+                [ H.div [ HA.class "transaction-item__balance-movement" ]
+                    [ H.span [ HA.class "balance-before" ] [ H.text <| priorBalance ++ "\u{00A0}€" ]
+                    , H.span [ HA.class "arrow-icon" ] [ H.text " → " ]
+                    , H.span [ HA.class "balance-after" ] [ H.text <| tx.runningBalance ++ "\u{00A0}€" ]
+                    ]
+                ]
+            ]
+        ]
+
+
+viewWithRunningBalanceEntity : List WithRunningBalanceEntity -> Html Msg
+viewWithRunningBalanceEntity withRunningBalanceEntity =
+    H.div [ HA.class "section" ]
+        [ H.div [ HA.class "transaction-list" ]
+            [ H.div [ HA.class "transaction-list__header" ]
+                [ H.h3 [] [ H.text "Transactions2 (from DB)" ]
+                , H.button
+                    [ HA.class "button button--primary"
+                    , HE.onClick AddTransactionClicked
+                    ]
+                    [ H.text "Add Transaction" ]
+                ]
+            , H.ul [ HA.class "transaction-list__items" ]
+                (List.map
+                    viewOneTransaction
+                    (withPriorBalance withRunningBalanceEntity)
+                )
+            ]
+        ]
+
+
+viewTransactions : Model -> Html Msg
+viewTransactions model =
     let
         transactions : List ( Int, TransactionView )
         transactions =
@@ -443,6 +549,72 @@ viewHome model =
                         ( zero, [] )
                         transactions
     in
+    H.div [ HA.class "section" ]
+        [ H.div [ HA.class "transaction-list" ]
+            [ H.div [ HA.class "transaction-list__header" ]
+                [ H.h3 [] [ H.text "Transactions1 (from memory)" ]
+                , H.button
+                    [ HA.class "button button--primary"
+                    , HE.onClick AddTransactionClicked
+                    ]
+                    [ H.text "Add Transaction" ]
+                ]
+            , H.ul [ HA.class "transaction-list__items" ]
+                (List.map
+                    (\( transactionId, tx ) ->
+                        let
+                            isPositive =
+                                Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
+
+                            amountClass =
+                                if isPositive then
+                                    "transaction-item__amount transaction-item__amount--positive"
+
+                                else
+                                    "transaction-item__amount transaction-item__amount--negative"
+
+                            amountSign =
+                                if isPositive then
+                                    "+"
+
+                                else
+                                    "-"
+                        in
+                        H.li
+                            [ HA.class "transaction-item"
+                            , HE.onClick (EditTransactionClicked transactionId)
+                            ]
+                            [ H.div [ HA.class "transaction-item__row" ]
+                                [ H.div [ HA.class "transaction-item__main-content" ]
+                                    [ H.div [ HA.class "transaction-item__details" ]
+                                        [ H.div [ HA.class "transaction-item__description" ]
+                                            [ H.text tx.descr ]
+                                        , H.div [ HA.class "transaction-item__accounts" ]
+                                            [ H.text (tx.from.name ++ " → " ++ tx.to.name) ]
+                                        ]
+                                    , H.div [ HA.class "transaction-item__date" ]
+                                        [ H.text (dateFmt tx.date) ]
+                                    , H.div [ HA.class amountClass ]
+                                        [ H.text (amountSign ++ amountFmt tx.amount) ]
+                                    ]
+                                , H.div [ HA.class "transaction-item__balance-column" ]
+                                    [ H.div [ HA.class "transaction-item__balance-movement" ]
+                                        [ H.span [ HA.class "balance-before" ] [ H.text (amountFmt tx.balanceMovement.from) ]
+                                        , H.span [ HA.class "arrow-icon" ] [ H.text " → " ]
+                                        , H.span [ HA.class "balance-after" ] [ H.text (amountFmt tx.balanceMovement.to) ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                    )
+                    transactionsWithBalance
+                )
+            ]
+        ]
+
+
+viewHome : Model -> Html Msg
+viewHome model =
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.div [ HA.class "debug-info" ]
@@ -484,68 +656,16 @@ viewHome model =
                             )
                         ]
             ]
-        , H.div [ HA.class "section" ]
-            [ H.div [ HA.class "transaction-list" ]
-                [ H.div [ HA.class "transaction-list__header" ]
-                    [ H.h3 [] [ H.text "Transactions" ]
-                    , H.button
-                        [ HA.class "button button--primary"
-                        , HE.onClick AddTransactionClicked
-                        ]
-                        [ H.text "Add Transaction" ]
-                    ]
-                , H.ul [ HA.class "transaction-list__items" ]
-                    (List.map
-                        (\( transactionId, tx ) ->
-                            let
-                                isPositive =
-                                    Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
+        , viewTransactions model
+        , case model.book2 of
+            Loading ->
+                H.text "Loading transactions..."
 
-                                amountClass =
-                                    if isPositive then
-                                        "transaction-item__amount transaction-item__amount--positive"
+            Failed ->
+                H.text "Failed to load transactions."
 
-                                    else
-                                        "transaction-item__amount transaction-item__amount--negative"
-
-                                amountSign =
-                                    if isPositive then
-                                        "+"
-
-                                    else
-                                        "-"
-                            in
-                            H.li
-                                [ HA.class "transaction-item"
-                                , HE.onClick (EditTransactionClicked transactionId)
-                                ]
-                                [ H.div [ HA.class "transaction-item__row" ]
-                                    [ H.div [ HA.class "transaction-item__main-content" ]
-                                        [ H.div [ HA.class "transaction-item__details" ]
-                                            [ H.div [ HA.class "transaction-item__description" ]
-                                                [ H.text tx.descr ]
-                                            , H.div [ HA.class "transaction-item__accounts" ]
-                                                [ H.text (tx.from.name ++ " → " ++ tx.to.name) ]
-                                            ]
-                                        , H.div [ HA.class "transaction-item__date" ]
-                                            [ H.text (dateFmt tx.date) ]
-                                        , H.div [ HA.class amountClass ]
-                                            [ H.text (amountSign ++ amountFmt tx.amount) ]
-                                        ]
-                                    , H.div [ HA.class "transaction-item__balance-column" ]
-                                        [ H.div [ HA.class "transaction-item__balance-movement" ]
-                                            [ H.span [ HA.class "balance-before" ] [ H.text (amountFmt tx.balanceMovement.from) ]
-                                            , H.span [ HA.class "arrow-icon" ] [ H.text " → " ]
-                                            , H.span [ HA.class "balance-after" ] [ H.text (amountFmt tx.balanceMovement.to) ]
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                        )
-                        transactionsWithBalance
-                    )
-                ]
-            ]
+            Loaded withRunningBalanceEntity ->
+                viewWithRunningBalanceEntity withRunningBalanceEntity
         , case model.dialog of
             Nothing ->
                 H.text ""
@@ -921,6 +1041,7 @@ init () url key =
       , now = Time.millisToPosix 0
       , zone = Time.utc
       , book = book
+      , book2 = Loading
       , dialog = Nothing
       , isDarkTheme = False
       , tempCategories = Loading
@@ -929,17 +1050,26 @@ init () url key =
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
         , fetchCategories
+        , fetchWithRunningBalanceEntity
         ]
     )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    let
-        _ =
-            Debug.log "(msg, model)" ( msg, model )
-    in
     case msg of
+        GotWithRunningBalanceEntity result ->
+            case result of
+                Ok withRunningBalanceEntity ->
+                    ( { model | book2 = Loaded withRunningBalanceEntity }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( { model | book2 = Failed }
+                    , Cmd.none
+                    )
+
         GotCategories result ->
             case result of
                 Ok categories ->
