@@ -13,7 +13,7 @@
 module Server (runServer, exportElm) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import Data.Aeson (FromJSON, ToJSON (toJSON), object)
+import Data.Aeson (FromJSON, ToJSON)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
 import Data.Text qualified as T
