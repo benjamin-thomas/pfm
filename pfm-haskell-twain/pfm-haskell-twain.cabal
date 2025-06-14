@@ -22,7 +22,16 @@ executable pfm-haskell-twain
     import:           extensions
     main-is:          Main.hs
     other-modules:    Server
-
+                    , ElmExport
+                    , Domain.User
+                    , Domain.Category
+                    , Domain.Ledger
+                    , DB.User
+                    , DB.Category
+                    , DB.LedgerView
+                    , DTO.User
+                    , DTO.Category
+                    , DTO.Ledger
     build-depends:    base ^>=4.18.3.0
                     , text
                     , bytestring
