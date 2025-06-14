@@ -12,6 +12,38 @@ DROP TABLE IF EXISTS transactions;
 DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS categories;
 
+-- TEMP/BOGUS START
+DROP TABLE IF EXISTS users; -- temp bogus table, just for testing stuff..
+CREATE TABLE users
+    ( user_id   INTEGER PRIMARY KEY
+    , first_name TEXT    NOT NULL
+    , last_name  TEXT    NOT NULL
+    , email     TEXT    NOT NULL
+    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , CHECK (TRIM(first_name) <> '')
+    , CHECK (TRIM(last_name) <> '')
+    , CHECK (TRIM(email) <> '')
+    , UNIQUE (email)
+    , UNIQUE (first_name, last_name)
+    )
+    ;
+
+CREATE TRIGGER update_users_updated_at
+AFTER UPDATE ON users
+FOR EACH ROW
+BEGIN
+    UPDATE users
+    SET updated_at = strftime('%s', current_timestamp)
+    WHERE user_id = NEW.user_id;
+END;
+
+INSERT INTO users (first_name, last_name, email)
+VALUES ('John', 'Doe', 'john@example.com')
+     , ('Jane', 'Doe', 'jane@example.com')
+     ;
+-- TEMP/BOGUS STOP
+
 -- In SQLite, a column with type INTEGER PRIMARY KEY is an alias for the ROWID (it auto-increments)
 CREATE TABLE categories
     ( category_id INTEGER PRIMARY KEY

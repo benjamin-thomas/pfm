@@ -10,13 +10,16 @@ import Control.Monad (filterM)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Category (CategoryRow, getCategories)
 import DB.LedgerView (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
+import DB.User
 import DTO.Category (CategoryDTO, toCategoryDTO)
 import DTO.Ledger
+import DTO.User (UserDTO, fromUser)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, open)
 import Domain.Category (Category, fromCategoryRow, isStale)
 import Domain.Ledger
+import Domain.User
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Text.Read (readMaybe)
@@ -68,11 +71,22 @@ handleTransactions conn = do
     Twain.send $ Twain.json dtoTransactions
 {- FOURMOLU_ENABLE -}
 
+{- FOURMOLU_DISABLE -}
+handleUsers :: Connection -> Twain.ResponderM ()
+handleUsers conn = do
+    usersDb <- liftIO $ getUserRows conn :: Twain.ResponderM [UserRow]
+    let users = map fromUserRow usersDb  :: [User]
+    let filtered = filter isOnNewPlatform users :: [User]
+    let usersDto = map fromUser filtered    :: [UserDTO]
+    Twain.send $ Twain.json usersDto
+{- FOURMOLU_ENABLE -}
+
 routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi"
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions" $ handleTransactions conn
+    , Twain.get "/users" $ handleUsers conn
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do
         name <- Twain.param "name"

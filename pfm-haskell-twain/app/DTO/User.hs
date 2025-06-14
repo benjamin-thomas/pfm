@@ -1,21 +1,23 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module DTO.User
   ( UserDTO
-  , toUserDTO
+  , fromUser
   ) where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text
-import Domain.User qualified as Domain
+import Domain.User (User (..))
 import Elm
 import GHC.Generics (Generic)
 
 data UserDTO = MkUserDTO
   { userId :: Int
-  , userName :: Text
-  , userEmail :: Text
+  , fullName :: Text
+  , email :: Text
   }
   deriving stock (Generic)
 
@@ -23,10 +25,10 @@ instance Elm UserDTO
 instance ToJSON UserDTO
 instance FromJSON UserDTO
 
-toUserDTO :: Domain.User -> UserDTO
-toUserDTO user =
+fromUser :: User -> UserDTO
+fromUser MkUser{..} =
   MkUserDTO
-    { userId = Domain.userId user
-    , userName = Domain.userName user
-    , userEmail = Domain.userEmail user
+    { userId = userId
+    , fullName = fullName
+    , email = email
     }
