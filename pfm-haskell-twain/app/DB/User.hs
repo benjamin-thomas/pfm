@@ -3,7 +3,7 @@
 
 module DB.User
     ( UserRow (..)
-    , getUserAllRows
+    , getAllUserRows
     , getNewPlatformUserRows
     ) where
 
@@ -24,6 +24,7 @@ data UserRow = MkUserRow
     , createdAt :: Int
     , updatedAt :: Int
     }
+    deriving (Show) -- show for ghci exploration
 
 instance FromRow UserRow where
     fromRow =
@@ -35,9 +36,18 @@ instance FromRow UserRow where
             <*> field
             <*> field
 
+{-
+
+cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple
+
+ghci> :m + DB.User
+ghci> newConn >>= getAllUserRows
+
+ -}
+
 -- Get all users
-getUserAllRows :: Connection -> IO [UserRow]
-getUserAllRows conn = query_ conn sql :: IO [UserRow]
+getAllUserRows :: Connection -> IO [UserRow]
+getAllUserRows conn = query_ conn sql :: IO [UserRow]
   where
     sql =
         [r|

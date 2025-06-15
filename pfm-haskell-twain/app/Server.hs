@@ -74,7 +74,7 @@ handleUsers conn = do
 
     liftIO $ putStrLn $ "\x1b[33mallP: " <> show allP <> "\x1b[0m"
     userRows <-
-        let getUsers = if allP then getUserAllRows else getNewPlatformUserRows
+        let getUsers = if allP then getAllUserRows else getNewPlatformUserRows
          in liftIO $ getUsers conn
     let users = map fromUserRow userRows
     Twain.send $ Twain.json users

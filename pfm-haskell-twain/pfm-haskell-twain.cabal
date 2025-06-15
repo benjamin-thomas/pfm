@@ -28,6 +28,7 @@ executable pfm-haskell-twain
                     , DB.LedgerView
                     , DTO.Utils
                     , DTO.User
+                    , DB.UserBeam
                     , DTO.Category
                     , DTO.Ledger
     build-depends:    base ^>=4.18.3.0
