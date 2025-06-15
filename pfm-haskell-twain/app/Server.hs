@@ -64,13 +64,20 @@ handleTransactions conn = do
     Twain.send $ Twain.json ledgerLineSummaries
 {- FOURMOLU_ENABLE -}
 
-{- FOURMOLU_DISABLE -}
+-- http -v localhost:8080/users all==1
 handleUsers :: Connection -> Twain.ResponderM ()
 handleUsers conn = do
-    usersDb <- liftIO $ getNewPlatformUsers conn :: Twain.ResponderM [UserRow]
-    let users = map fromUserRow usersDb         :: [User]
+    allP <-
+        fmap
+            (maybe False (("0" :: String) /=))
+            (Twain.queryParamMaybe "all")
+
+    liftIO $ putStrLn $ "\x1b[33mallP: " <> show allP <> "\x1b[0m"
+    userRows <-
+        let getUsers = if allP then getUserAllRows else getNewPlatformUserRows
+         in liftIO $ getUsers conn
+    let users = map fromUserRow userRows
     Twain.send $ Twain.json users
-{- FOURMOLU_ENABLE -}
 
 routes :: Connection -> [Twain.Middleware]
 routes conn =

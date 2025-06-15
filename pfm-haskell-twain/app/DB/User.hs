@@ -3,8 +3,8 @@
 
 module DB.User
     ( UserRow (..)
-    , getUserRows
-    , getNewPlatformUsers
+    , getUserAllRows
+    , getNewPlatformUserRows
     ) where
 
 import Data.Text
@@ -36,8 +36,8 @@ instance FromRow UserRow where
             <*> field
 
 -- Get all users
-getUserRows :: Connection -> IO [UserRow]
-getUserRows conn = query_ conn sql :: IO [UserRow]
+getUserAllRows :: Connection -> IO [UserRow]
+getUserAllRows conn = query_ conn sql :: IO [UserRow]
   where
     sql =
         [r|
@@ -51,8 +51,8 @@ SELECT user_id
 |]
 
 -- Get only users who joined after June 1, 2025 (new platform users)
-getNewPlatformUsers :: Connection -> IO [UserRow]
-getNewPlatformUsers conn = query_ conn sql :: IO [UserRow]
+getNewPlatformUserRows :: Connection -> IO [UserRow]
+getNewPlatformUserRows conn = query_ conn sql :: IO [UserRow]
   where
     sql =
         [r|
