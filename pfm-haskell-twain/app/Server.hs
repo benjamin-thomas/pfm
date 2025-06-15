@@ -59,7 +59,7 @@ handleCategories conn = do
 handleTransactions :: Connection -> Twain.ResponderM ()
 handleTransactions conn = do
     accountId <- Twain.queryParam "accountId"
-    transactions <- liftIO $ getLedgerViewRows conn (MkAccountId accountId) :: Twain.ResponderM [LedgerViewRow]
+    transactions <- liftIO $ getLedgerViewRows (MkAccountId accountId) conn :: Twain.ResponderM [LedgerViewRow]
     let ledgerLineSummaries = map fromLedgerViewRow transactions            :: [LedgerLineSummary]
     Twain.send $ Twain.json ledgerLineSummaries
 {- FOURMOLU_ENABLE -}

@@ -28,7 +28,6 @@ executable pfm-haskell-twain
                     , DB.LedgerView
                     , DTO.Utils
                     , DTO.User
-                    , DB.UserBeam
                     , DTO.Category
                     , DTO.Ledger
     build-depends:    base ^>=4.18.3.0
@@ -43,8 +42,7 @@ executable pfm-haskell-twain
                     , raw-strings-qq
                     , time
                     , elm-street
-                    , beam-core
-                    , beam-sqlite
+                  
 
     hs-source-dirs:   app
     default-language: Haskell2010

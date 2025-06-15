@@ -11,7 +11,7 @@ module DB.LedgerView
 import Database.SQLite.Simple (Connection, FromRow (..), field, query)
 import Text.RawString.QQ (r)
 
-newtype AccountId = MkAccountId Int
+newtype AccountId = MkAccountId Int deriving (Show)
 
 data LedgerViewRow = MkLedgerViewRow
   { lvrTransactionId :: Int
@@ -33,6 +33,7 @@ data LedgerViewRow = MkLedgerViewRow
   , lvrUpdatedAtUtc :: String
   , lvrUpdatedAtTz :: String
   }
+  deriving (Show)
 
 instance FromRow LedgerViewRow where
   fromRow =
@@ -57,8 +58,8 @@ instance FromRow LedgerViewRow where
       <*> field
 
 -- | Get transactions with running balance for a specific account
-getLedgerViewRows :: Connection -> AccountId -> IO [LedgerViewRow]
-getLedgerViewRows conn (MkAccountId accountId) = do
+getLedgerViewRows :: AccountId -> Connection -> IO [LedgerViewRow]
+getLedgerViewRows (MkAccountId accountId) conn = do
   query
     conn
     sql
