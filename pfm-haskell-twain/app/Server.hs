@@ -6,20 +6,16 @@
 
 module Server (runServer) where
 
-import Control.Monad (filterM)
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import DB.Category (CategoryRow, getCategories)
+import DB.Category (CategoryRow, getNonStaleCategories)
 import DB.LedgerView (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
 import DB.User
-import DTO.Category (CategoryDTO, toCategoryDTO)
-import DTO.Ledger
-import DTO.User (UserDTO, fromUser)
+import DTO.Category (Category, fromCategoryRow)
+import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
+import DTO.User (User, fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, open)
-import Domain.Category (Category, fromCategoryRow, isStale)
-import Domain.Ledger
-import Domain.User
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Text.Read (readMaybe)
@@ -53,11 +49,9 @@ greeting name = Twain.html $ "Hello, " <> name
 -- http -v localhost:8080/categories
 handleCategories :: Connection -> Twain.ResponderM ()
 handleCategories conn = do
-    categoriesDb  <- liftIO $ getCategories conn                 :: Twain.ResponderM [CategoryRow]
-    let categories = fmap fromCategoryRow categoriesDb           :: [Category]
-    filtered <- liftIO $ filterM (fmap not . isStale) categories :: Twain.ResponderM [Category]
-    let categoriesDto = map toCategoryDTO filtered               :: [CategoryDTO]
-    Twain.send $ Twain.json categoriesDto
+    categoriesDb <- liftIO $ getNonStaleCategories conn :: Twain.ResponderM [CategoryRow]
+    let categories = map fromCategoryRow categoriesDb  :: [Category]
+    Twain.send $ Twain.json categories
 {- FOURMOLU_ENABLE -}
 
 {- FOURMOLU_DISABLE -}
@@ -67,18 +61,15 @@ handleTransactions conn = do
     accountId <- Twain.queryParam "accountId"
     transactions <- liftIO $ getLedgerViewRows conn (MkAccountId accountId) :: Twain.ResponderM [LedgerViewRow]
     let ledgerLineSummaries = map fromLedgerViewRow transactions            :: [LedgerLineSummary]
-    let dtoTransactions = map toLedgerLineSummaryDTO ledgerLineSummaries    :: [LedgerLineSummaryDTO]
-    Twain.send $ Twain.json dtoTransactions
+    Twain.send $ Twain.json ledgerLineSummaries
 {- FOURMOLU_ENABLE -}
 
 {- FOURMOLU_DISABLE -}
 handleUsers :: Connection -> Twain.ResponderM ()
 handleUsers conn = do
-    usersDb <- liftIO $ getUserRows conn :: Twain.ResponderM [UserRow]
-    let users = map fromUserRow usersDb  :: [User]
-    let filtered = filter isOnNewPlatform users :: [User]
-    let usersDto = map fromUser filtered    :: [UserDTO]
-    Twain.send $ Twain.json usersDto
+    usersDb <- liftIO $ getNewPlatformUsers conn :: Twain.ResponderM [UserRow]
+    let users = map fromUserRow usersDb         :: [User]
+    Twain.send $ Twain.json users
 {- FOURMOLU_ENABLE -}
 
 routes :: Connection -> [Twain.Middleware]

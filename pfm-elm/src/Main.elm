@@ -4,9 +4,9 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
-import Domain exposing (Account, CategoryOld2, TransactionViewWithBalance)
-import Generated.Decoder exposing (decodeCategory, decodeWithRunningBalanceEntity)
-import Generated.Types exposing (Category, WithRunningBalanceEntity)
+import Domain exposing (Account, TransactionViewWithBalance)
+import Generated.Decoder exposing (decodeCategory, decodeLedgerLineSummary)
+import Generated.Types exposing (Category, LedgerLineSummary)
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -63,11 +63,11 @@ fetchCategories =
 -}
 
 
-fetchWithRunningBalanceEntity : Cmd Msg
-fetchWithRunningBalanceEntity =
+fetchLedgerLineSummary : Cmd Msg
+fetchLedgerLineSummary =
     Http.get
         { url = "http://localhost:8080/transactions?accountId=2"
-        , expect = Http.expectJson GotWithRunningBalanceEntity (D.list decodeWithRunningBalanceEntity)
+        , expect = Http.expectJson GotLedgerLineSummary (D.list decodeLedgerLineSummary)
         }
 
 
@@ -257,7 +257,7 @@ type alias Model =
     , now : Time.Posix
     , zone : Time.Zone
     , book : Dict Int TransactionView
-    , book2 : Status (List WithRunningBalanceEntity)
+    , book2 : Status (List LedgerLineSummary)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , tempCategories : Status (List Category)
@@ -297,7 +297,7 @@ type Msg
     | GotZone Time.Zone
     | ToggleTheme
     | GotCategories (Result Http.Error (List Category))
-    | GotWithRunningBalanceEntity (Result Http.Error (List WithRunningBalanceEntity))
+    | GotLedgerLineSummary (Result Http.Error (List LedgerLineSummary))
 
 
 uniqueBy : (a -> comparable) -> List a -> List a
@@ -408,7 +408,7 @@ balanceCard account accountBalance =
         ]
 
 
-withPriorBalance : List WithRunningBalanceEntity -> List ( WithRunningBalanceEntity, ( Int, String ) )
+withPriorBalance : List LedgerLineSummary -> List ( LedgerLineSummary, ( Int, String ) )
 withPriorBalance transactions =
     case transactions of
         [] ->
@@ -428,7 +428,7 @@ withPriorBalance transactions =
                     transactions
 
 
-viewOneTransaction : ( WithRunningBalanceEntity, ( Int, String ) ) -> Html Msg
+viewOneTransaction : ( LedgerLineSummary, ( Int, String ) ) -> Html Msg
 viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         isPositive =
@@ -477,8 +477,8 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
         ]
 
 
-viewWithRunningBalanceEntity : List WithRunningBalanceEntity -> Html Msg
-viewWithRunningBalanceEntity withRunningBalanceEntity =
+viewLedgerLineSummary : List LedgerLineSummary -> Html Msg
+viewLedgerLineSummary withRunningBalanceEntity =
     H.div [ HA.class "section" ]
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
@@ -665,7 +665,7 @@ viewHome model =
                 H.text "Failed to load transactions."
 
             Loaded withRunningBalanceEntity ->
-                viewWithRunningBalanceEntity withRunningBalanceEntity
+                viewLedgerLineSummary withRunningBalanceEntity
         , case model.dialog of
             Nothing ->
                 H.text ""
@@ -1050,7 +1050,7 @@ init () url key =
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
         , fetchCategories
-        , fetchWithRunningBalanceEntity
+        , fetchLedgerLineSummary
         ]
     )
 
@@ -1058,7 +1058,7 @@ init () url key =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotWithRunningBalanceEntity result ->
+        GotLedgerLineSummary result ->
             case result of
                 Ok withRunningBalanceEntity ->
                     ( { model | book2 = Loaded withRunningBalanceEntity }

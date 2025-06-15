@@ -4,6 +4,7 @@
 module DB.User
     ( UserRow (..)
     , getUserRows
+    , getNewPlatformUsers
     ) where
 
 import Data.Text
@@ -25,7 +26,7 @@ data UserRow = MkUserRow
     }
 
 instance FromRow UserRow where
-    fromRow = do
+    fromRow =
         MkUserRow
             <$> field
             <*> field
@@ -34,6 +35,7 @@ instance FromRow UserRow where
             <*> field
             <*> field
 
+-- Get all users
 getUserRows :: Connection -> IO [UserRow]
 getUserRows conn = query_ conn sql :: IO [UserRow]
   where
@@ -46,4 +48,20 @@ SELECT user_id
      , created_at
      , updated_at
   FROM users
+|]
+
+-- Get only users who joined after June 1, 2025 (new platform users)
+getNewPlatformUsers :: Connection -> IO [UserRow]
+getNewPlatformUsers conn = query_ conn sql :: IO [UserRow]
+  where
+    sql =
+        [r|
+SELECT user_id
+     , first_name
+     , last_name
+     , email
+     , created_at
+     , updated_at
+  FROM users
+ WHERE created_at > strftime('%s', '2025-06-01')
 |]

@@ -5,6 +5,7 @@
 module DB.Category
   ( CategoryRow (..)
   , getCategories
+  , getNonStaleCategories
   ) where
 
 import Database.SQLite.Simple
@@ -30,6 +31,7 @@ instance FromRow CategoryRow where
       <*> field
       <*> field
 
+-- Get all categories
 getCategories :: Connection -> IO [CategoryRow]
 getCategories conn = query_ conn sql :: IO [CategoryRow]
  where
@@ -40,4 +42,18 @@ SELECT category_id
      , created_at
      , updated_at
   FROM categories
+|]
+
+-- Get only categories that have been updated in the last 90 days
+getNonStaleCategories :: Connection -> IO [CategoryRow]
+getNonStaleCategories conn = query_ conn sql :: IO [CategoryRow]
+ where
+  sql =
+    [r|
+SELECT category_id
+     , name
+     , created_at
+     , updated_at
+  FROM categories
+ WHERE updated_at > (strftime('%s', 'now') - 90 * 24 * 60 * 60)
 |]

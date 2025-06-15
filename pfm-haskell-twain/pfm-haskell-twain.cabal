@@ -23,9 +23,6 @@ executable pfm-haskell-twain
     main-is:          Main.hs
     other-modules:    Server
                     , ElmExport
-                    , Domain.User
-                    , Domain.Category
-                    , Domain.Ledger
                     , DB.User
                     , DB.Category
                     , DB.LedgerView

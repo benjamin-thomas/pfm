@@ -1,27 +1,39 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module DTO.Category
-  ( CategoryDTO
-  , toCategoryDTO
+  ( Category
+  , fromCategoryRow
+  , fmtCategory
   ) where
 
 import Data.Aeson (FromJSON, ToJSON)
-import Domain.Category (Category (..))
+import DB.Category (CategoryRow(..))
 import Elm
 import GHC.Generics (Generic)
 
-data CategoryDTO = MkCategoryDTO
-  { categoryDtoId :: Int
-  , categoryDtoName :: String
+data Category = MkCategory
+  { categoryId :: Int
+  , categoryName :: String
   }
   deriving stock (Generic, Show)
   deriving anyclass (Elm, ToJSON, FromJSON)
 
-toCategoryDTO :: Category -> CategoryDTO
-toCategoryDTO category =
-  MkCategoryDTO
-    { categoryDtoId = categoryId category
-    , categoryDtoName = categoryName category
+fromCategoryRow :: CategoryRow -> Category
+fromCategoryRow MkCategoryRow{..} =
+  MkCategory
+    { categoryId = categoryRowId
+    , categoryName = categoryRowName
     }
+
+{- | Format a category for display with additional context
+-}
+fmtCategory :: Category -> String
+fmtCategory category =
+  mconcat
+    [ "#" <> show (categoryId category)
+    , ": "
+    , categoryName category
+    ]

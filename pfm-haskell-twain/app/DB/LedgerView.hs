@@ -14,24 +14,24 @@ import Text.RawString.QQ (r)
 newtype AccountId = MkAccountId Int
 
 data LedgerViewRow = MkLedgerViewRow
-  { ledgerViewTransactionId :: Int
-  , ledgerViewFromAccountId :: Int
-  , ledgerViewFromAccountName :: String
-  , ledgerViewToAccountId :: Int
-  , ledgerViewToAccountName :: String
-  , ledgerViewDateUnix :: Int
-  , ledgerViewDate :: String
-  , ledgerViewDescr :: String
-  , ledgerViewFlowCents :: Int
-  , ledgerViewFlow :: String
-  , ledgerViewRunningBalanceCents :: Int
-  , ledgerViewRunningBalance :: String
-  , ledgerViewCreatedAtUnix :: Int
-  , ledgerViewCreatedAtUtc :: String
-  , ledgerViewCreatedAtTz :: String
-  , ledgerViewUpdatedAtUnix :: Int
-  , ledgerViewUpdatedAtUtc :: String
-  , ledgerViewUpdatedAtTz :: String
+  { lvrTransactionId :: Int
+  , lvrFromAccountId :: Int
+  , lvrFromAccountName :: String
+  , lvrToAccountId :: Int
+  , lvrToAccountName :: String
+  , lvrDateUnix :: Int
+  , lvrDate :: String
+  , lvrDescr :: String
+  , lvrFlowCents :: Int
+  , lvrFlow :: String
+  , lvrRunningBalanceCents :: Int
+  , lvrRunningBalance :: String
+  , lvrCreatedAtUnix :: Int
+  , lvrCreatedAtUtc :: String
+  , lvrCreatedAtTz :: String
+  , lvrUpdatedAtUnix :: Int
+  , lvrUpdatedAtUtc :: String
+  , lvrUpdatedAtTz :: String
   }
 
 instance FromRow LedgerViewRow where

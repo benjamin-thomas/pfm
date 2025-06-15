@@ -4,31 +4,36 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module DTO.User
-  ( UserDTO
-  , fromUser
+  ( User
+  , fromUserRow
   ) where
 
+import DB.User (UserRow (..))
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text
-import Domain.User (User (..))
+import Data.Text qualified as T
+import Data.Time (UTCTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Elm
 import GHC.Generics (Generic)
 
-data UserDTO = MkUserDTO
+data User = MkUser
   { userId :: Int
-  , fullName :: Text
-  , email :: Text
+  , userFullName :: Text
+  , userEmail :: Text
+  , userJoinedOn :: UTCTime
   }
   deriving stock (Generic)
 
-instance Elm UserDTO
-instance ToJSON UserDTO
-instance FromJSON UserDTO
+instance Elm User
+instance ToJSON User
+instance FromJSON User
 
-fromUser :: User -> UserDTO
-fromUser MkUser{..} =
-  MkUserDTO
+fromUserRow :: UserRow -> User
+fromUserRow MkUserRow{..} =
+  MkUser
     { userId = userId
-    , fullName = fullName
-    , email = email
+    , userFullName = T.unwords [firstName, lastName]
+    , userEmail = email
+    , userJoinedOn = posixSecondsToUTCTime $ fromIntegral createdAt
     }

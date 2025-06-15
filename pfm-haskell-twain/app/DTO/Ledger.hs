@@ -1,62 +1,60 @@
+{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module DTO.Ledger
-    ( LedgerLineSummaryDTO (..)
-    , toLedgerLineSummaryDTO
+    ( LedgerLineSummary (..)
+    , fromLedgerViewRow
     ) where
 
+import DB.LedgerView (LedgerViewRow (..))
 import Data.Aeson (FromJSON, ToJSON)
-import Domain.Ledger (LedgerLineSummary (..))
 import Elm
 import GHC.Generics (Generic)
 
--- | DTO wrapper for WithRunningBalance
-data LedgerLineSummaryDTO = MkLedgerLineSummaryDTO
-    { ledgerLineSummaryDtoTransactionId :: Int
-    , ledgerLineSummaryDtoFromAccountId :: Int
-    , ledgerLineSummaryDtoFromAccountName :: String
-    , ledgerLineSummaryDtoToAccountId :: Int
-    , ledgerLineSummaryDtoToAccountName :: String
-    , ledgerLineSummaryDtoDateUnix :: Int
-    , ledgerLineSummaryDtoDate :: String
-    , ledgerLineSummaryDtoDescr :: String
-    , ledgerLineSummaryDtoFlowCents :: Int
-    , ledgerLineSummaryDtoFlow :: String
-    , ledgerLineSummaryDtoRunningBalanceCents :: Int
-    , ledgerLineSummaryDtoRunningBalance :: String
-    , ledgerLineSummaryDtoCreatedAtUnix :: Int
-    , ledgerLineSummaryDtoCreatedAtUtc :: String
-    , ledgerLineSummaryDtoCreatedAtTz :: String
-    , ledgerLineSummaryDtoUpdatedAtUnix :: Int
-    , ledgerLineSummaryDtoUpdatedAtUtc :: String
-    , ledgerLineSummaryDtoUpdatedAtTz :: String
+data LedgerLineSummary = MkLedgerLineSummary
+    { llsTransactionId :: Int
+    , llsFromAccountId :: Int
+    , llsFromAccountName :: String
+    , llsToAccountId :: Int
+    , llsToAccountName :: String
+    , llsDateUnix :: Int
+    , llsDate :: String
+    , llsDescr :: String
+    , llsFlowCents :: Int
+    , llsFlow :: String
+    , llsRunningBalanceCents :: Int
+    , llsRunningBalance :: String
+    , llsCreatedAtUnix :: Int
+    , llsCreatedAtUtc :: String
+    , llsCreatedAtTz :: String
+    , llsUpdatedAtUnix :: Int
+    , llsUpdatedAtUtc :: String
+    , llsUpdatedAtTz :: String
     }
-    deriving stock (Generic)
+    deriving stock (Show, Generic)
+    deriving anyclass (Elm, ToJSON, FromJSON)
 
-instance Elm LedgerLineSummaryDTO
-instance ToJSON LedgerLineSummaryDTO
-instance FromJSON LedgerLineSummaryDTO
-
-toLedgerLineSummaryDTO :: LedgerLineSummary -> LedgerLineSummaryDTO
-toLedgerLineSummaryDTO ledgerLineSummary =
-    MkLedgerLineSummaryDTO
-        { ledgerLineSummaryDtoTransactionId = ledgerLineSummaryTransactionId ledgerLineSummary
-        , ledgerLineSummaryDtoFromAccountId = ledgerLineSummaryFromAccountId ledgerLineSummary
-        , ledgerLineSummaryDtoFromAccountName = ledgerLineSummaryFromAccountName ledgerLineSummary
-        , ledgerLineSummaryDtoToAccountId = ledgerLineSummaryToAccountId ledgerLineSummary
-        , ledgerLineSummaryDtoToAccountName = ledgerLineSummaryToAccountName ledgerLineSummary
-        , ledgerLineSummaryDtoDateUnix = ledgerLineSummaryDateUnix ledgerLineSummary
-        , ledgerLineSummaryDtoDate = ledgerLineSummaryDate ledgerLineSummary
-        , ledgerLineSummaryDtoDescr = ledgerLineSummaryDescr ledgerLineSummary
-        , ledgerLineSummaryDtoFlowCents = ledgerLineSummaryFlowCents ledgerLineSummary
-        , ledgerLineSummaryDtoFlow = ledgerLineSummaryFlow ledgerLineSummary
-        , ledgerLineSummaryDtoRunningBalanceCents = ledgerLineSummaryRunningBalanceCents ledgerLineSummary
-        , ledgerLineSummaryDtoRunningBalance = ledgerLineSummaryRunningBalance ledgerLineSummary
-        , ledgerLineSummaryDtoCreatedAtUnix = ledgerLineSummaryCreatedAtUnix ledgerLineSummary
-        , ledgerLineSummaryDtoCreatedAtUtc = ledgerLineSummaryCreatedAtUtc ledgerLineSummary
-        , ledgerLineSummaryDtoCreatedAtTz = ledgerLineSummaryCreatedAtTz ledgerLineSummary
-        , ledgerLineSummaryDtoUpdatedAtUnix = ledgerLineSummaryUpdatedAtUnix ledgerLineSummary
-        , ledgerLineSummaryDtoUpdatedAtUtc = ledgerLineSummaryUpdatedAtUtc ledgerLineSummary
-        , ledgerLineSummaryDtoUpdatedAtTz = ledgerLineSummaryUpdatedAtTz ledgerLineSummary
+fromLedgerViewRow :: LedgerViewRow -> LedgerLineSummary
+fromLedgerViewRow MkLedgerViewRow{..} =
+    MkLedgerLineSummary
+        { llsTransactionId = lvrTransactionId
+        , llsFromAccountId = lvrFromAccountId
+        , llsFromAccountName = lvrFromAccountName
+        , llsToAccountId = lvrToAccountId
+        , llsToAccountName = lvrToAccountName
+        , llsDateUnix = lvrDateUnix
+        , llsDate = lvrDate
+        , llsDescr = lvrDescr
+        , llsFlowCents = lvrFlowCents
+        , llsFlow = lvrFlow
+        , llsRunningBalanceCents = lvrRunningBalanceCents
+        , llsRunningBalance = lvrRunningBalance
+        , llsCreatedAtUnix = lvrCreatedAtUnix
+        , llsCreatedAtUtc = lvrCreatedAtUtc
+        , llsCreatedAtTz = lvrCreatedAtTz
+        , llsUpdatedAtUnix = lvrUpdatedAtUnix
+        , llsUpdatedAtUtc = lvrUpdatedAtUtc
+        , llsUpdatedAtTz = lvrUpdatedAtTz
         }

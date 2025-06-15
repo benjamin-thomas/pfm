@@ -3,8 +3,9 @@
 
 module ElmExport (exportElm) where
 
-import DTO.Category (CategoryDTO)
-import DTO.User (UserDTO)
+import DTO.Category (Category)
+import DTO.Ledger (LedgerLineSummary)
+import DTO.User (User)
 import Elm
 
 exportElm :: IO ()
@@ -13,7 +14,7 @@ exportElm =
         defaultSettings "../pfm-elm/src/" ["Generated"]
 
 type Types =
-    '[ UserDTO
-     , CategoryDTO
-     --  , WithRunningBalanceDTO
+    '[ User
+     , Category
+     , LedgerLineSummary
      ]
