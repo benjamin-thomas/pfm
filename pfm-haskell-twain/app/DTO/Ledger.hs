@@ -9,7 +9,8 @@ module DTO.Ledger
     ) where
 
 import DB.LedgerView (LedgerViewRow (..))
-import Data.Aeson (FromJSON, ToJSON)
+import DTO.Utils
+import Data.Aeson (FromJSON, Options (fieldLabelModifier), ToJSON (toJSON), defaultOptions, genericToJSON)
 import Elm
 import GHC.Generics (Generic)
 
@@ -34,7 +35,14 @@ data LedgerLineSummary = MkLedgerLineSummary
     , llsUpdatedAtTz :: String
     }
     deriving stock (Show, Generic)
-    deriving anyclass (Elm, ToJSON, FromJSON)
+    deriving anyclass (Elm, FromJSON)
+
+instance ToJSON LedgerLineSummary where
+    toJSON =
+        genericToJSON
+            defaultOptions
+                { fieldLabelModifier = dropAndLowerHead (length "lls")
+                }
 
 fromLedgerViewRow :: LedgerViewRow -> LedgerLineSummary
 fromLedgerViewRow MkLedgerViewRow{..} =

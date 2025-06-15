@@ -26,6 +26,7 @@ executable pfm-haskell-twain
                     , DB.User
                     , DB.Category
                     , DB.LedgerView
+                    , DTO.Utils
                     , DTO.User
                     , DTO.Category
                     , DTO.Ledger

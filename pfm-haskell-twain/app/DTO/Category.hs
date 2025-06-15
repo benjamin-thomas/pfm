@@ -9,8 +9,9 @@ module DTO.Category
   , fmtCategory
   ) where
 
-import Data.Aeson (FromJSON, ToJSON)
-import DB.Category (CategoryRow(..))
+import DB.Category (CategoryRow (..))
+import DTO.Utils (dropAndLowerHead)
+import Data.Aeson
 import Elm
 import GHC.Generics (Generic)
 
@@ -19,7 +20,14 @@ data Category = MkCategory
   , categoryName :: String
   }
   deriving stock (Generic, Show)
-  deriving anyclass (Elm, ToJSON, FromJSON)
+  deriving anyclass (Elm, FromJSON)
+
+instance ToJSON Category where
+  toJSON =
+    genericToJSON
+      defaultOptions
+        { fieldLabelModifier = dropAndLowerHead (length "category")
+        }
 
 fromCategoryRow :: CategoryRow -> Category
 fromCategoryRow MkCategoryRow{..} =
@@ -28,8 +36,6 @@ fromCategoryRow MkCategoryRow{..} =
     , categoryName = categoryRowName
     }
 
-{- | Format a category for display with additional context
--}
 fmtCategory :: Category -> String
 fmtCategory category =
   mconcat
