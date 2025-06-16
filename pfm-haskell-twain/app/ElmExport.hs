@@ -5,6 +5,7 @@ module ElmExport (exportElm) where
 
 import DTO.Category (Category)
 import DTO.Ledger (LedgerLineSummary)
+import DTO.TransactionWrite
 import DTO.User (User)
 import Elm
 
@@ -17,4 +18,5 @@ type Types =
     '[ User
      , Category
      , LedgerLineSummary
+     , TransactionWrite
      ]

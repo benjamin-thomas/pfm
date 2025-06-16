@@ -1,0 +1,15 @@
+### Get ledger entries for account 2
+GET http://localhost:8080/transactions?accountId=2
+Content-Type: application/json
+
+### Add a transaction
+POST http://localhost:8080/transactions
+Content-Type: application/json
+
+{
+  "fromAccountId": 1,
+  "toAccountId": 2,
+  "date": 123,
+  "descr": "Some transaction",
+  "cents": 999
+}

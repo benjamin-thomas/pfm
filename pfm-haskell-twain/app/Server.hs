@@ -9,13 +9,16 @@ module Server (runServer) where
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Category.Queries (CategoryRow, getNonStaleCategories)
 import DB.LedgerView.Queries (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
+import DB.Transactions.Queries
 import DB.User.Queries
 import DTO.Category (Category, fromCategoryRow)
 import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
+import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, open)
+import Network.HTTP.Types (status200, status201)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Text.Read (readMaybe)
@@ -36,6 +39,10 @@ corsMiddleware app req respond = do
         $ respond
             . Twain.withHeader
                 ("Access-Control-Allow-Origin", "http://localhost:3000")
+            . Twain.withHeader
+                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            . Twain.withHeader
+                ("Access-Control-Allow-Headers", "Content-Type")
 
 echoName :: Twain.ResponderM ()
 echoName = do
@@ -56,13 +63,22 @@ handleCategories conn = do
 
 {- FOURMOLU_DISABLE -}
 -- http -v localhost:8080/transactions/ accountId==2
-handleTransactions :: Connection -> Twain.ResponderM ()
-handleTransactions conn = do
+handleGetTransactions :: Connection -> Twain.ResponderM ()
+handleGetTransactions conn = do
     accountId <- Twain.queryParam "accountId"
     transactions <- liftIO $ getLedgerViewRows (MkAccountId accountId) conn :: Twain.ResponderM [LedgerViewRow]
     let ledgerLineSummaries = map fromLedgerViewRow transactions            :: [LedgerLineSummary]
     Twain.send $ Twain.json ledgerLineSummaries
 {- FOURMOLU_ENABLE -}
+
+handlePostTransactions :: Connection -> Twain.ResponderM ()
+handlePostTransactions conn = do
+    toInsert <- toTransactionNewRow <$> Twain.fromBody
+    liftIO $ insertTransaction conn toInsert
+    -- FIXME: how should I handle the account context?
+    transactions <- liftIO $ getLedgerViewRows (MkAccountId 2) conn :: Twain.ResponderM [LedgerViewRow]
+    let ledgerLineSummaries = map fromLedgerViewRow transactions :: [LedgerLineSummary]
+    Twain.send $ Twain.status status201 $ Twain.json ledgerLineSummaries
 
 -- http -v localhost:8080/users all==1
 handleUsers :: Connection -> Twain.ResponderM ()
@@ -83,7 +99,9 @@ routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi"
     , Twain.get "/categories" $ handleCategories conn
-    , Twain.get "/transactions" $ handleTransactions conn
+    , Twain.get "/transactions" $ handleGetTransactions conn
+    , Twain.post "/transactions" $ handlePostTransactions conn
+    , Twain.route (Just "OPTIONS") "/transactions" $ Twain.send $ Twain.status status200 $ Twain.json ()
     , Twain.get "/users" $ handleUsers conn
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do

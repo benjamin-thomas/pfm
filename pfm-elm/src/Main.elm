@@ -6,7 +6,8 @@ import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
 import Domain exposing (Account, TransactionViewWithBalance)
 import Generated.Decoder exposing (decodeCategory, decodeLedgerLineSummary)
-import Generated.Types exposing (Category, LedgerLineSummary)
+import Generated.Encoder exposing (encodeTransactionWrite)
+import Generated.Types exposing (Category, LedgerLineSummary, TransactionWrite)
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -15,6 +16,7 @@ import Iso8601
 import Json.Decode as D
 import Json.Encode as E
 import Page.UI as UI_Page
+import Process
 import Route exposing (Route)
 import Set
 import Task
@@ -71,6 +73,20 @@ fetchLedgerLineSummary =
         }
 
 
+postTransaction : TransactionWrite -> Cmd Msg
+postTransaction transaction =
+    Http.post
+        { url = "http://localhost:8080/transactions"
+        , body = Http.jsonBody (encodeTransactionWrite transaction)
+
+        -- , expect = Http.expectJson GotLedgerLineSummary (D.list decodeLedgerLineSummary)
+        , expect =
+            Http.expectJson
+                (CreateDialogChanged << GotCreateSaveResponse)
+                (D.list decodeLedgerLineSummary)
+        }
+
+
 type alias CategoryOld =
     { name : String
     }
@@ -83,15 +99,6 @@ type alias Account =
 
 
 type alias Transaction =
-    { date : Time.Posix
-    , descr : String
-    , fromAccountId : Int
-    , toAccountId : Int
-    , amount : Decimal
-    }
-
-
-type alias TransactionView =
     { date : Time.Posix
     , descr : String
     , from : Account
@@ -195,7 +202,7 @@ allAccounts =
         |> Dict.fromList
 
 
-balance : Dict Int TransactionView -> Account -> Decimal
+balance : Dict Int Transaction -> Account -> Decimal
 balance txs account =
     Dict.foldl
         (\_ { from, to, amount } total ->
@@ -256,7 +263,7 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , book : Dict Int TransactionView
+    , book : Dict Int Transaction
     , book2 : Status (List LedgerLineSummary)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
@@ -272,6 +279,7 @@ type MkEditDialogChanged
     | EditDateChanged String
     | EditToggleTimeDisplay
     | EditDialogSave
+    | GotEditSaveResponse (Result Http.Error (List LedgerLineSummary))
 
 
 type MkCreateDialogChanged
@@ -282,6 +290,7 @@ type MkCreateDialogChanged
     | CreateDateChanged String
     | CreateToggleTimeDisplay
     | CreateDialogSave
+    | GotCreateSaveResponse (Result Http.Error (List LedgerLineSummary))
 
 
 type Msg
@@ -501,7 +510,7 @@ viewLedgerLineSummary withRunningBalanceEntity =
 viewTransactions : Model -> Html Msg
 viewTransactions model =
     let
-        transactions : List ( Int, TransactionView )
+        transactions : List ( Int, Transaction )
         transactions =
             List.sortBy
                 (\( _, tx ) -> Time.posixToMillis tx.date)
@@ -511,7 +520,7 @@ viewTransactions model =
         transactionsWithBalance =
             let
                 f :
-                    ( Int, TransactionView )
+                    ( Int, Transaction )
                     -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
                     -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
                 f ( transactionId, o ) ( prevBalance, txs ) =
@@ -641,7 +650,7 @@ viewHome model =
 
                 Failed ->
                     H.div []
-                        [ H.text "Failed to load categories." ]
+                        [ H.text "Error loading categories." ]
 
                 Loaded categories ->
                     H.div []
@@ -662,7 +671,7 @@ viewHome model =
                 H.text "Loading transactions..."
 
             Failed ->
-                H.text "Failed to load transactions."
+                H.text "Error loading transactions."
 
             Loaded withRunningBalanceEntity ->
                 viewLedgerLineSummary withRunningBalanceEntity
@@ -990,7 +999,7 @@ init () url key =
         v =
             Maybe.withDefault zero << Decimal.fromString
 
-        book : Dict Int TransactionView
+        book : Dict Int Transaction
         book =
             Dict.fromList
                 [ ( 1
@@ -1053,6 +1062,14 @@ init () url key =
         , fetchLedgerLineSummary
         ]
     )
+
+
+simulateResponse : Cmd Msg
+simulateResponse =
+    Process.sleep 0
+        |> Task.andThen (\() -> Task.succeed [])
+        -- |> Task.andThen (\() -> Task.fail <| Http.BadStatus 500)
+        |> Task.attempt (CreateDialogChanged << GotCreateSaveResponse)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -1145,7 +1162,7 @@ update msg model =
 
                         EditDialogSave ->
                             let
-                                newBook : Dict Int TransactionView
+                                newBook : Dict Int Transaction
                                 newBook =
                                     Dict.update
                                         data.transactionId
@@ -1184,10 +1201,19 @@ update msg model =
                             in
                             ( { model
                                 | book = newBook
-                                , dialog = Nothing
+
+                                -- , dialog = Nothing
                               }
-                            , closeDialog ()
+                            , Cmd.batch
+                                [ --closeDialog ()
+                                  Task.attempt
+                                    (EditDialogChanged << GotEditSaveResponse)
+                                    (Task.succeed [])
+                                ]
                             )
+
+                        GotEditSaveResponse result ->
+                            Debug.todo "GotSaveResponse"
 
                 _ ->
                     ( model
@@ -1251,7 +1277,7 @@ update msg model =
 
                         CreateDialogSave ->
                             let
-                                newTransaction : TransactionView
+                                newTransaction : TransactionWrite
                                 newTransaction =
                                     let
                                         fromAccount =
@@ -1261,23 +1287,34 @@ update msg model =
                                         toAccount =
                                             Dict.get data.to allAccounts
                                                 |> Maybe.withDefault spar
-
-                                        parsedDate : Time.Posix
-                                        parsedDate =
-                                            Iso8601.toTime data.date
-                                                |> Result.toMaybe
-                                                |> Maybe.withDefault model.now
                                     in
-                                    { date = parsedDate
+                                    { fromAccountId = Debug.log "TMP" 2 -- fromAccount.id
+                                    , toAccountId = Debug.log "TMP" 4 -- toAccount.id
+                                    , date = model.now |> Time.posixToMillis
                                     , descr = data.descr
-                                    , from = fromAccount
-                                    , to = toAccount
-                                    , amount = Maybe.withDefault zero <| Decimal.fromString data.amount
+                                    , cents =
+                                        data.amount
+                                            |> String.replace "." ""
+                                            |> Debug.log "TMP"
+                                            |> String.toInt
+                                            |> Maybe.withDefault 0
                                     }
                             in
+                            ( model
+                              -- , simulateResponse
+                            , postTransaction newTransaction
+                            )
+
+                        GotCreateSaveResponse result ->
                             ( { model
                                 | dialog = Nothing
-                                , book = Dict.insert (Dict.size model.book + 1) newTransaction model.book
+                                , book2 =
+                                    case result of
+                                        Err _ ->
+                                            Failed
+
+                                        Ok lines ->
+                                            Loaded lines
                               }
                             , closeDialog ()
                             )
