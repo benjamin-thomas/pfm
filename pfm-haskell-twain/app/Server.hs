@@ -7,12 +7,12 @@
 module Server (runServer) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
-import DB.Category (CategoryRow, getNonStaleCategories)
-import DB.LedgerView (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
-import DB.User
+import DB.Category.Queries (CategoryRow, getNonStaleCategories)
+import DB.LedgerView.Queries (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
+import DB.User.Queries
 import DTO.Category (Category, fromCategoryRow)
 import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
-import DTO.User (User, fromUserRow)
+import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, open)

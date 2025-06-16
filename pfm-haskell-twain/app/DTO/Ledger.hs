@@ -8,7 +8,7 @@ module DTO.Ledger
     , fromLedgerViewRow
     ) where
 
-import DB.LedgerView (LedgerViewRow (..))
+import DB.LedgerView.Queries (LedgerViewRow (..))
 import DTO.Utils
 import Data.Aeson (FromJSON, Options (fieldLabelModifier), ToJSON (toJSON), defaultOptions, genericToJSON)
 import Elm

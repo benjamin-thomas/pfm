@@ -1,20 +1,22 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
-module DB.Category
+module DB.Category.Queries
   ( CategoryRow (..)
   , getCategories
   , getNonStaleCategories
   ) where
 
+import Data.FileEmbed (embedFile)
+import Data.Text.Encoding (decodeUtf8)
 import Database.SQLite.Simple
   ( Connection
   , FromRow (fromRow)
   , field
   , query_
+  , Query(Query)
   )
-import Text.RawString.QQ (r)
 
 data CategoryRow = MkCategoryRow
   { categoryRowId :: Int
@@ -35,25 +37,10 @@ instance FromRow CategoryRow where
 getCategories :: Connection -> IO [CategoryRow]
 getCategories conn = query_ conn sql :: IO [CategoryRow]
  where
-  sql =
-    [r|
-SELECT category_id
-     , name
-     , created_at
-     , updated_at
-  FROM categories
-|]
+  sql = Query (decodeUtf8 $(embedFile "app/DB/Category/getAll.sql"))
 
 -- Get only categories that have been updated in the last 90 days
 getNonStaleCategories :: Connection -> IO [CategoryRow]
 getNonStaleCategories conn = query_ conn sql :: IO [CategoryRow]
  where
-  sql =
-    [r|
-SELECT category_id
-     , name
-     , created_at
-     , updated_at
-  FROM categories
- WHERE updated_at > (strftime('%s', 'now') - 90 * 24 * 60 * 60)
-|]
+  sql = Query (decodeUtf8 $(embedFile "app/DB/Category/getNonStale.sql"))

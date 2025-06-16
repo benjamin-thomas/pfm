@@ -8,7 +8,7 @@ module DTO.User
   , fromUserRow
   ) where
 
-import DB.User (UserRow (..))
+import DB.User.Queries (UserRow (..))
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Text
 import Data.Text qualified as T

@@ -23,9 +23,9 @@ executable pfm-haskell-twain
     main-is:          Main.hs
     other-modules:    Server
                     , ElmExport
-                    , DB.User
-                    , DB.Category
-                    , DB.LedgerView
+                    , DB.User.Queries
+                    , DB.Category.Queries
+                    , DB.LedgerView.Queries
                     , DTO.Utils
                     , DTO.User
                     , DTO.Category
@@ -42,7 +42,7 @@ executable pfm-haskell-twain
                     , raw-strings-qq
                     , time
                     , elm-street
-                  
+                    , file-embed
 
     hs-source-dirs:   app
     default-language: Haskell2010

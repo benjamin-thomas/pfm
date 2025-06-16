@@ -1,73 +1,3 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE QuasiQuotes #-}
-
-module DB.LedgerView
-  ( LedgerViewRow (..)
-  , getLedgerViewRows
-  , AccountId (MkAccountId)
-  ) where
-
-import Database.SQLite.Simple (Connection, FromRow (..), field, query)
-import Text.RawString.QQ (r)
-
-newtype AccountId = MkAccountId Int deriving (Show)
-
-data LedgerViewRow = MkLedgerViewRow
-  { lvrTransactionId :: Int
-  , lvrFromAccountId :: Int
-  , lvrFromAccountName :: String
-  , lvrToAccountId :: Int
-  , lvrToAccountName :: String
-  , lvrDateUnix :: Int
-  , lvrDate :: String
-  , lvrDescr :: String
-  , lvrFlowCents :: Int
-  , lvrFlow :: String
-  , lvrRunningBalanceCents :: Int
-  , lvrRunningBalance :: String
-  , lvrCreatedAtUnix :: Int
-  , lvrCreatedAtUtc :: String
-  , lvrCreatedAtTz :: String
-  , lvrUpdatedAtUnix :: Int
-  , lvrUpdatedAtUtc :: String
-  , lvrUpdatedAtTz :: String
-  }
-  deriving (Show)
-
-instance FromRow LedgerViewRow where
-  fromRow =
-    MkLedgerViewRow
-      <$> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-      <*> field
-
--- | Get transactions with running balance for a specific account
-getLedgerViewRows :: AccountId -> Connection -> IO [LedgerViewRow]
-getLedgerViewRows (MkAccountId accountId) conn = do
-  query
-    conn
-    sql
-    (accountId, accountId, accountId) ::
-    IO [LedgerViewRow]
- where
-  sql =
-    [r|
 SELECT y.transaction_id
      , y.from_account_id
      , y.from_account_name
@@ -113,5 +43,3 @@ FROM (
 )y
 
 ORDER BY y.transaction_id
-;
-|]
