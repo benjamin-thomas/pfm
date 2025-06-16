@@ -7,9 +7,9 @@ SELECT y.transaction_id
      , date(y.date, 'unixepoch') AS date
      , y.descr
      , y.flow_cents
-     , printf("%.2f", y.flow_cents / 100.0) AS flow
+     , printf('%.2f', y.flow_cents / 100.0) AS flow
      , y.running_balance_cents
-     , printf("%.2f", y.running_balance_cents / 100.0) AS running_balance
+     , printf('%.2f', y.running_balance_cents / 100.0) AS running_balance
      , y.created_at AS created_at_unix
      , datetime(y.created_at, 'unixepoch') AS created_at_utc
      , datetime(y.created_at, 'unixepoch', 'localtime') AS created_at_tz
