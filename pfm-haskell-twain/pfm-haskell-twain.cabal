@@ -27,6 +27,8 @@ executable pfm-haskell-twain
                     , DB.Category.Queries
                     , DB.LedgerView.Queries
                     , DB.Transactions.Queries
+                    , DB.Accounts.Queries
+                    , DTO.AccountRead
                     , DTO.Utils
                     , DTO.TransactionWrite
                     , DTO.User

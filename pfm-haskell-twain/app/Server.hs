@@ -7,10 +7,12 @@
 module Server (runServer) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
+import DB.Accounts.Queries qualified as AccountQueries
 import DB.Category.Queries (CategoryRow, getNonStaleCategories)
 import DB.LedgerView.Queries (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
 import DB.Transactions.Queries
 import DB.User.Queries
+import DTO.AccountRead qualified as AccountRead
 import DTO.Category (Category, fromCategoryRow)
 import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
 import DTO.TransactionWrite (toTransactionNewRow)
@@ -95,9 +97,16 @@ handleUsers conn = do
     let users = map fromUserRow userRows
     Twain.send $ Twain.json users
 
+handleAccounts :: Connection -> Twain.ResponderM ()
+handleAccounts conn = do
+    accountRows <- liftIO $ AccountQueries.getAll conn
+    let accounts_ = map AccountRead.fromAccountRow accountRows
+    Twain.send $ Twain.json accounts_
+
 routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi"
+    , Twain.get "/accounts" $ handleAccounts conn
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn

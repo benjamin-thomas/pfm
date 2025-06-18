@@ -4,10 +4,10 @@ import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
 import Decimal exposing (Decimal, zero)
 import Dict exposing (Dict)
-import Domain exposing (Account, TransactionViewWithBalance)
-import Generated.Decoder exposing (decodeCategory, decodeLedgerLineSummary)
+import Domain exposing (AccountOld, TransactionViewWithBalance)
+import Generated.Decoder exposing (decodeAccountRead, decodeCategory, decodeLedgerLineSummary)
 import Generated.Encoder exposing (encodeTransactionWrite)
-import Generated.Types exposing (Category, LedgerLineSummary, TransactionWrite)
+import Generated.Types exposing (AccountRead, Category, LedgerLineSummary, TransactionWrite)
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -73,6 +73,14 @@ fetchLedgerLineSummary =
         }
 
 
+fetchAccounts : Cmd Msg
+fetchAccounts =
+    Http.get
+        { url = "http://localhost:8080/accounts"
+        , expect = Http.expectJson GotAccounts (D.list decodeAccountRead)
+        }
+
+
 postTransaction : TransactionWrite -> Cmd Msg
 postTransaction transaction =
     Http.post
@@ -92,17 +100,17 @@ type alias CategoryOld =
     }
 
 
-type alias Account =
+type alias AccountOld =
     { name : String
     , category : CategoryOld
     }
 
 
-type alias Transaction =
+type alias TransactionOld =
     { date : Time.Posix
     , descr : String
-    , from : Account
-    , to : Account
+    , from : AccountOld
+    , to : AccountOld
     , amount : Decimal
     }
 
@@ -127,63 +135,63 @@ income =
     { name = "Income" }
 
 
-checkingAccount : Account
+checkingAccount : AccountOld
 checkingAccount =
     { name = "Checking account"
     , category = assets
     }
 
 
-savingsAccount : Account
+savingsAccount : AccountOld
 savingsAccount =
     { name = "Savings account"
     , category = assets
     }
 
 
-openingBalance : Account
+openingBalance : AccountOld
 openingBalance =
     { name = "OpeningBalance"
     , category = equity
     }
 
 
-employerABC : Account
+employerABC : AccountOld
 employerABC =
     { name = "EmployerABC"
     , category = income
     }
 
 
-customerXYZ : Account
+customerXYZ : AccountOld
 customerXYZ =
     { name = "CustomerXYZ"
     , category = income
     }
 
 
-spar : Account
+spar : AccountOld
 spar =
     { name = "Spar"
     , category = expenses
     }
 
 
-tesco : Account
+tesco : AccountOld
 tesco =
     { name = "Tesco"
     , category = expenses
     }
 
 
-amazon : Account
+amazon : AccountOld
 amazon =
     { name = "Amazon"
     , category = expenses
     }
 
 
-allAccounts_ : List Account
+allAccounts_ : List AccountOld
 allAccounts_ =
     [ checkingAccount
     , savingsAccount
@@ -195,14 +203,14 @@ allAccounts_ =
     ]
 
 
-allAccounts : Dict String Account
+allAccounts : Dict String AccountOld
 allAccounts =
     allAccounts_
         |> List.map (\o -> ( o.name, o ))
         |> Dict.fromList
 
 
-balance : Dict Int Transaction -> Account -> Decimal
+balance : Dict Int TransactionOld -> AccountOld -> Decimal
 balance txs account =
     Dict.foldl
         (\_ { from, to, amount } total ->
@@ -222,8 +230,8 @@ balance txs account =
 type alias MkEditDialog =
     { transactionId : Int
     , descr : String
-    , from : String
-    , to : String
+    , fromAccountId : Int
+    , toAccountId : Int
     , amount : String
     , date : String
     , showTime : Bool
@@ -232,8 +240,8 @@ type alias MkEditDialog =
 
 type alias MkCreateDialog =
     { descr : String
-    , from : String
-    , to : String
+    , fromAccountId : Int
+    , toAccountId : Int
     , amount : String
     , date : String
     , showTime : Bool
@@ -263,18 +271,19 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , book : Dict Int Transaction
+    , book : Dict Int TransactionOld
     , book2 : Status (List LedgerLineSummary)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , tempCategories : Status (List Category)
+    , accounts : Status (List AccountRead)
     }
 
 
 type MkEditDialogChanged
     = EditDescrChanged String
-    | EditFromChanged String
-    | EditToChanged String
+    | EditFromChanged Int
+    | EditToChanged Int
     | EditAmountChanged String
     | EditDateChanged String
     | EditToggleTimeDisplay
@@ -284,8 +293,8 @@ type MkEditDialogChanged
 
 type MkCreateDialogChanged
     = CreateDescrChanged String
-    | CreateFromChanged String
-    | CreateToChanged String
+    | CreateFromChanged Int
+    | CreateToChanged Int
     | CreateAmountChanged String
     | CreateDateChanged String
     | CreateToggleTimeDisplay
@@ -306,6 +315,7 @@ type Msg
     | GotZone Time.Zone
     | ToggleTheme
     | GotCategories (Result Http.Error (List Category))
+    | GotAccounts (Result Http.Error (List AccountRead))
     | GotLedgerLineSummary (Result Http.Error (List LedgerLineSummary))
 
 
@@ -388,7 +398,7 @@ dialog =
     H.node "dialog"
 
 
-accountsForBalances : List Account
+accountsForBalances : List AccountOld
 accountsForBalances =
     List.sortBy (\o -> o.name) <|
         List.filter
@@ -396,7 +406,7 @@ accountsForBalances =
             allAccounts_
 
 
-balanceCard : Account -> Decimal -> Html Msg
+balanceCard : AccountOld -> Decimal -> Html Msg
 balanceCard account accountBalance =
     let
         colorAccent =
@@ -507,121 +517,6 @@ viewLedgerLineSummary withRunningBalanceEntity =
         ]
 
 
-viewTransactions : Model -> Html Msg
-viewTransactions model =
-    let
-        transactions : List ( Int, Transaction )
-        transactions =
-            List.sortBy
-                (\( _, tx ) -> Time.posixToMillis tx.date)
-                (Dict.toList model.book)
-
-        transactionsWithBalance : List ( Int, TransactionViewWithBalance )
-        transactionsWithBalance =
-            let
-                f :
-                    ( Int, Transaction )
-                    -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
-                    -> ( Decimal, List ( Int, TransactionViewWithBalance ) )
-                f ( transactionId, o ) ( prevBalance, txs ) =
-                    let
-                        newBalance =
-                            Decimal.add
-                                prevBalance
-                                (if o.to.name == checkingAccount.name then
-                                    o.amount
-
-                                 else if o.from.name == checkingAccount.name then
-                                    Decimal.negate o.amount
-
-                                 else
-                                    zero
-                                )
-                    in
-                    ( newBalance
-                    , ( transactionId
-                      , { date = o.date
-                        , descr = o.descr
-                        , from = o.from
-                        , to = o.to
-                        , amount = o.amount
-                        , balanceMovement = { from = prevBalance, to = newBalance }
-                        }
-                      )
-                        :: txs
-                    )
-            in
-            List.reverse <|
-                Tuple.second <|
-                    List.foldl
-                        f
-                        ( zero, [] )
-                        transactions
-    in
-    H.div [ HA.class "section" ]
-        [ H.div [ HA.class "transaction-list" ]
-            [ H.div [ HA.class "transaction-list__header" ]
-                [ H.h3 [] [ H.text "Transactions1 (from memory)" ]
-                , H.button
-                    [ HA.class "button button--primary"
-                    , HE.onClick AddTransactionClicked
-                    ]
-                    [ H.text "Add Transaction" ]
-                ]
-            , H.ul [ HA.class "transaction-list__items" ]
-                (List.map
-                    (\( transactionId, tx ) ->
-                        let
-                            isPositive =
-                                Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
-
-                            amountClass =
-                                if isPositive then
-                                    "transaction-item__amount transaction-item__amount--positive"
-
-                                else
-                                    "transaction-item__amount transaction-item__amount--negative"
-
-                            amountSign =
-                                if isPositive then
-                                    "+"
-
-                                else
-                                    "-"
-                        in
-                        H.li
-                            [ HA.class "transaction-item"
-                            , HE.onClick (EditTransactionClicked transactionId)
-                            ]
-                            [ H.div [ HA.class "transaction-item__row" ]
-                                [ H.div [ HA.class "transaction-item__main-content" ]
-                                    [ H.div [ HA.class "transaction-item__details" ]
-                                        [ H.div [ HA.class "transaction-item__description" ]
-                                            [ H.text tx.descr ]
-                                        , H.div [ HA.class "transaction-item__accounts" ]
-                                            [ H.text (tx.from.name ++ " → " ++ tx.to.name) ]
-                                        ]
-                                    , H.div [ HA.class "transaction-item__date" ]
-                                        [ H.text (dateFmt tx.date) ]
-                                    , H.div [ HA.class amountClass ]
-                                        [ H.text (amountSign ++ amountFmt tx.amount) ]
-                                    ]
-                                , H.div [ HA.class "transaction-item__balance-column" ]
-                                    [ H.div [ HA.class "transaction-item__balance-movement" ]
-                                        [ H.span [ HA.class "balance-before" ] [ H.text (amountFmt tx.balanceMovement.from) ]
-                                        , H.span [ HA.class "arrow-icon" ] [ H.text " → " ]
-                                        , H.span [ HA.class "balance-after" ] [ H.text (amountFmt tx.balanceMovement.to) ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                    )
-                    transactionsWithBalance
-                )
-            ]
-        ]
-
-
 viewHome : Model -> Html Msg
 viewHome model =
     H.div [ HA.class "container" ]
@@ -665,7 +560,6 @@ viewHome model =
                             )
                         ]
             ]
-        , viewTransactions model
         , case model.book2 of
             Loading ->
                 H.text "Loading transactions..."
@@ -680,15 +574,27 @@ viewHome model =
                 H.text ""
 
             Just (EditDialog data) ->
-                viewEditDialog data
+                case model.accounts of
+                    Loaded allAccounts2 ->
+                        viewEditDialog allAccounts2 data
+
+                    _ ->
+                        -- FIXME: that doesn't feel right
+                        H.text "??"
 
             Just (CreateDialog data) ->
-                viewCreateDialog data
+                case model.accounts of
+                    Loaded allAccounts2 ->
+                        viewCreateDialog allAccounts2 data
+
+                    _ ->
+                        -- FIXME: that doesn't feel right
+                        H.text "??"
         ]
 
 
-viewEditDialog : MkEditDialog -> Html Msg
-viewEditDialog data =
+viewEditDialog : List AccountRead -> MkEditDialog -> Html Msg
+viewEditDialog allAccounts2 data =
     dialog
         [ HA.id "transaction-dialog"
         , HA.class "transaction"
@@ -703,17 +609,17 @@ viewEditDialog data =
                 }
             , accountSelect
                 { text = "From"
-                , value = data.from
+                , value = String.fromInt data.fromAccountId
                 , onInput = EditDialogChanged << EditFromChanged
-                , accounts = allAccounts_
-                , excludeAccount = Just data.to
+                , accounts = allAccounts2
+                , excludeAccount = Just (String.fromInt data.toAccountId)
                 }
             , accountSelect
                 { text = "To"
-                , value = data.to
+                , value = String.fromInt data.toAccountId
                 , onInput = EditDialogChanged << EditToChanged
-                , accounts = allAccounts_
-                , excludeAccount = Just data.from
+                , accounts = allAccounts2
+                , excludeAccount = Just (String.fromInt data.fromAccountId)
                 }
             , makeTextField
                 { text = "Amount"
@@ -744,8 +650,8 @@ viewEditDialog data =
         ]
 
 
-viewCreateDialog : MkCreateDialog -> Html Msg
-viewCreateDialog data =
+viewCreateDialog : List AccountRead -> MkCreateDialog -> Html Msg
+viewCreateDialog allAccounts2 data =
     dialog
         [ HA.id "transaction-dialog"
         , HA.class "transaction"
@@ -760,17 +666,17 @@ viewCreateDialog data =
                 }
             , accountSelect
                 { text = "From"
-                , value = data.from
+                , value = String.fromInt data.fromAccountId
                 , onInput = CreateDialogChanged << CreateFromChanged
-                , accounts = allAccounts_
-                , excludeAccount = Just data.to
+                , accounts = allAccounts2
+                , excludeAccount = Just (String.fromInt data.toAccountId)
                 }
             , accountSelect
                 { text = "To"
-                , value = data.to
+                , value = String.fromInt data.toAccountId
                 , onInput = CreateDialogChanged << CreateToChanged
-                , accounts = allAccounts_
-                , excludeAccount = Just data.from
+                , accounts = allAccounts2
+                , excludeAccount = Just (String.fromInt data.fromAccountId)
                 }
             , makeTextField
                 { text = "Amount"
@@ -924,12 +830,13 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
         ]
 
 
-accountSelect : { a | onInput : String -> msg, text : String, value : String, accounts : List Account, excludeAccount : Maybe String } -> Html msg
+accountSelect : { a | onInput : Int -> msg, text : String, value : String, accounts : List AccountRead, excludeAccount : Maybe String } -> Html msg
 accountSelect { onInput, text, value, accounts, excludeAccount } =
     let
         fieldId =
             makeFieldId text
 
+        filteredAccounts : List AccountRead
         filteredAccounts =
             case excludeAccount of
                 Just excludeName ->
@@ -951,17 +858,17 @@ accountSelect { onInput, text, value, accounts, excludeAccount } =
         , H.select
             [ HA.class "field__select"
             , HA.id fieldId
-            , HE.onInput onInput
+            , HE.onInput (onInput << Maybe.withDefault 0 << String.toInt)
             , HA.value value
             ]
-            (H.option [ HA.value "" ] [ H.text "-- Select an account --" ]
+            (H.option [ HA.value "0" ] [ H.text "-- Select an account --" ]
                 :: List.map
                     (\account ->
                         H.option
-                            [ HA.value account.name
+                            [ HA.value (String.fromInt account.accountId)
                             , HA.selected (account.name == value)
                             ]
-                            [ H.text (account.category.name ++ ": " ++ account.name) ]
+                            [ H.text (account.categoryName ++ ": " ++ account.name) ]
                     )
                     filteredAccounts
             )
@@ -999,7 +906,7 @@ init () url key =
         v =
             Maybe.withDefault zero << Decimal.fromString
 
-        book : Dict Int Transaction
+        book : Dict Int TransactionOld
         book =
             Dict.fromList
                 [ ( 1
@@ -1054,12 +961,14 @@ init () url key =
       , dialog = Nothing
       , isDarkTheme = False
       , tempCategories = Loading
+      , accounts = Loading
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
         , fetchCategories
         , fetchLedgerLineSummary
+        , fetchAccounts
         ]
     )
 
@@ -1084,6 +993,18 @@ update msg model =
 
                 Err _ ->
                     ( { model | book2 = Failed }
+                    , Cmd.none
+                    )
+
+        GotAccounts result ->
+            case result of
+                Ok accounts ->
+                    ( { model | accounts = Loaded accounts }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( { model | accounts = Failed }
                     , Cmd.none
                     )
 
@@ -1133,15 +1054,19 @@ update msg model =
                             , Cmd.none
                             )
 
-                        EditFromChanged str ->
+                        EditFromChanged n ->
                             ( { model
-                                | dialog = Just <| EditDialog { data | from = str }
+                                | dialog = Just <| EditDialog { data | fromAccountId = n }
                               }
                             , Cmd.none
                             )
 
-                        EditToChanged str ->
-                            ( { model | dialog = Just <| EditDialog { data | to = str } }
+                        EditToChanged n ->
+                            ( { model
+                                | dialog =
+                                    Just <|
+                                        EditDialog { data | toAccountId = n }
+                              }
                             , Cmd.none
                             )
 
@@ -1162,7 +1087,7 @@ update msg model =
 
                         EditDialogSave ->
                             let
-                                newBook : Dict Int Transaction
+                                newBook : Dict Int TransactionOld
                                 newBook =
                                     Dict.update
                                         data.transactionId
@@ -1172,12 +1097,14 @@ update msg model =
                                                     (\old ->
                                                         let
                                                             fromAccount =
-                                                                Dict.get data.from allAccounts
-                                                                    |> Maybe.withDefault old.from
+                                                                -- Dict.get data.from allAccounts
+                                                                --     |> Maybe.withDefault old.from
+                                                                Debug.todo "fromAccount"
 
                                                             toAccount =
-                                                                Dict.get data.to allAccounts
-                                                                    |> Maybe.withDefault old.to
+                                                                -- Dict.get data.to allAccounts
+                                                                --     |> Maybe.withDefault old.to
+                                                                Debug.todo "toAccount"
 
                                                             newDate =
                                                                 Iso8601.toTime data.date
@@ -1230,8 +1157,8 @@ update msg model =
                 dialog_ =
                     CreateDialog
                         { descr = ""
-                        , from = ""
-                        , to = ""
+                        , fromAccountId = 0
+                        , toAccountId = 0
                         , amount = ""
                         , date = Utils.formatDateTimeLocal model.zone now
                         , showTime = True
@@ -1250,13 +1177,17 @@ update msg model =
                             , Cmd.none
                             )
 
-                        CreateFromChanged str ->
-                            ( { model | dialog = Just <| CreateDialog { data | from = str } }
+                        CreateFromChanged n ->
+                            ( { model
+                                | dialog =
+                                    Just <|
+                                        CreateDialog { data | fromAccountId = n }
+                              }
                             , Cmd.none
                             )
 
-                        CreateToChanged str ->
-                            ( { model | dialog = Just <| CreateDialog { data | to = str } }
+                        CreateToChanged n ->
+                            ( { model | dialog = Just <| CreateDialog { data | toAccountId = n } }
                             , Cmd.none
                             )
 
@@ -1279,26 +1210,25 @@ update msg model =
                             let
                                 newTransaction : TransactionWrite
                                 newTransaction =
-                                    let
-                                        fromAccount =
-                                            Dict.get data.from allAccounts
-                                                |> Maybe.withDefault checkingAccount
-
-                                        toAccount =
-                                            Dict.get data.to allAccounts
-                                                |> Maybe.withDefault spar
-                                    in
-                                    { fromAccountId = Debug.log "TMP" 2 -- fromAccount.id
-                                    , toAccountId = Debug.log "TMP" 4 -- toAccount.id
-                                    , date = model.now |> Time.posixToMillis
-                                    , descr = data.descr
-                                    , cents =
-                                        data.amount
-                                            |> String.replace "." ""
-                                            |> Debug.log "TMP"
-                                            |> String.toInt
-                                            |> Maybe.withDefault 0
-                                    }
+                                    Debug.log "newTransaction" <|
+                                        { fromAccountId = data.fromAccountId
+                                        , toAccountId = data.toAccountId
+                                        , date =
+                                            (data.date
+                                                -- FIXME: bruh, it comes in as "2025-06-18T08:51:47"
+                                                |> Debug.log "date"
+                                            )
+                                                |> String.toInt
+                                                -- FIXME: I don't like this!
+                                                |> Maybe.withDefault 0
+                                        , descr = data.descr
+                                        , cents =
+                                            data.amount
+                                                |> String.replace "." ""
+                                                |> Debug.log "TMP"
+                                                |> String.toInt
+                                                |> Maybe.withDefault 0
+                                        }
                             in
                             ( model
                               -- , simulateResponse
@@ -1370,14 +1300,15 @@ handleEditDialog id model =
                 | dialog =
                     Just <|
                         EditDialog
-                            { transactionId = id
-                            , descr = tx.descr
-                            , from = tx.from.name
-                            , to = tx.to.name
-                            , amount = Decimal.toString tx.amount
-                            , date = formatDateForInput tx.date hasTimeInfo
-                            , showTime = hasTimeInfo
-                            }
+                            -- { transactionId = id
+                            -- , descr = tx.descr
+                            -- , fromAccountId = tx.from
+                            -- , to = tx.to.name
+                            -- , amount = Decimal.toString tx.amount
+                            -- , date = formatDateForInput tx.date hasTimeInfo
+                            -- , showTime = hasTimeInfo
+                            -- }
+                            (Debug.todo "EditDialog")
               }
             , showDialog ()
             )

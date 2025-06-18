@@ -1,5 +1,5 @@
 module Domain exposing
-    ( Account
+    ( AccountOld
     , CategoryOld2
     , TransactionViewWithBalance
     )
@@ -13,7 +13,7 @@ type alias CategoryOld2 =
     }
 
 
-type alias Account =
+type alias AccountOld =
     { name : String
     , category : CategoryOld2
     }
@@ -22,8 +22,8 @@ type alias Account =
 type alias TransactionViewWithBalance =
     { date : Time.Posix
     , descr : String
-    , from : Account
-    , to : Account
+    , from : AccountOld
+    , to : AccountOld
     , amount : Decimal
     , balanceMovement : { from : Decimal, to : Decimal }
     }

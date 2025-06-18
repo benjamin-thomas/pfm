@@ -3,6 +3,7 @@
 
 module ElmExport (exportElm) where
 
+import DTO.AccountRead (AccountRead)
 import DTO.Category (Category)
 import DTO.Ledger (LedgerLineSummary)
 import DTO.TransactionWrite
@@ -15,7 +16,8 @@ exportElm =
         defaultSettings "../pfm-elm/src/" ["Generated"]
 
 type Types =
-    '[ User
+    '[ AccountRead
+     , User
      , Category
      , LedgerLineSummary
      , TransactionWrite
