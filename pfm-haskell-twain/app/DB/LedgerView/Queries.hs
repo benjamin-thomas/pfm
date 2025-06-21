@@ -10,7 +10,7 @@ module DB.LedgerView.Queries
 
 import Data.FileEmbed (embedFile)
 import Data.Text.Encoding (decodeUtf8)
-import Database.SQLite.Simple (Connection, FromRow (..), field, query, Query(Query))
+import Database.SQLite.Simple (Connection, FromRow (..), Query (Query), field, query)
 
 newtype AccountId = MkAccountId Int deriving (Show)
 
@@ -57,6 +57,15 @@ instance FromRow LedgerViewRow where
       <*> field
       <*> field
       <*> field
+
+{-
+
+cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple
+
+ghci> :m + DB.LedgerView.Queries
+ghci> newConn  >>= getLedgerViewRows (MkAccountId 2)
+
+ -}
 
 -- | Get transactions with running balance for a specific account
 getLedgerViewRows :: AccountId -> Connection -> IO [LedgerViewRow]

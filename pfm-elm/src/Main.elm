@@ -233,7 +233,7 @@ type alias MkEditDialog =
     , fromAccountId : Int
     , toAccountId : Int
     , amount : String
-    , date : String
+    , date : Time.Posix
     , showTime : Bool
     }
 
@@ -243,7 +243,7 @@ type alias MkCreateDialog =
     , fromAccountId : Int
     , toAccountId : Int
     , amount : String
-    , date : String
+    , date : Time.Posix
     , showTime : Bool
     }
 
@@ -285,7 +285,7 @@ type MkEditDialogChanged
     | EditFromChanged Int
     | EditToChanged Int
     | EditAmountChanged String
-    | EditDateChanged String
+    | EditDateChanged Time.Posix
     | EditToggleTimeDisplay
     | EditDialogSave
     | GotEditSaveResponse (Result Http.Error (List LedgerLineSummary))
@@ -296,7 +296,7 @@ type MkCreateDialogChanged
     | CreateFromChanged Int
     | CreateToChanged Int
     | CreateAmountChanged String
-    | CreateDateChanged String
+    | CreateDateChanged Time.Posix
     | CreateToggleTimeDisplay
     | CreateDialogSave
     | GotCreateSaveResponse (Result Http.Error (List LedgerLineSummary))
@@ -743,47 +743,28 @@ makeFieldId =
         << String.toLower
 
 
-dateField : { text : String, date : String, showTime : Bool, onDateInput : String -> msg, onToggleTime : msg } -> Html msg
+dateField :
+    { text : String
+    , date : Time.Posix
+    , showTime : Bool
+    , onDateInput : Time.Posix -> msg
+    , onToggleTime : msg
+    }
+    -> Html msg
 dateField { text, date, showTime, onDateInput, onToggleTime } =
     let
         fieldId =
             makeFieldId text
 
-        -- Parse the current date string
-        dateOnly =
-            if String.contains "T" date then
-                String.split "T" date |> List.head |> Maybe.withDefault date
-
-            else
-                date
-
-        timeOnly =
-            if String.contains "T" date then
-                String.split "T" date
-                    |> List.drop 1
-                    |> List.head
-                    |> Maybe.withDefault "00:00"
-
-            else
-                "00:00"
-
         inputType =
+            -- If the time is not shown, we'll still store an "instant" (so a posix time)
+            -- So the time portion will implicitly be equal to the current time, from the user's browser
+            -- at the time of the input.
             if showTime then
                 "datetime-local"
 
             else
                 "date"
-
-        inputValue =
-            if showTime then
-                if String.contains "T" date then
-                    date
-
-                else
-                    date ++ "T" ++ timeOnly
-
-            else
-                dateOnly
     in
     H.div [ HA.class "field" ]
         [ H.div [ HA.class "field__header" ]
@@ -809,21 +790,12 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
             [ HA.class "field__input"
             , HA.id fieldId
             , HA.type_ inputType
-            , HA.value inputValue
+            , HA.value <| formatDateForInput date showTime
             , HE.onInput
-                (\newValue ->
-                    if showTime then
-                        onDateInput newValue
-
-                    else
-                    -- Preserve any existing time when changing just the date
-                    if
-                        String.contains "T" date
-                    then
-                        onDateInput (newValue ++ "T" ++ timeOnly)
-
-                    else
-                        onDateInput newValue
+                (onDateInput
+                    << Debug.log "wat"
+                    << Result.withDefault (Time.millisToPosix 0)
+                    << Iso8601.toTime
                 )
             ]
             []
@@ -1105,11 +1077,6 @@ update msg model =
                                                                 -- Dict.get data.to allAccounts
                                                                 --     |> Maybe.withDefault old.to
                                                                 Debug.todo "toAccount"
-
-                                                            newDate =
-                                                                Iso8601.toTime data.date
-                                                                    |> Result.toMaybe
-                                                                    |> Maybe.withDefault old.date
                                                         in
                                                         Just
                                                             { old
@@ -1120,7 +1087,7 @@ update msg model =
                                                                     Maybe.withDefault
                                                                         old.amount
                                                                         (Decimal.fromString data.amount)
-                                                                , date = newDate
+                                                                , date = data.date
                                                             }
                                                     )
                                         )
@@ -1160,7 +1127,7 @@ update msg model =
                         , fromAccountId = 0
                         , toAccountId = 0
                         , amount = ""
-                        , date = Utils.formatDateTimeLocal model.zone now
+                        , date = now
                         , showTime = True
                         }
             in
@@ -1196,8 +1163,8 @@ update msg model =
                             , Cmd.none
                             )
 
-                        CreateDateChanged str ->
-                            ( { model | dialog = Just <| CreateDialog { data | date = str } }
+                        CreateDateChanged posix ->
+                            ( { model | dialog = Just <| CreateDialog { data | date = posix } }
                             , Cmd.none
                             )
 
@@ -1213,14 +1180,9 @@ update msg model =
                                     Debug.log "newTransaction" <|
                                         { fromAccountId = data.fromAccountId
                                         , toAccountId = data.toAccountId
-                                        , date =
-                                            (data.date
-                                                -- FIXME: bruh, it comes in as "2025-06-18T08:51:47"
-                                                |> Debug.log "date"
-                                            )
-                                                |> String.toInt
-                                                -- FIXME: I don't like this!
-                                                |> Maybe.withDefault 0
+
+                                        -- We remove sub-second values, as only JS does that and we don't need it!
+                                        , date = Time.posixToMillis data.date // 1000
                                         , descr = data.descr
                                         , cents =
                                             data.amount
