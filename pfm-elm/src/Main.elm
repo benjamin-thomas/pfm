@@ -612,14 +612,14 @@ viewEditDialog allAccounts2 data =
                 , value = String.fromInt data.fromAccountId
                 , onInput = EditDialogChanged << EditFromChanged
                 , accounts = allAccounts2
-                , excludeAccount = Just (String.fromInt data.toAccountId)
+                , excludeAccountId = Just data.toAccountId
                 }
             , accountSelect
                 { text = "To"
                 , value = String.fromInt data.toAccountId
                 , onInput = EditDialogChanged << EditToChanged
                 , accounts = allAccounts2
-                , excludeAccount = Just (String.fromInt data.fromAccountId)
+                , excludeAccountId = Just data.fromAccountId
                 }
             , makeTextField
                 { text = "Amount"
@@ -669,14 +669,14 @@ viewCreateDialog allAccounts2 data =
                 , value = String.fromInt data.fromAccountId
                 , onInput = CreateDialogChanged << CreateFromChanged
                 , accounts = allAccounts2
-                , excludeAccount = Just (String.fromInt data.toAccountId)
+                , excludeAccountId = Just data.toAccountId
                 }
             , accountSelect
                 { text = "To"
                 , value = String.fromInt data.toAccountId
                 , onInput = CreateDialogChanged << CreateToChanged
                 , accounts = allAccounts2
-                , excludeAccount = Just (String.fromInt data.fromAccountId)
+                , excludeAccountId = Just data.fromAccountId
                 }
             , makeTextField
                 { text = "Amount"
@@ -802,21 +802,25 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
         ]
 
 
-accountSelect : { a | onInput : Int -> msg, text : String, value : String, accounts : List AccountRead, excludeAccount : Maybe String } -> Html msg
-accountSelect { onInput, text, value, accounts, excludeAccount } =
+accountSelect :
+    { a
+        | onInput : Int -> msg
+        , text : String
+        , value : String
+        , accounts : List AccountRead
+        , excludeAccountId : Maybe Int
+    }
+    -> Html msg
+accountSelect { onInput, text, value, accounts, excludeAccountId } =
     let
         fieldId =
             makeFieldId text
 
         filteredAccounts : List AccountRead
         filteredAccounts =
-            case excludeAccount of
-                Just excludeName ->
-                    if String.isEmpty excludeName then
-                        accounts
-
-                    else
-                        List.filter (\account -> account.name /= excludeName) accounts
+            case excludeAccountId of
+                Just excludeId ->
+                    List.filter ((/=) excludeId << .accountId) accounts
 
                 Nothing ->
                     accounts
