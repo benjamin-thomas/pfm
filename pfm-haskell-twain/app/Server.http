@@ -13,3 +13,18 @@ Content-Type: application/json
   "descr": "Some transaction",
   "cents": 999
 }
+
+### Update a transaction
+PUT http://localhost:8080/transactions/7
+Content-Type: application/json
+
+{
+  "fromAccountId": 3,
+  "toAccountId": 4,
+  "date": 234,
+  "descr": "Some transaction changed",
+  "cents": 888
+}
+
+### Delete a transaction
+DELETE http://localhost:8080/transactions/7

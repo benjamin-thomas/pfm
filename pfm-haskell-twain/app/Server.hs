@@ -18,9 +18,10 @@ import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
 import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy qualified as BSL
 import Data.Text qualified as T
 import Database.SQLite.Simple (Connection, open)
-import Network.HTTP.Types (status200, status201)
+import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Text.Read (readMaybe)
@@ -77,10 +78,20 @@ handlePostTransactions :: Connection -> Twain.ResponderM ()
 handlePostTransactions conn = do
     toInsert <- toTransactionNewRow <$> Twain.fromBody
     liftIO $ insertTransaction conn toInsert
-    -- FIXME: how should I handle the account context?
-    transactions <- liftIO $ getLedgerViewRows (MkAccountId 2) conn :: Twain.ResponderM [LedgerViewRow]
-    let ledgerLineSummaries = map fromLedgerViewRow transactions :: [LedgerLineSummary]
-    Twain.send $ Twain.status status201 $ Twain.json ledgerLineSummaries
+    Twain.send $ Twain.raw status201 [] BSL.empty
+
+handlePutTransactions :: Connection -> Twain.ResponderM ()
+handlePutTransactions conn = do
+    transactionId :: Int <- Twain.param "id"
+    toUpdate <- toTransactionNewRow <$> Twain.fromBody
+    liftIO $ updateTransaction conn (transactionId, toUpdate)
+    Twain.send $ Twain.raw status204 [] BSL.empty
+
+handleDeleteTransactions :: Connection -> Twain.ResponderM ()
+handleDeleteTransactions conn = do
+    transactionId :: Int <- Twain.param "id"
+    liftIO $ deleteTransaction conn transactionId
+    Twain.send $ Twain.raw status204 [] BSL.empty
 
 -- http -v localhost:8080/users all==1
 handleUsers :: Connection -> Twain.ResponderM ()
@@ -110,6 +121,8 @@ routes conn =
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
+    , Twain.put "/transactions/:id" $ handlePutTransactions conn
+    , Twain.delete "/transactions/:id" $ handleDeleteTransactions conn
     , Twain.route (Just "OPTIONS") "/transactions" $ Twain.send $ Twain.status status200 $ Twain.json ()
     , Twain.get "/users" $ handleUsers conn
     , Twain.get "/echo/:name" echoName

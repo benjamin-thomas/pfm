@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module DB.Transactions.Queries where
@@ -23,3 +24,39 @@ insertTransaction conn =
   execute conn $
     Query $
       decodeUtf8 $(embedFile "app/DB/Transactions/insert.sql")
+
+-- instance ToRow (Int, TransactionNewRow) where
+--   toRow (transactionId, newRow) =
+--     [ toField $ fromAccountId newRow
+--     , toField $ toAccountId newRow
+--     , toField $ date newRow
+--     , toField $ descr newRow
+--     , toField $ cents newRow
+--     , toField transactionId
+--     ]
+
+-- updateTransaction :: Connection -> (Int, TransactionNewRow) -> IO ()
+-- updateTransaction conn =
+--   execute conn $
+--     Query $
+--       decodeUtf8 $(embedFile "app/DB/Transactions/update.sql")
+
+updateTransaction :: Connection -> (Int, TransactionNewRow) -> IO ()
+updateTransaction conn (transactionId, newRow) =
+  execute
+    conn
+    (Query $ decodeUtf8 $(embedFile "app/DB/Transactions/update.sql"))
+    ( fromAccountId newRow
+    , toAccountId newRow
+    , date newRow
+    , descr newRow
+    , cents newRow
+    , transactionId
+    )
+
+deleteTransaction :: Connection -> Int -> IO ()
+deleteTransaction conn transactionId =
+  execute
+    conn
+    (Query $ decodeUtf8 $(embedFile "app/DB/Transactions/delete.sql"))
+    (Only transactionId)
