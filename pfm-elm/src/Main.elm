@@ -86,12 +86,24 @@ postTransaction transaction =
     Http.post
         { url = "http://localhost:8080/transactions"
         , body = Http.jsonBody (encodeTransactionWrite transaction)
-
-        -- , expect = Http.expectJson GotLedgerLineSummary (D.list decodeLedgerLineSummary)
         , expect =
-            Http.expectJson
+            Http.expectWhatever
                 (CreateDialogChanged << GotCreateSaveResponse)
-                (D.list decodeLedgerLineSummary)
+        }
+
+
+putTransaction : ( Int, TransactionWrite ) -> Cmd Msg
+putTransaction ( transactionId, transaction ) =
+    Http.request
+        { method = "PUT"
+        , headers = []
+        , url = "http://localhost:8080/transactions/" ++ String.fromInt transactionId
+        , body = Http.jsonBody (encodeTransactionWrite transaction)
+        , expect =
+            Http.expectWhatever
+                (EditDialogChanged << GotEditSaveResponse)
+        , timeout = Nothing
+        , tracker = Nothing
         }
 
 
@@ -229,21 +241,21 @@ balance txs account =
 
 type alias MkEditDialog =
     { transactionId : Int
-    , descr : String
     , fromAccountId : Int
     , toAccountId : Int
     , amount : String
     , date : Time.Posix
+    , descr : String
     , showTime : Bool
     }
 
 
 type alias MkCreateDialog =
-    { descr : String
-    , fromAccountId : Int
+    { fromAccountId : Int
     , toAccountId : Int
-    , amount : String
     , date : Time.Posix
+    , descr : String
+    , amount : String
     , showTime : Bool
     }
 
@@ -288,7 +300,7 @@ type MkEditDialogChanged
     | EditDateChanged Time.Posix
     | EditToggleTimeDisplay
     | EditDialogSave
-    | GotEditSaveResponse (Result Http.Error (List LedgerLineSummary))
+    | GotEditSaveResponse (Result Http.Error ())
 
 
 type MkCreateDialogChanged
@@ -299,13 +311,13 @@ type MkCreateDialogChanged
     | CreateDateChanged Time.Posix
     | CreateToggleTimeDisplay
     | CreateDialogSave
-    | GotCreateSaveResponse (Result Http.Error (List LedgerLineSummary))
+    | GotCreateSaveResponse (Result Http.Error ())
 
 
 type Msg
     = UrlRequested UrlRequest
     | UrlChanged Url
-    | EditTransactionClicked Int
+    | EditTransactionClicked ( Int, TransactionWrite )
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
@@ -447,6 +459,18 @@ withPriorBalance transactions =
                     transactions
 
 
+toTransactionWrite : LedgerLineSummary -> ( Int, TransactionWrite )
+toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr, flowCents } =
+    ( transactionId
+    , { fromAccountId = fromAccountId
+      , toAccountId = toAccountId
+      , dateUnix = dateUnix
+      , descr = descr
+      , cents = abs flowCents
+      }
+    )
+
+
 viewOneTransaction : ( LedgerLineSummary, ( Int, String ) ) -> Html Msg
 viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
@@ -470,7 +494,7 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
     in
     H.li
         [ HA.class "transaction-item"
-        , HE.onClick (EditTransactionClicked tx.transactionId)
+        , HE.onClick (EditTransactionClicked <| toTransactionWrite tx)
         ]
         [ H.div [ HA.class "transaction-item__row" ]
             [ H.div [ HA.class "transaction-item__main-content" ]
@@ -842,7 +866,7 @@ accountSelect { onInput, text, value, accounts, excludeAccountId } =
                     (\account ->
                         H.option
                             [ HA.value (String.fromInt account.accountId)
-                            , HA.selected (account.name == value)
+                            , HA.selected (String.fromInt account.accountId == value)
                             ]
                             [ H.text (account.categoryName ++ ": " ++ account.name) ]
                     )
@@ -952,7 +976,7 @@ init () url key =
 simulateResponse : Cmd Msg
 simulateResponse =
     Process.sleep 0
-        |> Task.andThen (\() -> Task.succeed [])
+        |> Task.andThen (\() -> Task.succeed ())
         -- |> Task.andThen (\() -> Task.fail <| Http.BadStatus 500)
         |> Task.attempt (CreateDialogChanged << GotCreateSaveResponse)
 
@@ -1016,8 +1040,8 @@ update msg model =
             , Cmd.none
             )
 
-        EditTransactionClicked transactionId ->
-            handleEditDialog transactionId model
+        EditTransactionClicked params ->
+            handleEditDialog params model
 
         EditDialogChanged subMsg ->
             case model.dialog of
@@ -1104,14 +1128,46 @@ update msg model =
                               }
                             , Cmd.batch
                                 [ --closeDialog ()
-                                  Task.attempt
-                                    (EditDialogChanged << GotEditSaveResponse)
-                                    (Task.succeed [])
+                                  --   Task.attempt
+                                  --     (EditDialogChanged << GotEditSaveResponse)
+                                  --     (Task.succeed ())
+                                  let
+                                    transactionWrite : TransactionWrite
+                                    transactionWrite =
+                                        { fromAccountId = data.fromAccountId
+                                        , toAccountId = data.toAccountId
+                                        , dateUnix = Time.posixToMillis data.date
+                                        , descr = data.descr
+                                        , cents =
+                                            String.toInt data.amount
+                                                -- (-1) will make the update fail
+                                                |> Maybe.withDefault -1
+                                        }
+                                  in
+                                  putTransaction
+                                    ( data.transactionId
+                                    , transactionWrite
+                                    )
                                 ]
                             )
 
                         GotEditSaveResponse result ->
-                            Debug.todo "GotSaveResponse"
+                            case result of
+                                Err _ ->
+                                    ( model
+                                      -- TODO: display toast error or similar
+                                    , Cmd.none
+                                    )
+
+                                Ok _ ->
+                                    ( { model
+                                        | dialog = Nothing
+                                      }
+                                    , Cmd.batch
+                                        [ closeDialog ()
+                                        , fetchLedgerLineSummary
+                                        ]
+                                    )
 
                 _ ->
                     ( model
@@ -1186,7 +1242,7 @@ update msg model =
                                         , toAccountId = data.toAccountId
 
                                         -- We remove sub-second values, as only JS does that and we don't need it!
-                                        , date = Time.posixToMillis data.date // 1000
+                                        , dateUnix = Time.posixToMillis data.date // 1000
                                         , descr = data.descr
                                         , cents =
                                             data.amount
@@ -1202,18 +1258,22 @@ update msg model =
                             )
 
                         GotCreateSaveResponse result ->
-                            ( { model
-                                | dialog = Nothing
-                                , book2 =
-                                    case result of
-                                        Err _ ->
-                                            Failed
+                            case result of
+                                Err _ ->
+                                    ( model
+                                      -- TODO: display toast error or similar
+                                    , Cmd.none
+                                    )
 
-                                        Ok lines ->
-                                            Loaded lines
-                              }
-                            , closeDialog ()
-                            )
+                                Ok _ ->
+                                    ( { model
+                                        | dialog = Nothing
+                                      }
+                                    , Cmd.batch
+                                        [ closeDialog ()
+                                        , fetchLedgerLineSummary
+                                        ]
+                                    )
 
                 _ ->
                     ( model
@@ -1249,40 +1309,35 @@ update msg model =
             )
 
 
-handleEditDialog : Int -> Model -> ( Model, Cmd Msg )
-handleEditDialog id model =
-    case Dict.get id model.book of
-        Just tx ->
-            let
-                dateString =
-                    Iso8601.fromTime tx.date
-
-                hasTimeInfo =
-                    String.contains "T" dateString
-                        && not (String.endsWith "T00:00:00.000Z" dateString)
-                        && not (String.endsWith "T00:00:00Z" dateString)
-            in
-            ( { model
-                | dialog =
-                    Just <|
-                        EditDialog
-                            -- { transactionId = id
-                            -- , descr = tx.descr
-                            -- , fromAccountId = tx.from
-                            -- , to = tx.to.name
-                            -- , amount = Decimal.toString tx.amount
-                            -- , date = formatDateForInput tx.date hasTimeInfo
-                            -- , showTime = hasTimeInfo
-                            -- }
-                            (Debug.todo "EditDialog")
-              }
-            , showDialog ()
-            )
-
-        Nothing ->
-            ( model
-            , Cmd.none
-            )
+handleEditDialog : ( Int, TransactionWrite ) -> Model -> ( Model, Cmd Msg )
+handleEditDialog ( transactionId, tx ) model =
+    -- let
+    --     dateString =
+    --         Iso8601.fromTime tx.date
+    --     hasTimeInfo =
+    --         String.contains "T" dateString
+    --             && not (String.endsWith "T00:00:00.000Z" dateString)
+    --             && not (String.endsWith "T00:00:00Z" dateString)
+    -- in
+    let
+        editDialogModel : MkEditDialog
+        editDialogModel =
+            { transactionId = transactionId
+            , fromAccountId = tx.fromAccountId
+            , toAccountId = tx.toAccountId
+            , amount = String.fromInt tx.cents
+            , date = Time.millisToPosix tx.dateUnix
+            , descr = tx.descr
+            , showTime = True -- FIXME: observe the unix ts trailing info
+            }
+    in
+    ( { model
+        | dialog =
+            Just
+                (EditDialog editDialogModel)
+      }
+    , showDialog ()
+    )
 
 
 subscriptions : Model -> Sub Msg

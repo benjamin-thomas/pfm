@@ -43,7 +43,7 @@ corsMiddleware app req respond = do
             . Twain.withHeader
                 ("Access-Control-Allow-Origin", "http://localhost:3000")
             . Twain.withHeader
-                ("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                ("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PUT, DELETE, PATCH")
             . Twain.withHeader
                 ("Access-Control-Allow-Headers", "Content-Type")
 
@@ -124,6 +124,7 @@ routes conn =
     , Twain.put "/transactions/:id" $ handlePutTransactions conn
     , Twain.delete "/transactions/:id" $ handleDeleteTransactions conn
     , Twain.route (Just "OPTIONS") "/transactions" $ Twain.send $ Twain.status status200 $ Twain.json ()
+    , Twain.route (Just "OPTIONS") "/transactions/:id" $ Twain.send $ Twain.status status200 $ Twain.json ()
     , Twain.get "/users" $ handleUsers conn
     , Twain.get "/echo/:name" echoName
     , Twain.get "/greet/:name" $ do

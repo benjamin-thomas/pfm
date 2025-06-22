@@ -17,7 +17,7 @@ import GHC.Generics (Generic)
 data TransactionWrite = MkTransactionWrite
   { twFromAccountId :: Int
   , twToAccountId :: Int
-  , twDate :: Int
+  , twDateUnix :: Int
   , twDescr :: String
   , twCents :: Int
   }
@@ -36,7 +36,7 @@ toTransactionNewRow tx =
   MkTransactionNewRow
     { fromAccountId = twFromAccountId tx
     , toAccountId = twToAccountId tx
-    , date = twDate tx
+    , date = twDateUnix tx
     , descr = twDescr tx
     , cents = twCents tx
     }
