@@ -18,7 +18,7 @@ import Generated.Types
         , LedgerLine
         , TransactionWrite
         )
-import Html as H exposing (Attribute, Html)
+import Html as H exposing (Attribute, Html, b)
 import Html.Attributes as HA
 import Html.Events as HE
 import Http
@@ -158,6 +158,14 @@ type Status a
     | Loaded a
 
 
+type alias Data =
+    { categories : Status (List Category)
+    , accounts : Status (List AccountRead)
+    , balances : Status (List AccountBalanceRead)
+    , ledgerLines : Status (List LedgerLine)
+    }
+
+
 type alias Model =
     { key : Nav.Key
     , url : Url
@@ -166,10 +174,7 @@ type alias Model =
     , zone : Time.Zone
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
-    , categories : Status (List Category)
-    , accounts : Status (List AccountRead)
-    , balances : Status (List AccountBalanceRead)
-    , ledgerLines : Status (List LedgerLine)
+    , data : Data
     }
 
 
@@ -401,50 +406,91 @@ viewLedgerLines withRunningBalanceEntity =
         ]
 
 
+statusMap : (a -> b) -> Status a -> Status b
+statusMap f ma =
+    case ma of
+        Loaded a ->
+            Loaded (f a)
+
+        Failed ->
+            Failed
+
+        Loading ->
+            Loading
+
+
+statusAndMap : Status a -> Status (a -> b) -> Status b
+statusAndMap ma mf =
+    case ( mf, ma ) of
+        ( Loaded f, Loaded a ) ->
+            Loaded (f a)
+
+        ( Failed, _ ) ->
+            Failed
+
+        ( _, Failed ) ->
+            Failed
+
+        ( Loading, _ ) ->
+            Loading
+
+        ( _, Loading ) ->
+            Loading
+
+
+viewLoaded :
+    Maybe Dialog
+    -> List AccountRead
+    -> List AccountBalanceRead
+    -> List LedgerLine
+    -> Html Msg
+viewLoaded dialog_ accounts balances ledgerLines =
+    H.div [ HA.class "container" ]
+        [ H.div [ HA.class "section" ]
+            [ H.div [ HA.class "debug-info" ]
+                [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
+            ]
+        , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
+        , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
+        , H.div [ HA.class "section" ]
+            [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
+            , H.div [ HA.class "balances" ]
+                (List.map
+                    (\balance_ ->
+                        balanceCard balance_
+                    )
+                    balances
+                )
+            ]
+        , viewLedgerLines ledgerLines
+        , case dialog_ of
+            Nothing ->
+                H.text ""
+
+            Just (EditDialog data) ->
+                viewEditDialog accounts data
+
+            Just (CreateDialog data) ->
+                viewCreateDialog accounts data
+        ]
+
+
 viewHome : Model -> Html Msg
 viewHome model =
-    case ( model.accounts, model.balances, model.ledgerLines ) of
-        ( Loaded accounts, Loaded balances, Loaded ledgerLines ) ->
-            H.div [ HA.class "container" ]
-                [ H.div [ HA.class "section" ]
-                    [ H.div [ HA.class "debug-info" ]
-                        [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
-                    ]
-                , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
-                , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
-                , H.div [ HA.class "section" ]
-                    [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
-                    , H.div [ HA.class "balances" ]
-                        (List.map
-                            (\balance_ ->
-                                balanceCard balance_
-                            )
-                            balances
-                        )
-                    ]
-                , viewLedgerLines ledgerLines
-                , case model.dialog of
-                    Nothing ->
-                        H.text ""
+    case
+        Loaded (\a b c -> viewLoaded model.dialog a b c)
+            |> statusAndMap model.data.accounts
+            |> statusAndMap model.data.balances
+            |> statusAndMap model.data.ledgerLines
+    of
+        Loaded x ->
+            x
 
-                    Just (EditDialog data) ->
-                        viewEditDialog accounts data
+        Failed ->
+            H.text "Failed to load data."
 
-                    Just (CreateDialog data) ->
-                        viewCreateDialog accounts data
-                ]
-
-        ( Loaded _, _, _ ) ->
-            H.text "Loading accounts..."
-
-        ( _, Loaded _, _ ) ->
-            H.text "Loading balances..."
-
-        ( _, _, Loaded _ ) ->
-            H.text "Loading ledger..."
-
-        _ ->
-            H.text "Error loading data."
+        Loading ->
+            H.text "Loading..."
 
 
 viewEditDialog : List AccountRead -> MkEditDialog -> Html Msg
@@ -729,6 +775,25 @@ type alias Flags =
     }
 
 
+loadingData : Data
+loadingData =
+    { categories = Loading
+    , accounts = Loading
+    , balances = Loading
+    , ledgerLines = Loading
+    }
+
+
+fetchData : Cmd Msg
+fetchData =
+    Cmd.batch
+        [ fetchCategories
+        , fetchLedgerLines
+        , fetchAccounts
+        , fetchBalances
+        ]
+
+
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
     ( { key = key
@@ -738,18 +803,12 @@ init () url key =
       , zone = Time.utc
       , dialog = Nothing
       , isDarkTheme = False
-      , categories = Loading
-      , accounts = Loading
-      , balances = Loading
-      , ledgerLines = Loading
+      , data = loadingData
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
-        , fetchCategories
-        , fetchLedgerLines
-        , fetchAccounts
-        , fetchBalances
+        , fetchData
         ]
     )
 
@@ -764,52 +823,57 @@ simulateResponse =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        updateData : (Data -> Data) -> Model
+        updateData f =
+            { model | data = f model.data }
+    in
     case msg of
         GotBalances result ->
             case result of
                 Ok balances ->
-                    ( { model | balances = Loaded balances }
+                    ( updateData (\d -> { d | balances = Loaded balances })
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | balances = Failed }
+                    ( updateData (\d -> { d | balances = Failed })
                     , Cmd.none
                     )
 
         GotLedgerLines result ->
             case result of
                 Ok ledgerLines ->
-                    ( { model | ledgerLines = Loaded ledgerLines }
+                    ( updateData (\d -> { d | ledgerLines = Loaded ledgerLines })
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | ledgerLines = Failed }
+                    ( updateData (\d -> { d | ledgerLines = Failed })
                     , Cmd.none
                     )
 
         GotAccounts result ->
             case result of
                 Ok accounts ->
-                    ( { model | accounts = Loaded accounts }
+                    ( updateData (\d -> { d | accounts = Loaded accounts })
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | accounts = Failed }
+                    ( updateData (\d -> { d | accounts = Failed })
                     , Cmd.none
                     )
 
         GotCategories result ->
             case result of
                 Ok categories ->
-                    ( { model | categories = Loaded categories }
+                    ( updateData (\d -> { d | categories = Loaded categories })
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | categories = Failed }
+                    ( updateData (\d -> { d | categories = Failed })
                     , Cmd.none
                     )
 
@@ -916,10 +980,11 @@ update msg model =
                                 Ok _ ->
                                     ( { model
                                         | dialog = Nothing
+                                        , data = loadingData
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchLedgerLines
+                                        , fetchData
                                         ]
                                     )
 
@@ -1022,10 +1087,11 @@ update msg model =
                                 Ok _ ->
                                     ( { model
                                         | dialog = Nothing
+                                        , data = loadingData
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchLedgerLines
+                                        , fetchData
                                         ]
                                     )
 
