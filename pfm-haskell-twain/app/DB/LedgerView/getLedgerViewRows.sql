@@ -18,7 +18,7 @@ SELECT y.transaction_id
      , datetime(y.updated_at, 'unixepoch', 'localtime') AS updated_at_tz
 FROM (
         SELECT x.*
-      , SUM(x.flow_cents) OVER (ORDER BY x.transaction_id) AS running_balance_cents
+      , SUM(x.flow_cents) OVER (ORDER BY x.date) AS running_balance_cents
         FROM (
         SELECT t.transaction_id
                 , a.name AS from_account_name
@@ -42,4 +42,4 @@ FROM (
         )x
 )y
 
-ORDER BY y.transaction_id
+ORDER BY y.date ASC

@@ -1,0 +1,18 @@
+- autocomplete=off everywhere
+- enable deleting a transaction
+- segment the ledger book my accounting_period (monthly typically)
+  - that could mean I'll have to redeclare opening balances on each new period.
+- enable listing the accounts
+  - CRUD
+- enable choosing the target account for the ledger's "point of view"
+- maybe later: allow reordering the ledger entries via click and drag
+  - if I do that, then only show the date for the user
+  - the app's tz will always be UTC
+- cleanup /ui, KISS
+- implement graphs to show the balance's evolution
+- maybe allow selecting accounts to appear in the "balance cards"
+  - then allow cycling through the accounts, carousel-style
+  - then, ledger view will be from the "first" card's account point of view
+- then later, allow importing OFX files
+  - make sure to detect re-imports (the same tx being imported twice should be
+    detected)
