@@ -7,7 +7,7 @@ import Generated.Decoder
         ( decodeAccountBalanceRead
         , decodeAccountRead
         , decodeCategory
-        , decodeLedgerLineSummary
+        , decodeLedgerLine
         )
 import Generated.Encoder exposing (encodeTransactionWrite)
 import Generated.Types
@@ -15,7 +15,7 @@ import Generated.Types
         ( AccountBalanceRead
         , AccountRead
         , Category
-        , LedgerLineSummary
+        , LedgerLine
         , TransactionWrite
         )
 import Html as H exposing (Attribute, Html)
@@ -70,11 +70,11 @@ fetchCategories =
 
 {-| http -v localhost:8080/transactions/ accountId==2
 -}
-fetchLedgerLineSummary : Cmd Msg
-fetchLedgerLineSummary =
+fetchLedgerLines : Cmd Msg
+fetchLedgerLines =
     Http.get
         { url = "http://localhost:8080/transactions?accountId=2"
-        , expect = Http.expectJson GotLedgerLineSummary (D.list decodeLedgerLineSummary)
+        , expect = Http.expectJson GotLedgerLines (D.list decodeLedgerLine)
         }
 
 
@@ -164,12 +164,12 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , ledger : Status (List LedgerLineSummary)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , categories : Status (List Category)
     , accounts : Status (List AccountRead)
     , balances : Status (List AccountBalanceRead)
+    , ledgerLines : Status (List LedgerLine)
     }
 
 
@@ -210,7 +210,7 @@ type Msg
     | GotCategories (Result Http.Error (List Category))
     | GotAccounts (Result Http.Error (List AccountRead))
     | GotBalances (Result Http.Error (List AccountBalanceRead))
-    | GotLedgerLineSummary (Result Http.Error (List LedgerLineSummary))
+    | GotLedgerLines (Result Http.Error (List LedgerLine))
 
 
 view : Model -> Browser.Document Msg
@@ -299,7 +299,7 @@ balanceCard { categoryName, accountName, accountBalance } =
         ]
 
 
-withPriorBalance : List LedgerLineSummary -> List ( LedgerLineSummary, ( Int, String ) )
+withPriorBalance : List LedgerLine -> List ( LedgerLine, ( Int, String ) )
 withPriorBalance transactions =
     case transactions of
         [] ->
@@ -319,7 +319,7 @@ withPriorBalance transactions =
                     transactions
 
 
-toTransactionWrite : LedgerLineSummary -> ( Int, TransactionWrite )
+toTransactionWrite : LedgerLine -> ( Int, TransactionWrite )
 toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr, flowCents } =
     ( transactionId
     , { fromAccountId = fromAccountId
@@ -331,7 +331,7 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
     )
 
 
-viewOneTransaction : ( LedgerLineSummary, ( Int, String ) ) -> Html Msg
+viewOneTransaction : ( LedgerLine, ( Int, String ) ) -> Html Msg
 viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         isPositive =
@@ -380,8 +380,8 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
         ]
 
 
-viewLedgerLineSummary : List LedgerLineSummary -> Html Msg
-viewLedgerLineSummary withRunningBalanceEntity =
+viewLedgerLines : List LedgerLine -> Html Msg
+viewLedgerLines withRunningBalanceEntity =
     H.div [ HA.class "section" ]
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
@@ -403,8 +403,8 @@ viewLedgerLineSummary withRunningBalanceEntity =
 
 viewHome : Model -> Html Msg
 viewHome model =
-    case ( model.accounts, model.balances, model.ledger ) of
-        ( Loaded accounts, Loaded balances, Loaded ledger ) ->
+    case ( model.accounts, model.balances, model.ledgerLines ) of
+        ( Loaded accounts, Loaded balances, Loaded ledgerLines ) ->
             H.div [ HA.class "container" ]
                 [ H.div [ HA.class "section" ]
                     [ H.div [ HA.class "debug-info" ]
@@ -422,7 +422,7 @@ viewHome model =
                             balances
                         )
                     ]
-                , viewLedgerLineSummary ledger
+                , viewLedgerLines ledgerLines
                 , case model.dialog of
                     Nothing ->
                         H.text ""
@@ -736,18 +736,18 @@ init () url key =
       , route = Route.fromUrl url
       , now = Time.millisToPosix 0
       , zone = Time.utc
-      , ledger = Loading
       , dialog = Nothing
       , isDarkTheme = False
       , categories = Loading
       , accounts = Loading
       , balances = Loading
+      , ledgerLines = Loading
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
         , fetchCategories
-        , fetchLedgerLineSummary
+        , fetchLedgerLines
         , fetchAccounts
         , fetchBalances
         ]
@@ -777,15 +777,15 @@ update msg model =
                     , Cmd.none
                     )
 
-        GotLedgerLineSummary result ->
+        GotLedgerLines result ->
             case result of
-                Ok withRunningBalanceEntity ->
-                    ( { model | ledger = Loaded withRunningBalanceEntity }
+                Ok ledgerLines ->
+                    ( { model | ledgerLines = Loaded ledgerLines }
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | ledger = Failed }
+                    ( { model | ledgerLines = Failed }
                     , Cmd.none
                     )
 
@@ -919,7 +919,7 @@ update msg model =
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchLedgerLineSummary
+                                        , fetchLedgerLines
                                         ]
                                     )
 
@@ -1025,7 +1025,7 @@ update msg model =
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchLedgerLineSummary
+                                        , fetchLedgerLines
                                         ]
                                     )
 

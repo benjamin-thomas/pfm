@@ -5,7 +5,7 @@ module ElmExport (exportElm) where
 
 import DTO.AccountRead (AccountBalanceRead, AccountRead)
 import DTO.Category (Category)
-import DTO.Ledger (LedgerLineSummary)
+import DTO.Ledger (LedgerLine)
 import DTO.TransactionWrite
 import DTO.User (User)
 import Elm
@@ -20,6 +20,6 @@ type Types =
      , AccountBalanceRead
      , User
      , Category
-     , LedgerLineSummary
+     , LedgerLine
      , TransactionWrite
      ]

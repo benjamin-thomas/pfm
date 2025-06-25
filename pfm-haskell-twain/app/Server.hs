@@ -14,7 +14,7 @@ import DB.Transactions.Queries
 import DB.User.Queries
 import DTO.AccountRead qualified as AccountRead
 import DTO.Category (Category, fromCategoryRow)
-import DTO.Ledger (LedgerLineSummary, fromLedgerViewRow)
+import DTO.Ledger (LedgerLine, fromLedgerViewRow)
 import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
@@ -70,7 +70,7 @@ handleGetTransactions :: Connection -> Twain.ResponderM ()
 handleGetTransactions conn = do
     accountId <- Twain.queryParam "accountId"
     transactions <- liftIO $ getLedgerViewRows (MkAccountId accountId) conn :: Twain.ResponderM [LedgerViewRow]
-    let ledgerLineSummaries = map fromLedgerViewRow transactions            :: [LedgerLineSummary]
+    let ledgerLineSummaries = map fromLedgerViewRow transactions            :: [LedgerLine]
     Twain.send $ Twain.json ledgerLineSummaries
 {- FOURMOLU_ENABLE -}
 

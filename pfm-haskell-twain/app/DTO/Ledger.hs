@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module DTO.Ledger
-    ( LedgerLineSummary (..)
+    ( LedgerLine (..)
     , fromLedgerViewRow
     ) where
 
@@ -14,7 +14,7 @@ import Data.Aeson (FromJSON, Options (fieldLabelModifier), ToJSON (toJSON), defa
 import Elm
 import GHC.Generics (Generic)
 
-data LedgerLineSummary = MkLedgerLineSummary
+data LedgerLine = MkLedgerLine
     { llsTransactionId :: Int
     , llsFromAccountId :: Int
     , llsFromAccountName :: String
@@ -37,16 +37,16 @@ data LedgerLineSummary = MkLedgerLineSummary
     deriving stock (Show, Generic)
     deriving anyclass (Elm, FromJSON)
 
-instance ToJSON LedgerLineSummary where
+instance ToJSON LedgerLine where
     toJSON =
         genericToJSON
             defaultOptions
                 { fieldLabelModifier = dropAndLowerHead (length "lls")
                 }
 
-fromLedgerViewRow :: LedgerViewRow -> LedgerLineSummary
+fromLedgerViewRow :: LedgerViewRow -> LedgerLine
 fromLedgerViewRow MkLedgerViewRow{..} =
-    MkLedgerLineSummary
+    MkLedgerLine
         { llsTransactionId = lvrTransactionId
         , llsFromAccountId = lvrFromAccountId
         , llsFromAccountName = lvrFromAccountName
