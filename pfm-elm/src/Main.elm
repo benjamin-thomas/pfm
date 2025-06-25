@@ -2,12 +2,22 @@ port module Main exposing (..)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
-import Decimal exposing (Decimal, zero)
-import Dict exposing (Dict)
-import Domain exposing (AccountOld, TransactionViewWithBalance)
-import Generated.Decoder exposing (decodeAccountRead, decodeCategory, decodeLedgerLineSummary)
+import Generated.Decoder
+    exposing
+        ( decodeAccountBalanceRead
+        , decodeAccountRead
+        , decodeCategory
+        , decodeLedgerLineSummary
+        )
 import Generated.Encoder exposing (encodeTransactionWrite)
-import Generated.Types exposing (AccountRead, Category, LedgerLineSummary, TransactionWrite)
+import Generated.Types
+    exposing
+        ( AccountBalanceRead
+        , AccountRead
+        , Category
+        , LedgerLineSummary
+        , TransactionWrite
+        )
 import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -18,11 +28,10 @@ import Json.Encode as E
 import Page.UI as UI_Page
 import Process
 import Route exposing (Route)
-import Set
 import Task
 import Time
 import Url exposing (Url)
-import Utils exposing (amountFmt, formatDateForInput)
+import Utils
 
 
 port enterPressed : (() -> msg) -> Sub msg
@@ -59,12 +68,8 @@ fetchCategories =
         }
 
 
-
-{- | http -v localhost:8080/transactions/ accountId==2
-
+{-| http -v localhost:8080/transactions/ accountId==2
 -}
-
-
 fetchLedgerLineSummary : Cmd Msg
 fetchLedgerLineSummary =
     Http.get
@@ -78,6 +83,14 @@ fetchAccounts =
     Http.get
         { url = "http://localhost:8080/accounts"
         , expect = Http.expectJson GotAccounts (D.list decodeAccountRead)
+        }
+
+
+fetchBalances : Cmd Msg
+fetchBalances =
+    Http.get
+        { url = "http://localhost:8080/accounts/balances?accountIds=2,3" -- FIXME: find a way this param
+        , expect = Http.expectJson GotBalances (D.list decodeAccountBalanceRead)
         }
 
 
@@ -105,138 +118,6 @@ putTransaction ( transactionId, transaction ) =
         , timeout = Nothing
         , tracker = Nothing
         }
-
-
-type alias CategoryOld =
-    { name : String
-    }
-
-
-type alias AccountOld =
-    { name : String
-    , category : CategoryOld
-    }
-
-
-type alias TransactionOld =
-    { date : Time.Posix
-    , descr : String
-    , from : AccountOld
-    , to : AccountOld
-    , amount : Decimal
-    }
-
-
-assets : CategoryOld
-assets =
-    { name = "Assets" }
-
-
-expenses : CategoryOld
-expenses =
-    { name = "Expenses" }
-
-
-equity : CategoryOld
-equity =
-    { name = "Equity" }
-
-
-income : CategoryOld
-income =
-    { name = "Income" }
-
-
-checkingAccount : AccountOld
-checkingAccount =
-    { name = "Checking account"
-    , category = assets
-    }
-
-
-savingsAccount : AccountOld
-savingsAccount =
-    { name = "Savings account"
-    , category = assets
-    }
-
-
-openingBalance : AccountOld
-openingBalance =
-    { name = "OpeningBalance"
-    , category = equity
-    }
-
-
-employerABC : AccountOld
-employerABC =
-    { name = "EmployerABC"
-    , category = income
-    }
-
-
-customerXYZ : AccountOld
-customerXYZ =
-    { name = "CustomerXYZ"
-    , category = income
-    }
-
-
-spar : AccountOld
-spar =
-    { name = "Spar"
-    , category = expenses
-    }
-
-
-tesco : AccountOld
-tesco =
-    { name = "Tesco"
-    , category = expenses
-    }
-
-
-amazon : AccountOld
-amazon =
-    { name = "Amazon"
-    , category = expenses
-    }
-
-
-allAccounts_ : List AccountOld
-allAccounts_ =
-    [ checkingAccount
-    , savingsAccount
-    , openingBalance
-    , employerABC
-    , customerXYZ
-    , spar
-    , amazon
-    ]
-
-
-allAccounts : Dict String AccountOld
-allAccounts =
-    allAccounts_
-        |> List.map (\o -> ( o.name, o ))
-        |> Dict.fromList
-
-
-balance : Dict Int TransactionOld -> AccountOld -> Decimal
-balance txs account =
-    Dict.foldl
-        (\_ { from, to, amount } total ->
-            if to == account then
-                Decimal.add total amount
-
-            else if from == account then
-                Decimal.sub total amount
-
-            else
-                total
-        )
-        zero
-        txs
 
 
 type alias MkEditDialog =
@@ -283,12 +164,12 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , book : Dict Int TransactionOld
-    , book2 : Status (List LedgerLineSummary)
+    , ledger : Status (List LedgerLineSummary)
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
-    , tempCategories : Status (List Category)
+    , categories : Status (List Category)
     , accounts : Status (List AccountRead)
+    , balances : Status (List AccountBalanceRead)
     }
 
 
@@ -328,27 +209,8 @@ type Msg
     | ToggleTheme
     | GotCategories (Result Http.Error (List Category))
     | GotAccounts (Result Http.Error (List AccountRead))
+    | GotBalances (Result Http.Error (List AccountBalanceRead))
     | GotLedgerLineSummary (Result Http.Error (List LedgerLineSummary))
-
-
-uniqueBy : (a -> comparable) -> List a -> List a
-uniqueBy toComparable =
-    Tuple.first
-        << List.foldl
-            (\item ( items, keys ) ->
-                if Set.member (toComparable item) keys then
-                    ( items, keys )
-
-                else
-                    ( item :: items, Set.insert (toComparable item) keys )
-            )
-            ( [], Set.empty )
-
-
-dateFmt : Time.Posix -> String
-dateFmt =
-    String.left 10
-        << Iso8601.fromTime
 
 
 view : Model -> Browser.Document Msg
@@ -410,22 +272,14 @@ dialog =
     H.node "dialog"
 
 
-accountsForBalances : List AccountOld
-accountsForBalances =
-    List.sortBy (\o -> o.name) <|
-        List.filter
-            (\o -> o.category == assets)
-            allAccounts_
-
-
-balanceCard : AccountOld -> Decimal -> Html Msg
-balanceCard account accountBalance =
+balanceCard : AccountBalanceRead -> Html Msg
+balanceCard { categoryName, accountName, accountBalance } =
     let
         colorAccent =
-            if account.category.name == "Assets" then
+            if categoryName == "Assets" then
                 "#3498db"
 
-            else if account.category.name == "Expenses" then
+            else if categoryName == "Expenses" then
                 "#e74c3c"
 
             else
@@ -433,9 +287,15 @@ balanceCard account accountBalance =
     in
     H.div
         [ HA.class "balance-card", HA.style "border-left-color" colorAccent ]
-        [ H.div [ HA.class "balance-card__category" ] [ H.text account.category.name ]
-        , H.div [ HA.class "balance-card__account" ] [ H.text account.name ]
-        , H.div [ HA.class "balance-card__amount" ] [ H.text (amountFmt accountBalance) ]
+        [ H.div [ HA.class "balance-card__category" ] [ H.text categoryName ]
+        , H.div [ HA.class "balance-card__account" ] [ H.text accountName ]
+        , H.div [ HA.class "balance-card__amount" ]
+            [ H.text <|
+                Utils.amountFmt2 <|
+                    { intPart = accountBalance // 100
+                    , decPart = modBy 100 accountBalance
+                    }
+            ]
         ]
 
 
@@ -505,7 +365,7 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
                         [ H.text (tx.fromAccountName ++ " → " ++ tx.toAccountName) ]
                     ]
                 , H.div [ HA.class "transaction-item__date" ]
-                    [ H.text (dateFmt <| Time.millisToPosix <| tx.dateUnix * 1000) ]
+                    [ H.text (Utils.dateFmtUnix tx.dateUnix) ]
                 , H.div [ HA.class amountClass ]
                     [ H.text (amountSign ++ tx.flow ++ "\u{00A0}€") ]
                 ]
@@ -525,7 +385,7 @@ viewLedgerLineSummary withRunningBalanceEntity =
     H.div [ HA.class "section" ]
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
-                [ H.h3 [] [ H.text "Transactions2 (from DB)" ]
+                [ H.h3 [] [ H.text "Transactions" ]
                 , H.button
                     [ HA.class "button button--primary"
                     , HE.onClick AddTransactionClicked
@@ -543,78 +403,48 @@ viewLedgerLineSummary withRunningBalanceEntity =
 
 viewHome : Model -> Html Msg
 viewHome model =
-    H.div [ HA.class "container" ]
-        [ H.div [ HA.class "section" ]
-            [ H.div [ HA.class "debug-info" ]
-                [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
-            ]
-        , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
-        , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
-        , H.div [ HA.class "section" ]
-            [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
-            , H.div [ HA.class "balances" ]
-                (List.map
-                    (\account ->
-                        balanceCard account (balance model.book account)
-                    )
-                    accountsForBalances
-                )
-            ]
-        , H.div []
-            [ H.h2 [] [ H.text "TEMP: testing frontend/backend code-gen interaction" ]
-            , case model.tempCategories of
-                Loading ->
-                    H.div []
-                        [ H.text "Loading categories..." ]
-
-                Failed ->
-                    H.div []
-                        [ H.text "Error loading categories." ]
-
-                Loaded categories ->
-                    H.div []
-                        [ H.text "Categories loaded."
-                        , H.ul []
-                            (List.map
-                                (\category ->
-                                    H.li []
-                                        [ H.text category.name ]
-                                )
-                                categories
+    case ( model.accounts, model.balances, model.ledger ) of
+        ( Loaded accounts, Loaded balances, Loaded ledger ) ->
+            H.div [ HA.class "container" ]
+                [ H.div [ HA.class "section" ]
+                    [ H.div [ HA.class "debug-info" ]
+                        [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
+                    ]
+                , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
+                , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
+                , H.div [ HA.class "section" ]
+                    [ H.h2 [ HA.class "section-title" ] [ H.text "Balances" ]
+                    , H.div [ HA.class "balances" ]
+                        (List.map
+                            (\balance_ ->
+                                balanceCard balance_
                             )
-                        ]
-            ]
-        , case model.book2 of
-            Loading ->
-                H.text "Loading transactions..."
+                            balances
+                        )
+                    ]
+                , viewLedgerLineSummary ledger
+                , case model.dialog of
+                    Nothing ->
+                        H.text ""
 
-            Failed ->
-                H.text "Error loading transactions."
+                    Just (EditDialog data) ->
+                        viewEditDialog accounts data
 
-            Loaded withRunningBalanceEntity ->
-                viewLedgerLineSummary withRunningBalanceEntity
-        , case model.dialog of
-            Nothing ->
-                H.text ""
+                    Just (CreateDialog data) ->
+                        viewCreateDialog accounts data
+                ]
 
-            Just (EditDialog data) ->
-                case model.accounts of
-                    Loaded allAccounts2 ->
-                        viewEditDialog allAccounts2 data
+        ( Loaded _, _, _ ) ->
+            H.text "Loading accounts..."
 
-                    _ ->
-                        -- FIXME: that doesn't feel right
-                        H.text "??"
+        ( _, Loaded _, _ ) ->
+            H.text "Loading balances..."
 
-            Just (CreateDialog data) ->
-                case model.accounts of
-                    Loaded allAccounts2 ->
-                        viewCreateDialog allAccounts2 data
+        ( _, _, Loaded _ ) ->
+            H.text "Loading ledger..."
 
-                    _ ->
-                        -- FIXME: that doesn't feel right
-                        H.text "??"
-        ]
+        _ ->
+            H.text "Error loading data."
 
 
 viewEditDialog : List AccountRead -> MkEditDialog -> Html Msg
@@ -814,7 +644,7 @@ dateField { text, date, showTime, onDateInput, onToggleTime } =
             [ HA.class "field__input"
             , HA.id fieldId
             , HA.type_ inputType
-            , HA.value <| formatDateForInput date showTime
+            , HA.value <| Utils.formatDateForInput date showTime
             , HE.onInput
                 (onDateInput
                     << Debug.log "wat"
@@ -901,67 +731,17 @@ type alias Flags =
 
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
-    let
-        v : String -> Decimal
-        v =
-            Maybe.withDefault zero << Decimal.fromString
-
-        book : Dict Int TransactionOld
-        book =
-            Dict.fromList
-                [ ( 1
-                  , { date = onDay 0
-                    , descr = "Opening balance"
-                    , from = openingBalance
-                    , to = checkingAccount
-                    , amount = v "1000.00"
-                    }
-                  )
-                , ( 2
-                  , { date = onDay 1
-                    , descr = "Groceries"
-                    , from = checkingAccount
-                    , to = spar
-                    , amount = v "9.99"
-                    }
-                  )
-                , ( 3
-                  , { date = onDay 2
-                    , descr = "Book purchase"
-                    , from = checkingAccount
-                    , to = amazon
-                    , amount = v "54.99"
-                    }
-                  )
-                , ( 4
-                  , { date = onDay 3
-                    , descr = "Groceries, again"
-                    , from = checkingAccount
-                    , to = spar
-                    , amount = v "37.42"
-                    }
-                  )
-                , ( 5
-                  , { date = onDay 4
-                    , descr = "Salary"
-                    , from = employerABC
-                    , to = checkingAccount
-                    , amount = v "100.00"
-                    }
-                  )
-                ]
-    in
     ( { key = key
       , url = url
       , route = Route.fromUrl url
       , now = Time.millisToPosix 0
       , zone = Time.utc
-      , book = book
-      , book2 = Loading
+      , ledger = Loading
       , dialog = Nothing
       , isDarkTheme = False
-      , tempCategories = Loading
+      , categories = Loading
       , accounts = Loading
+      , balances = Loading
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
@@ -969,6 +749,7 @@ init () url key =
         , fetchCategories
         , fetchLedgerLineSummary
         , fetchAccounts
+        , fetchBalances
         ]
     )
 
@@ -984,15 +765,27 @@ simulateResponse =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotLedgerLineSummary result ->
+        GotBalances result ->
             case result of
-                Ok withRunningBalanceEntity ->
-                    ( { model | book2 = Loaded withRunningBalanceEntity }
+                Ok balances ->
+                    ( { model | balances = Loaded balances }
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | book2 = Failed }
+                    ( { model | balances = Failed }
+                    , Cmd.none
+                    )
+
+        GotLedgerLineSummary result ->
+            case result of
+                Ok withRunningBalanceEntity ->
+                    ( { model | ledger = Loaded withRunningBalanceEntity }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( { model | ledger = Failed }
                     , Cmd.none
                     )
 
@@ -1011,12 +804,12 @@ update msg model =
         GotCategories result ->
             case result of
                 Ok categories ->
-                    ( { model | tempCategories = Loaded categories }
+                    ( { model | categories = Loaded categories }
                     , Cmd.none
                     )
 
                 Err _ ->
-                    ( { model | tempCategories = Failed }
+                    ( { model | categories = Failed }
                     , Cmd.none
                     )
 
@@ -1086,46 +879,7 @@ update msg model =
                             )
 
                         EditDialogSave ->
-                            let
-                                newBook : Dict Int TransactionOld
-                                newBook =
-                                    Dict.update
-                                        data.transactionId
-                                        (\mbOld ->
-                                            mbOld
-                                                |> Maybe.andThen
-                                                    (\old ->
-                                                        let
-                                                            fromAccount =
-                                                                -- Dict.get data.from allAccounts
-                                                                --     |> Maybe.withDefault old.from
-                                                                Debug.todo "fromAccount"
-
-                                                            toAccount =
-                                                                -- Dict.get data.to allAccounts
-                                                                --     |> Maybe.withDefault old.to
-                                                                Debug.todo "toAccount"
-                                                        in
-                                                        Just
-                                                            { old
-                                                                | descr = data.descr
-                                                                , from = fromAccount
-                                                                , to = toAccount
-                                                                , amount =
-                                                                    Maybe.withDefault
-                                                                        old.amount
-                                                                        (Decimal.fromString data.amount)
-                                                                , date = data.date
-                                                            }
-                                                    )
-                                        )
-                                        model.book
-                            in
-                            ( { model
-                                | book = newBook
-
-                                -- , dialog = Nothing
-                              }
+                            ( model
                             , Cmd.batch
                                 [ --closeDialog ()
                                   --   Task.attempt
@@ -1136,7 +890,7 @@ update msg model =
                                     transactionWrite =
                                         { fromAccountId = data.fromAccountId
                                         , toAccountId = data.toAccountId
-                                        , dateUnix = Time.posixToMillis data.date
+                                        , dateUnix = Time.posixToMillis data.date // 1000
                                         , descr = data.descr
                                         , cents =
                                             String.toInt data.amount
@@ -1326,7 +1080,7 @@ handleEditDialog ( transactionId, tx ) model =
             , fromAccountId = tx.fromAccountId
             , toAccountId = tx.toAccountId
             , amount = String.fromInt tx.cents
-            , date = Time.millisToPosix tx.dateUnix
+            , date = Time.millisToPosix (tx.dateUnix * 1000)
             , descr = tx.descr
             , showTime = True -- FIXME: observe the unix ts trailing info
             }

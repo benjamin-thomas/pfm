@@ -73,7 +73,6 @@ getLedgerViewRows (MkAccountId accountId) conn = do
   query
     conn
     sql
-    (accountId, accountId, accountId) ::
-    IO [LedgerViewRow]
+    (accountId, accountId, accountId)
  where
   sql = Query (decodeUtf8 $(embedFile "app/DB/LedgerView/getLedgerViewRows.sql"))

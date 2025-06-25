@@ -1,11 +1,15 @@
 module Utils exposing
     ( amountFmt
+    , amountFmt2
+    , dateFmt
+    , dateFmtUnix
     , formatDate
     , formatDateForInput
     , formatDateTimeLocal
     )
 
 import Decimal exposing (Decimal)
+import Iso8601
 import Time
 
 
@@ -24,6 +28,14 @@ amountFmt amount =
                     "IMPOSSIBLE"
     in
     str ++ "\u{00A0}€"
+
+
+amountFmt2 : { intPart : Int, decPart : Int } -> String
+amountFmt2 { intPart, decPart } =
+    String.fromInt intPart
+        ++ "."
+        ++ String.padRight 2 '0' (String.fromInt decPart)
+        ++ "\u{00A0}€"
 
 
 formatDate : Time.Posix -> String
@@ -171,3 +183,28 @@ formatDateTimeLocal zone time =
             String.padLeft 2 '0' (String.fromInt (Time.toSecond zone time))
     in
     year ++ "-" ++ month ++ "-" ++ day ++ "T" ++ hour ++ ":" ++ minute ++ ":" ++ seconds
+
+
+dateFmt : Time.Posix -> String
+dateFmt =
+    String.left 10
+        << Iso8601.fromTime
+
+
+dateFmtUnix : Int -> String
+dateFmtUnix dateUnix =
+    dateFmt <| Time.millisToPosix <| dateUnix * 1000
+
+
+
+-- uniqueBy : (a -> comparable) -> List a -> List a
+-- uniqueBy toComparable =
+--     Tuple.first
+--         << List.foldl
+--             (\item ( items, keys ) ->
+--                 if Set.member (toComparable item) keys then
+--                     ( items, keys )
+--                 else
+--                     ( item :: items, Set.insert (toComparable item) keys )
+--             )
+--             ( [], Set.empty )

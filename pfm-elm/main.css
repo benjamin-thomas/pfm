@@ -295,6 +295,7 @@ a:hover {
     font-weight: 600;
     text-align: right;
     align-self: center;
+    min-width: 100px;
 }
 
 .transaction-item__amount--positive {

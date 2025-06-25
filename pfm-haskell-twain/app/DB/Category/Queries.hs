@@ -13,9 +13,9 @@ import Data.Text.Encoding (decodeUtf8)
 import Database.SQLite.Simple
   ( Connection
   , FromRow (fromRow)
+  , Query (Query)
   , field
   , query_
-  , Query(Query)
   )
 
 data CategoryRow = MkCategoryRow

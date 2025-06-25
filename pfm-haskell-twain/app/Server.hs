@@ -114,10 +114,27 @@ handleAccounts conn = do
     let accounts_ = map AccountRead.fromAccountRow accountRows
     Twain.send $ Twain.json accounts_
 
+-- http :8080/accounts/2/balance
+handleAccountsBalance :: Connection -> Twain.ResponderM ()
+handleAccountsBalance conn = do
+    accountId :: Int <- Twain.param "id"
+    balance <- liftIO $ AccountQueries.getBalance accountId conn
+    Twain.send $ Twain.json balance
+
+-- http :8080/accounts/balances accountIds==2,3,4
+handleAccountsBalances :: Connection -> Twain.ResponderM ()
+handleAccountsBalances conn = do
+    accountIds :: [Int] <- Twain.queryParam "accountIds"
+    balanceRows <- liftIO $ AccountQueries.getBalances accountIds conn
+    let balances = map AccountRead.toAccountBalanceRead balanceRows
+    Twain.send $ Twain.json balances
+
 routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi"
     , Twain.get "/accounts" $ handleAccounts conn
+    , Twain.get "/accounts/:id/balance" $ handleAccountsBalance conn
+    , Twain.get "/accounts/balances" $ handleAccountsBalances conn
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn

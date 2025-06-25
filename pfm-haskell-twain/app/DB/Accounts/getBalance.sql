@@ -1,0 +1,1 @@
+SELECT SUM(cents) FROM transactions WHERE from_account_id = ?
