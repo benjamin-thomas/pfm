@@ -527,12 +527,96 @@ dialog.transaction::backdrop {
     padding: var(--space-xl);
 }
 
-.dialog-title {
-    margin-top: 0;
+.dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: var(--space-lg);
+}
+
+.dialog-title {
+    margin: 0;
     font-size: 20px;
     font-weight: 600;
     color: var(--color-text-bright);
+}
+
+.dialog-menu {
+    position: relative;
+}
+
+.menu-button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.menu-button:hover {
+    background-color: var(--color-hover);
+}
+
+.menu-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background-color: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    min-width: 150px;
+    z-index: 10;
+    display: none;
+}
+
+.dark-theme .menu-dropdown {
+    background-color: #252525;
+    border-color: #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-menu:hover .menu-dropdown {
+    display: block;
+}
+
+.menu-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    color: var(--color-text);
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.dark-theme .menu-item {
+    color: #e0e0e0;
+}
+
+.menu-item--disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.menu-item--disabled:hover {
+    background-color: transparent;
+}
+
+.dark-theme .menu-item--disabled:hover {
+    background-color: transparent;
+}
+
+.menu-item:hover {
+    background-color: var(--color-hover);
+}
+
+.dark-theme .menu-item:hover {
+    background-color: #333;
 }
 
 .field {

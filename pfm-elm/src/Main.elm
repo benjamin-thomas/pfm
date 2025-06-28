@@ -500,7 +500,20 @@ viewEditDialog allAccounts2 data =
         , HA.class "transaction"
         ]
         [ H.div [ HA.class "dialog-content" ]
-            [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
+            [ H.div [ HA.class "dialog-header" ]
+                [ H.h3 [ HA.class "dialog-title" ] [ H.text "Edit Transaction" ]
+                , H.div [ HA.class "dialog-menu" ]
+                    [ H.button
+                        [ HA.class "menu-button"
+                        , HA.attribute "aria-label" "More options"
+                        ]
+                        [ H.text "⋮" ]
+                    , H.div [ HA.class "menu-dropdown" ]
+                        [ H.button [ HA.class "menu-item" ] [ H.text "Delete" ]
+                        , H.button [ HA.class "menu-item menu-item--disabled" ] [ H.text "Duplicate" ]
+                        ]
+                    ]
+                ]
             , makeTextField
                 { text = "Description"
                 , value = data.descr
