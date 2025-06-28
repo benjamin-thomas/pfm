@@ -120,6 +120,19 @@ putTransaction ( transactionId, transaction ) =
         }
 
 
+deleteTransaction : { transactionId : Int } -> Cmd Msg
+deleteTransaction { transactionId } =
+    Http.request
+        { method = "DELETE"
+        , headers = []
+        , url = "http://localhost:8080/transactions/" ++ String.fromInt transactionId
+        , body = Http.emptyBody
+        , expect = Http.expectWhatever (EditDialogChanged << GotDeleteResponse)
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
 type alias MkEditDialog =
     { transactionId : Int
     , fromAccountId : Int
@@ -187,6 +200,8 @@ type MkEditDialogChanged
     | EditToggleTimeDisplay
     | EditDialogSave
     | GotEditSaveResponse (Result Http.Error ())
+    | GotDeleteResponse (Result Http.Error ())
+    | DeleteTransactionBtnPressed { transactionId : Int }
 
 
 type MkCreateDialogChanged
@@ -509,7 +524,11 @@ viewEditDialog allAccounts2 data =
                         ]
                         [ H.text "⋮" ]
                     , H.div [ HA.class "menu-dropdown" ]
-                        [ H.button [ HA.class "menu-item" ] [ H.text "Delete" ]
+                        [ H.button
+                            [ HA.class "menu-item"
+                            , HE.onClick (EditDialogChanged <| DeleteTransactionBtnPressed { transactionId = data.transactionId })
+                            ]
+                            [ H.text "Delete" ]
                         , H.button [ HA.class "menu-item menu-item--disabled" ] [ H.text "Duplicate" ]
                         ]
                     ]
@@ -984,6 +1003,30 @@ update msg model =
                             )
 
                         GotEditSaveResponse result ->
+                            case result of
+                                Err _ ->
+                                    ( model
+                                      -- TODO: display toast error or similar
+                                    , Cmd.none
+                                    )
+
+                                Ok _ ->
+                                    ( { model
+                                        | dialog = Nothing
+                                        , data = loadingData
+                                      }
+                                    , Cmd.batch
+                                        [ closeDialog ()
+                                        , fetchData
+                                        ]
+                                    )
+
+                        DeleteTransactionBtnPressed params ->
+                            ( model
+                            , deleteTransaction params
+                            )
+
+                        GotDeleteResponse result ->
                             case result of
                                 Err _ ->
                                     ( model
