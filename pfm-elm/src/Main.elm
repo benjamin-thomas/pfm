@@ -619,6 +619,7 @@ makeTextField { text, value, onInput, autofocus } =
         , H.input
             (List.filterMap identity
                 [ Just <| HA.type_ "text"
+                , Just <| HA.autocomplete False
                 , Just <| HA.id fieldId
                 , Just <| HA.class "field__input"
                 , Just <| HA.value value
