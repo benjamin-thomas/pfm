@@ -115,16 +115,26 @@ memoParser =
 ws :: Parser ()
 ws = CL.space space1 empty empty
 
+symbol :: Text -> Parser Text
+symbol txt = ws *> string txt <* ws
+
+untilNewLine :: Parser [Token Text]
+untilNewLine =
+  manyTill anySingle "\n"
+
+ignoreWs :: Parser a -> Parser a
+ignoreWs p = ws *> p <* ws
+
 statementTransactionParser :: Parser StatementTransaction
 statementTransactionParser = do
-  _ <- ws *> string "<STMTTRN>" <* ws
-  _ <- ws *> string "<TRNTYPE>" <* manyTill anySingle "\n"
-  dtPosted <- ws *> parseDtPosted <* ws
-  amount <- ws *> transactionAmountParser <* ws
-  fitId <- ws *> fitIdParser <* ws
-  name <- ws *> nameParser <* ws
-  memo <- ws *> memoParser <* ws
-  _ <- ws *> string "</STMTTRN>" <* ws
+  _ <- symbol "<STMTTRN>"
+  _ <- symbol "<TRNTYPE>" <* untilNewLine
+  dtPosted <- ignoreWs parseDtPosted
+  amount <- ignoreWs transactionAmountParser
+  fitId <- ignoreWs fitIdParser
+  name <- ignoreWs nameParser
+  memo <- ignoreWs memoParser
+  _ <- symbol "</STMTTRN>"
   pure $
     MkStatementTransaction
       { stPosted = dtPosted

@@ -113,11 +113,20 @@ fitIdSpec = describe "FITID" $ do
             "123-ABC"
 
 statementTransactionParserSpec :: Spec
-statementTransactionParserSpec =
+statementTransactionParserSpec = do
     it "parses a full statement" $ do
         shouldParse
             OfxParser.statementTransactionParser
-            fullStatement
+            [r|
+              <STMTTRN>
+                <TRNTYPE>DEBIT
+                <DTPOSTED>20120103120000.000
+                <TRNAMT>-49.95
+                <FITID>123-ABC
+                <NAME>PLANET BEACH AL001
+                <MEMO>RECUR DEBIT CRD PMT0
+              </STMTTRN>
+            |]
             ( MkStatementTransaction
                 { stPosted =
                     OfxParser.FullDate
@@ -131,18 +140,48 @@ statementTransactionParserSpec =
                 , stMemo = "RECUR DEBIT CRD PMT0"
                 }
             )
-  where
-    fullStatement =
-        [r|
-<STMTTRN>
-  <TRNTYPE>DEBIT
-  <DTPOSTED>20120103120000.000
-  <TRNAMT>-49.95
-  <FITID>123-ABC
-  <NAME>PLANET BEACH AL001
-  <MEMO>RECUR DEBIT CRD PMT0
-</STMTTRN>
-|]
+    it "parses two full statement" $ do
+        shouldParse
+            (P.many OfxParser.statementTransactionParser)
+            [r|
+              <STMTTRN>
+                <TRNTYPE>DEBIT
+                <DTPOSTED>20120103
+                <TRNAMT>-49.95
+                <FITID>123-ABC
+                <NAME>PLANET BEACH AL001
+                <MEMO>RECUR DEBIT CRD PMT0
+              </STMTTRN>
+              <STMTTRN>
+                <TRNTYPE>DEBIT
+                <DTPOSTED>20120104
+                <TRNAMT>-12.34
+                <FITID>124-DEF
+                <NAME>PLANET BEACH2 AL002
+                <MEMO>RECUR DEBIT CRD PMT1
+              </STMTTRN>
+            |]
+            [ MkStatementTransaction
+                { stPosted =
+                    OfxParser.ShortDate
+                        ( fromGregorian 2012 1 3
+                        )
+                , stAmount = Decimal 2 (-4995)
+                , stFitId = "123-ABC"
+                , stName = "PLANET BEACH AL001"
+                , stMemo = "RECUR DEBIT CRD PMT0"
+                }
+            , MkStatementTransaction
+                { stPosted =
+                    OfxParser.ShortDate
+                        ( fromGregorian 2012 1 4
+                        )
+                , stAmount = Decimal 2 (-1234)
+                , stFitId = "124-DEF"
+                , stName = "PLANET BEACH2 AL002"
+                , stMemo = "RECUR DEBIT CRD PMT1"
+                }
+            ]
 
 ofxParserSpec :: Spec
 ofxParserSpec = describe "OfxParser" $ do
