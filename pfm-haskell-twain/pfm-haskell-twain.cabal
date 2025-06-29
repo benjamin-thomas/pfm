@@ -21,8 +21,19 @@ executable pfm-haskell-twain
     import:           warnings
     import:           extensions
     main-is:          Main.hs
-    other-modules:    Server
-                    , ElmExport
+    build-depends:    base ^>=4.18.3.0
+                    , pfm-haskell-twain-lib
+
+    hs-source-dirs:   app
+    default-language: Haskell2010
+
+library pfm-haskell-twain-lib
+    import:           warnings
+    import:           extensions
+    hs-source-dirs:   src
+    exposed-modules:  ElmExport
+                    , OfxParser
+                    , Server
                     , DB.User.Queries
                     , DB.Category.Queries
                     , DB.LedgerView.Queries
@@ -35,33 +46,22 @@ executable pfm-haskell-twain
                     , DTO.Category
                     , DTO.Ledger
     build-depends:    base ^>=4.18.3.0
-                    , text
-                    , bytestring
-                    , twain
-                    , warp
-                    , wai-extra
-                    , http-types
-                    , sqlite-simple
                     , aeson
-                    , raw-strings-qq
-                    , time
+                    , bytestring
+                    , Decimal
                     , elm-street
                     , file-embed
-
-    hs-source-dirs:   app
-    default-language: Haskell2010
-
-library pfm-haskell-twain-lib
-    import:           warnings
-    import:           extensions
-    hs-source-dirs:   src
-    build-depends:    base ^>=4.18.3.0
+                    , http-types
                     , megaparsec
+                    , raw-strings-qq
+                    , sqlite-simple
                     , text
                     , time
-                    , Decimal
-    exposed-modules:  Hello
-                    , OfxParser
+                    , twain
+                    , wai-extra
+                    , warp
+
+
     default-language: Haskell2010
 
 
@@ -73,10 +73,10 @@ test-suite pfm-haskell-twain-test
     main-is:          Spec.hs
     build-depends:    base ^>=4.18.3.0
                     , pfm-haskell-twain-lib
-                    , hspec
-                    , megaparsec
                     , text
                     , time
+                    , megaparsec
+                    , hspec
                     , Decimal
                     , raw-strings-qq
     default-language: Haskell2010
@@ -89,7 +89,9 @@ test-suite test-dev
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test, src
     main-is:          Spec.hs
+    other-modules:    OfxParser
     build-depends:    base ^>=4.18.3.0
+                    -- test
                     , pfm-haskell-twain-lib
                     , text
                     , time
@@ -97,5 +99,20 @@ test-suite test-dev
                     , hspec
                     , Decimal
                     , raw-strings-qq
+                    -- lib
+                    , aeson
+                    , bytestring
+                    , Decimal
+                    , elm-street
+                    , file-embed
+                    , http-types
+                    , megaparsec
+                    , raw-strings-qq
+                    , sqlite-simple
+                    , text
+                    , time
+                    , twain
+                    , wai-extra
+                    , warp
     default-language: Haskell2010
 

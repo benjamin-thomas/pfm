@@ -37,10 +37,10 @@ instance FromRow CategoryRow where
 getCategories :: Connection -> IO [CategoryRow]
 getCategories conn = query_ conn sql :: IO [CategoryRow]
  where
-  sql = Query (decodeUtf8 $(embedFile "app/DB/Category/getAll.sql"))
+  sql = Query (decodeUtf8 $(embedFile "src/DB/Category/getAll.sql"))
 
 -- Get only categories that have been updated in the last 90 days
 getNonStaleCategories :: Connection -> IO [CategoryRow]
 getNonStaleCategories conn = query_ conn sql :: IO [CategoryRow]
  where
-  sql = Query (decodeUtf8 $(embedFile "app/DB/Category/getNonStale.sql"))
+  sql = Query (decodeUtf8 $(embedFile "src/DB/Category/getNonStale.sql"))

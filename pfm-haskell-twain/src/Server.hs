@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Server (runServer) where
+module Server (runServer, newConn) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Accounts.Queries qualified as AccountQueries
@@ -20,7 +20,7 @@ import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text qualified as T
-import Database.SQLite.Simple (Connection, open)
+import Database.SQLite.Simple (Connection, open, execute_)
 import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
@@ -185,3 +185,23 @@ runServer port = do
             , "http://localhost:" <> show port
             ]
     run port $ mkApp conn
+
+
+
+{-
+
+Temporary, for GHCi exploration.
+
+cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple
+
+ghci> :m +Database.Category Domain.Category
+ghci> categories <- getCategories =<< newConn
+ghci> map fmtCategory categories
+ghci> mapM isStale categories
+
+ -}
+newConn :: IO Connection
+newConn = do
+    conn <- open "./db.sqlite3"
+    execute_ conn "PRAGMA foreign_keys = ON"
+    pure conn

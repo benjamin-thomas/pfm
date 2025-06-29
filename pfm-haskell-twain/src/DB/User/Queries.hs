@@ -8,15 +8,15 @@ module DB.User.Queries
     , getNewPlatformUserRows
     ) where
 
-import Data.Text
 import Data.FileEmbed (embedFile)
+import Data.Text
 import Data.Text.Encoding (decodeUtf8)
 import Database.SQLite.Simple
     ( Connection
     , FromRow (fromRow)
+    , Query (Query)
     , field
     , query_
-    , Query(Query)
     )
 
 data UserRow = MkUserRow
@@ -52,10 +52,10 @@ ghci> newConn >>= getAllUserRows
 getAllUserRows :: Connection -> IO [UserRow]
 getAllUserRows conn = query_ conn sql :: IO [UserRow]
   where
-    sql = Query (decodeUtf8 $(embedFile "app/DB/User/getAll.sql"))
+    sql = Query (decodeUtf8 $(embedFile "src/DB/User/getAll.sql"))
 
 -- Get only users who joined after June 1, 2025 (new platform users)
 getNewPlatformUserRows :: Connection -> IO [UserRow]
 getNewPlatformUserRows conn = query_ conn sql :: IO [UserRow]
   where
-    sql = Query (decodeUtf8 $(embedFile "app/DB/User/getNewPlatformUsers.sql"))
+    sql = Query (decodeUtf8 $(embedFile "src/DB/User/getNewPlatformUsers.sql"))

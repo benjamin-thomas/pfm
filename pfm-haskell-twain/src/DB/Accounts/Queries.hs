@@ -32,7 +32,7 @@ ghci> newConn >>= getAll >>= mapM_ print
 
  -}
 getAll :: Connection -> IO [AccountReadRow]
-getAll conn = query_ conn $ Query $ decodeUtf8 $(embedFile "app/DB/Accounts/getAll.sql")
+getAll conn = query_ conn $ Query $ decodeUtf8 $(embedFile "src/DB/Accounts/getAll.sql")
 
 {-
 
@@ -47,7 +47,7 @@ getBalance accountId' conn = do
         [Only balance] -> pure balance
         _ -> pure 0
   where
-    sql = Query (decodeUtf8 $(embedFile "app/DB/Accounts/getBalance.sql"))
+    sql = Query (decodeUtf8 $(embedFile "src/DB/Accounts/getBalance.sql"))
 
 -- instance FromRow (AccountReadRow, Int) where
 --     fromRow =
@@ -74,4 +74,4 @@ getBalances accountIds conn = do
         let questions = intersperse ',' (map (const '?') accountIds)
          in Query
                 . T.replace "__QUESTIONS__" (T.pack questions)
-                $ decodeUtf8 $(embedFile "app/DB/Accounts/getBalances.sql")
+                $ decodeUtf8 $(embedFile "src/DB/Accounts/getBalances.sql")

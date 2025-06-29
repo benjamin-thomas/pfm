@@ -23,7 +23,7 @@ insertTransaction :: Connection -> TransactionNewRow -> IO ()
 insertTransaction conn =
   execute conn $
     Query $
-      decodeUtf8 $(embedFile "app/DB/Transactions/insert.sql")
+      decodeUtf8 $(embedFile "src/DB/Transactions/insert.sql")
 
 -- instance ToRow (Int, TransactionNewRow) where
 --   toRow (transactionId, newRow) =
@@ -39,13 +39,13 @@ insertTransaction conn =
 -- updateTransaction conn =
 --   execute conn $
 --     Query $
---       decodeUtf8 $(embedFile "app/DB/Transactions/update.sql")
+--       decodeUtf8 $(embedFile "src/DB/Transactions/update.sql")
 
 updateTransaction :: Connection -> (Int, TransactionNewRow) -> IO ()
 updateTransaction conn (transactionId, newRow) =
   execute
     conn
-    (Query $ decodeUtf8 $(embedFile "app/DB/Transactions/update.sql"))
+    (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/update.sql"))
     ( fromAccountId newRow
     , toAccountId newRow
     , date newRow
@@ -58,5 +58,5 @@ deleteTransaction :: Connection -> Int -> IO ()
 deleteTransaction conn transactionId =
   execute
     conn
-    (Query $ decodeUtf8 $(embedFile "app/DB/Transactions/delete.sql"))
+    (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/delete.sql"))
     (Only transactionId)

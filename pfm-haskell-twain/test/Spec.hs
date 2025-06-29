@@ -5,7 +5,6 @@ import Text.RawString.QQ
 
 import Data.Decimal (DecimalRaw (Decimal))
 import Data.Time
-import Hello qualified
 import OfxParser
     ( StatementTransaction
         ( MkStatementTransaction
@@ -38,11 +37,6 @@ $ ghcid -c "cabal repl test:test-dev" -T ":main" -W
 
  -}
 {- FOURMOLU_ENABLE -}
-
-helloSpec :: Spec
-helloSpec = describe "Hello" $ do
-    it "should return 'Hello, World!'" $ do
-        Hello.world `shouldBe` "Hello, World!"
 
 -- | `shouldParse` executes a parser, and returns a pretty error if it fails
 shouldParse :: (P.VisualStream s, P.TraversableStream s, P.ShowErrorComponent e, Show a, Eq a) => P.Parsec e s a -> s -> a -> IO ()
@@ -192,5 +186,4 @@ ofxParserSpec = describe "OfxParser" $ do
 
 main :: IO ()
 main = hspec $ do
-    helloSpec
     ofxParserSpec
