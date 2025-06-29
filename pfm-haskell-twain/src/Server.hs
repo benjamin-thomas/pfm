@@ -1,7 +1,9 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Server (runServer) where
@@ -19,13 +21,26 @@ import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Decimal (decimalMantissa, decimalPlaces)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Database.SQLite.Simple (Connection, execute_, open)
+import Data.Time (UTCTime (..), secondsToDiffTime)
+import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Database.SQLite.Simple (Connection, execute_, open, withTransaction)
 import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import OfxParser (ofxParser)
+import OfxParser
+    ( StatementTransaction
+        ( stAmount
+        , stName
+        , stPosted
+        )
+    , TimeStamp (FullDate, ShortDate)
+    , ofxParser
+    )
+import System.Exit (ExitCode (ExitFailure, ExitSuccess), exitFailure)
+import System.Process (system)
 import Text.Megaparsec qualified as P
 import Text.Pretty.Simple (pPrint)
 import Text.Read (readMaybe)
@@ -208,11 +223,51 @@ _newConn = do
     execute_ conn "PRAGMA foreign_keys = ON"
     pure conn
 
+yellow :: String
+yellow = "\x1b[33m"
+
+green :: String
+green = "\x1b[32m"
+
+reset :: String
+reset = "\x1b[0m"
+
+fromOfxTransaction :: StatementTransaction -> TransactionNewRow
+fromOfxTransaction tx
+    | stAmount tx == 0 = error "Amount is 0" -- programming error, DB constraint will prevent this row from being inserted.
+    | decimalPlaces (stAmount tx) /= 2 = error "Amount has more than 2 decimal places"
+    | otherwise =
+        let cents = decimalMantissa $ stAmount tx
+            checkingAccountId = 2
+            unknownIncomeAccountId = 9
+            unknownExpenseAccountId = 10
+         in MkTransactionNewRow
+                { fromAccountId = if stAmount tx < 0 then checkingAccountId else unknownIncomeAccountId
+                , toAccountId = if stAmount tx > 0 then checkingAccountId else unknownExpenseAccountId
+                , date = case stPosted tx of
+                    FullDate tsDate -> truncate $ utcTimeToPOSIXSeconds tsDate
+                    ShortDate day -> truncate $ utcTimeToPOSIXSeconds $ UTCTime day (secondsToDiffTime 0)
+                , descr = T.unpack $ stName tx
+                , cents = fromIntegral $ abs cents
+                }
+
 _wip :: IO ()
 _wip = do
+    -- sqlite-simple doesn't appear to handle multiple instructions so let's
+    -- just shell out for now.
+    putStrLn $ yellow <> "== Resetting the database" <> reset
+    let cmd = "cat sql/init.sql | sqlite3 ./db.sqlite3"
+    exitCode <- system cmd
+    case exitCode of
+        ExitSuccess -> putStrLn $ green <> "== Database reset" <> reset
+        ExitFailure code -> do
+            putStrLn $ "\x1b[31m== Database reset failed with code " <> show code <> reset
+            exitFailure
+    putStrLn ""
+
     let fileName = "CA20250628_165412.ofx" :: String
     ofxBS <- BSL.readFile (".tmp/" <> fileName)
-    let ofxText = TE.decodeLatin1 $ BSL.toStrict ofxBS
+    let ofxText = TE.decodeUtf8 $ BSL.toStrict ofxBS -- FIXME: handle decoding better
     let result = P.parse ofxParser fileName ofxText
     case result of
         Left e -> putStrLn $ P.errorBundlePretty e
@@ -220,3 +275,9 @@ _wip = do
             mapM_ pPrint transactions
             putStrLn $ "Parsed " <> show (length transactions) <> " transactions"
             putStrLn $ "Chars count: " <> show (T.length ofxText)
+            conn <- _newConn
+            withTransaction conn $ do
+                putStrLn $ yellow <> "== Truncating prior transactions" <> reset
+                deleteAllTransactions conn
+                mapM_ (insertTransaction conn . fromOfxTransaction) transactions
+                putStrLn $ green <> "== Transactions inserted" <> reset

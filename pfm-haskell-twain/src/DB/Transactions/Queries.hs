@@ -60,3 +60,10 @@ deleteTransaction conn transactionId =
     conn
     (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/delete.sql"))
     (Only transactionId)
+
+deleteAllTransactions :: Connection -> IO ()
+deleteAllTransactions conn =
+  execute
+    conn
+    (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/deleteAll.sql"))
+    ()

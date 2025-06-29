@@ -96,6 +96,8 @@ VALUES (1, 'OpeningBalance')      -- account_id = 1
      , (4, 'Spar')                -- account_id = 6
      , (4, 'Tesco')               -- account_id = 7
      , (4, 'Amazon')              -- account_id = 8
+     , (3, 'Unknown_INCOME')      -- account_id = 9
+     , (4, 'Unknown_EXPENSE')     -- account_id = 10
      ;
 
 /*
