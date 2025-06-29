@@ -4,6 +4,6 @@
     "dictionaryDefinitions": [],
     "dictionaries": [],
     "words": [],
-    "ignoreWords": [],
+    "ignoreWords": ["DTPOSTED", "TRNAMT"],
     "import": []
 }

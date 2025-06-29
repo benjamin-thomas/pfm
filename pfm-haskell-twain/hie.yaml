@@ -1,0 +1,11 @@
+# This file is required for hls to play nice with the "test-dev" ghcid workflow
+cradle:
+  cabal:
+    - path: "./app"
+      component: "exe:pfm-haskell-twain"
+
+    - path: "./src"
+      component: "test:test-dev"
+
+    - path: "./test"
+      component: "test:test-dev"

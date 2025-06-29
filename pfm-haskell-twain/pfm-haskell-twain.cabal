@@ -56,7 +56,12 @@ library pfm-haskell-twain-lib
     import:           extensions
     hs-source-dirs:   src
     build-depends:    base ^>=4.18.3.0
+                    , megaparsec
+                    , text
+                    , time
+                    , Decimal
     exposed-modules:  Hello
+                    , OfxParser
     default-language: Haskell2010
 
 
@@ -67,6 +72,28 @@ test-suite pfm-haskell-twain-test
     hs-source-dirs:   test
     main-is:          Spec.hs
     build-depends:    base ^>=4.18.3.0
-                    , hspec
                     , pfm-haskell-twain-lib
+                    , hspec
+                    , megaparsec
+                    , text
+                    , time
+                    , Decimal
     default-language: Haskell2010
+
+-- https://jade.fyi/blog/cabal-test-dev-trick/
+-- ghcid -c "cabal repl test:test-dev" -T :main
+test-suite test-dev
+    import:           warnings
+    import:           extensions
+    type:             exitcode-stdio-1.0
+    hs-source-dirs:   test, src
+    main-is:          Spec.hs
+    build-depends:    base ^>=4.18.3.0
+                    , pfm-haskell-twain-lib
+                    , text
+                    , time
+                    , megaparsec
+                    , hspec
+                    , Decimal
+    default-language: Haskell2010
+
