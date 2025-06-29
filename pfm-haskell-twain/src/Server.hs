@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Server (runServer, newConn) where
+module Server (runServer) where
 
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Accounts.Queries qualified as AccountQueries
@@ -20,10 +20,14 @@ import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text qualified as T
-import Database.SQLite.Simple (Connection, open, execute_)
+import Data.Text.Encoding qualified as TE
+import Database.SQLite.Simple (Connection, execute_, open)
 import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
+import OfxParser (ofxParser)
+import Text.Megaparsec qualified as P
+import Text.Pretty.Simple (pPrint)
 import Text.Read (readMaybe)
 import Web.Twain qualified as Twain
 
@@ -186,8 +190,6 @@ runServer port = do
             ]
     run port $ mkApp conn
 
-
-
 {-
 
 Temporary, for GHCi exploration.
@@ -195,13 +197,26 @@ Temporary, for GHCi exploration.
 cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple
 
 ghci> :m +Database.Category Domain.Category
-ghci> categories <- getCategories =<< newConn
+ghci> categories <- getCategories =<< _newConn
 ghci> map fmtCategory categories
 ghci> mapM isStale categories
 
  -}
-newConn :: IO Connection
-newConn = do
+_newConn :: IO Connection
+_newConn = do
     conn <- open "./db.sqlite3"
     execute_ conn "PRAGMA foreign_keys = ON"
     pure conn
+
+_wip :: IO ()
+_wip = do
+    let fileName = "CA20250628_165412.ofx" :: String
+    ofxBS <- BSL.readFile (".tmp/" <> fileName)
+    let ofxText = TE.decodeLatin1 $ BSL.toStrict ofxBS
+    let result = P.parse ofxParser fileName ofxText
+    case result of
+        Left e -> putStrLn $ P.errorBundlePretty e
+        Right transactions -> do
+            mapM_ pPrint transactions
+            putStrLn $ "Parsed " <> show (length transactions) <> " transactions"
+            putStrLn $ "Chars count: " <> show (T.length ofxText)

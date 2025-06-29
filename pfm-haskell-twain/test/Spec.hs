@@ -95,6 +95,11 @@ transactionAmountSpec = describe "TRNAMT" $ do
     it "parses a positive amount" $ do
         shouldParse
             OfxParser.transactionAmountParser
+            "<TRNAMT>+99.99"
+            (Decimal 2 9999)
+    it "parses a positive amount (implicitly positive)" $ do
+        shouldParse
+            OfxParser.transactionAmountParser
             "<TRNAMT>99.99"
             (Decimal 2 9999)
 

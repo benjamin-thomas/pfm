@@ -31,9 +31,9 @@ library pfm-haskell-twain-lib
     import:           warnings
     import:           extensions
     hs-source-dirs:   src
-    exposed-modules:  ElmExport
+    exposed-modules:  Server
+                    , ElmExport
                     , OfxParser
-                    , Server
                     , DB.User.Queries
                     , DB.Category.Queries
                     , DB.LedgerView.Queries
@@ -53,6 +53,7 @@ library pfm-haskell-twain-lib
                     , file-embed
                     , http-types
                     , megaparsec
+                    , pretty-simple
                     , raw-strings-qq
                     , sqlite-simple
                     , text
@@ -107,6 +108,7 @@ test-suite test-dev
                     , file-embed
                     , http-types
                     , megaparsec
+                    , pretty-simple
                     , raw-strings-qq
                     , sqlite-simple
                     , text

@@ -93,7 +93,7 @@ transactionAmountParser =
       scale = 10 ^ decimalPlaces
    in do
         _ <- symbol "<TRNAMT>"
-        isNeg <- (True <$ char '-') <|> pure False
+        isNeg <- (True <$ char '-') <|> (False <$ char '+') <|> pure False
         intPart <- read <$> many digitChar
         _ <- char '.'
         fracPart <- read <$> many digitChar
@@ -143,3 +143,9 @@ statementTransactionParser = do
       , stName = name
       , stMemo = memo
       }
+
+ofxParser :: Parser [StatementTransaction]
+ofxParser = do
+  _ <- manyTill anySingle "<OFX>" -- quick and dirty
+  _ <- manyTill anySingle (lookAhead (string "<STMTTRN>"))
+  many statementTransactionParser <* manyTill anySingle "</OFX>"
