@@ -1,9 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes #-}
+
+import Text.RawString.QQ
 
 import Data.Decimal (DecimalRaw (Decimal))
 import Data.Time
 import Hello qualified
-import OfxParser (TimeStamp (FullDate, ShortDate))
+import OfxParser
+    ( StatementTransaction
+        ( MkStatementTransaction
+        , stAmount
+        , stFitId
+        , stMemo
+        , stName
+        )
+    , TimeStamp (FullDate, ShortDate)
+    , stPosted
+    )
 import OfxParser qualified
 import Test.Hspec
 import Text.Megaparsec qualified as P
@@ -91,10 +104,52 @@ transactionAmountSpec = describe "TRNAMT" $ do
             "<TRNAMT>99.99"
             (Decimal 2 9999)
 
+fitIdSpec :: Spec
+fitIdSpec = describe "FITID" $ do
+    it "parses a FITID" $ do
+        shouldParse
+            OfxParser.fitIdParser
+            "<FITID>123-ABC"
+            "123-ABC"
+
+statementTransactionParserSpec :: Spec
+statementTransactionParserSpec =
+    it "parses a full statement" $ do
+        shouldParse
+            OfxParser.statementTransactionParser
+            fullStatement
+            ( MkStatementTransaction
+                { stPosted =
+                    OfxParser.FullDate
+                        ( UTCTime
+                            (fromGregorian 2012 1 3)
+                            43200.000
+                        )
+                , stAmount = Decimal 2 (-4995)
+                , stFitId = "123-ABC"
+                , stName = "PLANET BEACH AL001"
+                , stMemo = "RECUR DEBIT CRD PMT0"
+                }
+            )
+  where
+    fullStatement =
+        [r|
+<STMTTRN>
+  <TRNTYPE>DEBIT
+  <DTPOSTED>20120103120000.000
+  <TRNAMT>-49.95
+  <FITID>123-ABC
+  <NAME>PLANET BEACH AL001
+  <MEMO>RECUR DEBIT CRD PMT0
+</STMTTRN>
+|]
+
 ofxParserSpec :: Spec
 ofxParserSpec = describe "OfxParser" $ do
     datePostedSpec
     transactionAmountSpec
+    fitIdSpec
+    statementTransactionParserSpec
 
 main :: IO ()
 main = hspec $ do

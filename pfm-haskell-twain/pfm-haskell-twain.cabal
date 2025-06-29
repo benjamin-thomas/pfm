@@ -78,6 +78,7 @@ test-suite pfm-haskell-twain-test
                     , text
                     , time
                     , Decimal
+                    , raw-strings-qq
     default-language: Haskell2010
 
 -- https://jade.fyi/blog/cabal-test-dev-trick/
@@ -95,5 +96,6 @@ test-suite test-dev
                     , megaparsec
                     , hspec
                     , Decimal
+                    , raw-strings-qq
     default-language: Haskell2010
 

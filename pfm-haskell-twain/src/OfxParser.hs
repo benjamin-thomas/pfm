@@ -15,6 +15,7 @@ import Data.Time
 import Data.Void (Void)
 import Text.Megaparsec
 import Text.Megaparsec.Char
+import Text.Megaparsec.Char.Lexer qualified as CL
 
 type Parser = Parsec Void Text
 
@@ -35,12 +36,17 @@ type Parser = Parsec Void Text
 
 data StatementTransaction
   = MkStatementTransaction
-  { stPosted :: Text
-  , stAmount :: String
-  , stFitId :: String -- FinancialInstitutionTransactionId
-  , stName :: String
-  , stMemo :: String
+  { stPosted :: TimeStamp
+  , stAmount :: Decimal
+  , stFitId :: Text -- FinancialInstitutionTransactionId
+  , stName :: Text
+  , stMemo :: Text
   }
+  deriving (Show, Eq)
+
+tagValueParser :: Parser Text
+tagValueParser =
+  takeWhile1P Nothing (\c -> c /= '\n' && c /= '>')
 
 shortDateParser :: Parser Day
 shortDateParser = do
@@ -93,3 +99,37 @@ transactionAmountParser =
         fracPart <- read <$> many digitChar
         let cents = intPart * scale + fracPart
         pure $ Decimal decimalPlaces (if isNeg then -cents else cents)
+
+fitIdParser :: Parser Text
+fitIdParser =
+  string "<FITID>" *> tagValueParser
+
+nameParser :: Parser Text
+nameParser =
+  string "<NAME>" *> tagValueParser
+
+memoParser :: Parser Text
+memoParser =
+  string "<MEMO>" *> tagValueParser
+
+ws :: Parser ()
+ws = CL.space space1 empty empty
+
+statementTransactionParser :: Parser StatementTransaction
+statementTransactionParser = do
+  _ <- ws *> string "<STMTTRN>" <* ws
+  _ <- ws *> string "<TRNTYPE>" <* manyTill anySingle "\n"
+  dtPosted <- ws *> parseDtPosted <* ws
+  amount <- ws *> transactionAmountParser <* ws
+  fitId <- ws *> fitIdParser <* ws
+  name <- ws *> nameParser <* ws
+  memo <- ws *> memoParser <* ws
+  _ <- ws *> string "</STMTTRN>" <* ws
+  pure $
+    MkStatementTransaction
+      { stPosted = dtPosted
+      , stAmount = amount
+      , stFitId = fitId
+      , stName = name
+      , stMemo = memo
+      }

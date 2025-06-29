@@ -4,6 +4,12 @@
     "dictionaryDefinitions": [],
     "dictionaries": [],
     "words": [],
-    "ignoreWords": ["DTPOSTED", "TRNAMT"],
+    "ignoreWords": [
+        "DTPOSTED",
+        "TRNAMT",
+        "FITID",
+        "STMTTRN",
+        "TRNTYPE",
+    ],
     "import": []
 }
