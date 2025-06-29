@@ -84,7 +84,7 @@ data TimeStamp
 
 parseDtPosted :: Parser TimeStamp
 parseDtPosted = do
-  _ <- string "<DTPOSTED>"
+  _ <- symbol "<DTPOSTED>"
   try (FullDate <$> fullDateParser) <|> (ShortDate <$> shortDateParser)
 
 transactionAmountParser :: Parser Decimal
@@ -92,7 +92,7 @@ transactionAmountParser =
   let decimalPlaces = 2
       scale = 10 ^ decimalPlaces
    in do
-        _ <- string "<TRNAMT>"
+        _ <- symbol "<TRNAMT>"
         isNeg <- (True <$ char '-') <|> pure False
         intPart <- read <$> many digitChar
         _ <- char '.'
@@ -102,15 +102,15 @@ transactionAmountParser =
 
 fitIdParser :: Parser Text
 fitIdParser =
-  string "<FITID>" *> tagValueParser
+  symbol "<FITID>" *> tagValueParser
 
 nameParser :: Parser Text
 nameParser =
-  string "<NAME>" *> tagValueParser
+  symbol "<NAME>" *> tagValueParser
 
 memoParser :: Parser Text
 memoParser =
-  string "<MEMO>" *> tagValueParser
+  symbol "<MEMO>" *> tagValueParser
 
 ws :: Parser ()
 ws = CL.space space1 empty empty
@@ -129,11 +129,11 @@ statementTransactionParser :: Parser StatementTransaction
 statementTransactionParser = do
   _ <- symbol "<STMTTRN>"
   _ <- symbol "<TRNTYPE>" <* untilNewLine
-  dtPosted <- ignoreWs parseDtPosted
-  amount <- ignoreWs transactionAmountParser
-  fitId <- ignoreWs fitIdParser
-  name <- ignoreWs nameParser
-  memo <- ignoreWs memoParser
+  dtPosted <- parseDtPosted
+  amount <- transactionAmountParser
+  fitId <- fitIdParser
+  name <- nameParser
+  memo <- memoParser
   _ <- symbol "</STMTTRN>"
   pure $
     MkStatementTransaction
