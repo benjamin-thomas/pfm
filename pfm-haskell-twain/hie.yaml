@@ -9,3 +9,6 @@ cradle:
 
     - path: "./test"
       component: "test:test-dev"
+
+    - path: "./explore"
+      component: "lib:explore"

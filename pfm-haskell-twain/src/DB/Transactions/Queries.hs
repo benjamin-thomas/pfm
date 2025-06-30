@@ -13,17 +13,27 @@ import GHC.Generics
 data TransactionNewRow = MkTransactionNewRow
   { fromAccountId :: Int
   , toAccountId :: Int
+  , source :: Source
   , date :: Int
   , descr :: String
   , cents :: Int
   }
-  deriving (Generic, ToRow, FromRow)
+
+data Source = UI | OFX deriving (Show)
 
 insertTransaction :: Connection -> TransactionNewRow -> IO ()
-insertTransaction conn =
-  execute conn $
-    Query $
-      decodeUtf8 $(embedFile "src/DB/Transactions/insert.sql")
+insertTransaction conn newRow =
+  execute
+    conn
+    (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/insert.sql"))
+    ( fromAccountId newRow
+    , toAccountId newRow
+    , show $ source newRow
+    , date newRow
+    , descr newRow -- descr_orig
+    , descr newRow
+    , cents newRow
+    )
 
 -- instance ToRow (Int, TransactionNewRow) where
 --   toRow (transactionId, newRow) =

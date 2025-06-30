@@ -413,9 +413,14 @@ viewLedgerLines withRunningBalanceEntity =
                     [ H.text "Add Transaction" ]
                 ]
             , H.ul [ HA.class "transaction-list__items" ]
-                (List.map
-                    viewOneTransaction
-                    (withPriorBalance withRunningBalanceEntity)
+                (List.reverse
+                    -- FIXME: Compute the prior balance at the DB level.
+                    -- FIXME: That'll enable more flexibility reversing the rows order.
+                    -- FIXME: Or start the first row form the current balance, rather than 0€.
+                    (List.map
+                        viewOneTransaction
+                        (withPriorBalance withRunningBalanceEntity)
+                    )
                 )
             ]
         ]

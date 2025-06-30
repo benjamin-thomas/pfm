@@ -9,40 +9,10 @@ $ litecli ./db.sqlite3
 BEGIN TRANSACTION;
 
 DROP TABLE IF EXISTS transactions;
+DROP TABLE IF EXISTS sources;
 DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS categories;
 
--- TEMP/BOGUS START
-DROP TABLE IF EXISTS users; -- temp bogus table, just for testing stuff..
-CREATE TABLE users
-    ( user_id   INTEGER PRIMARY KEY
-    , first_name TEXT    NOT NULL
-    , last_name  TEXT    NOT NULL
-    , email     TEXT    NOT NULL
-    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    , CHECK (TRIM(first_name) <> '')
-    , CHECK (TRIM(last_name) <> '')
-    , CHECK (TRIM(email) <> '')
-    , UNIQUE (email)
-    , UNIQUE (first_name, last_name)
-    )
-    ;
-
-CREATE TRIGGER update_users_updated_at
-AFTER UPDATE ON users
-FOR EACH ROW
-BEGIN
-    UPDATE users
-    SET updated_at = strftime('%s', current_timestamp)
-    WHERE user_id = NEW.user_id;
-END;
-
-INSERT INTO users (first_name, last_name, email)
-VALUES ('John', 'Doe', 'john@example.com')
-     , ('Jane', 'Doe', 'jane@example.com')
-     ;
--- TEMP/BOGUS STOP
 
 -- In SQLite, a column with type INTEGER PRIMARY KEY is an alias for the ROWID (it auto-increments)
 CREATE TABLE categories
@@ -100,6 +70,28 @@ VALUES (1, 'OpeningBalance')      -- account_id = 1
      , (4, 'Unknown_EXPENSE')     -- account_id = 10
      ;
 
+CREATE TABLE sources
+    ( source_id  INTEGER PRIMARY KEY
+    , name       TEXT    NOT NULL UNIQUE CHECK (TRIM(name) <> '')
+    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    )
+    ;
+
+CREATE TRIGGER update_sources_updated_at
+AFTER UPDATE ON sources
+FOR EACH ROW
+BEGIN
+    UPDATE sources
+    SET updated_at = strftime('%s', current_timestamp)
+    WHERE source_id = NEW.source_id;
+END;
+
+INSERT INTO sources (name)
+VALUES ('OFX')
+     , ('UI')
+     ;
+
 /*
 SELECT * FROM account INNER JOIN category USING (category_id);
 */
@@ -108,7 +100,9 @@ CREATE TABLE transactions
     ( transaction_id  INTEGER        PRIMARY KEY
     , from_account_id INTEGER        NOT NULL REFERENCES accounts(account_id)
     , to_account_id   INTEGER        NOT NULL REFERENCES accounts(account_id)
+    , source_id       INTEGER        NOT NULL REFERENCES sources(source_id)
     , date            INTEGER        NOT NULL
+    , descr_orig      TEXT           NOT NULL -- will enable classifying if source=OFX
     , descr           TEXT           NOT NULL
     , cents           INTEGER        NOT NULL CHECK (cents > 0)
     , created_at      INTEGER        NOT NULL DEFAULT (strftime('%s', current_timestamp))
@@ -130,13 +124,14 @@ BEGIN
      WHERE transaction_id = NEW.transaction_id;
 END;
 
-INSERT INTO transactions (from_account_id, to_account_id, date, descr, cents)
-VALUES (1, 2, (SELECT strftime('%s', date(current_date, '+0 days'))), 'Opening balance', 100000) -- Opening balance to Checking account
-     , (2, 6, (SELECT strftime('%s', date(current_date, '+1 days'))), 'Groceries',          999) -- Checking account to Spar
-     , (2, 8, (SELECT strftime('%s', date(current_date, '+2 days'))), 'Book purchase',     5499) -- Checking account to Amazon
-     , (2, 6, (SELECT strftime('%s', date(current_date, '+3 days'))), 'Groceries, again',  3742) -- Checking account to Spar
-     , (4, 2, (SELECT strftime('%s', date(current_date, '+4 days'))), 'Salary',           10000) -- EmployerABC to Checking account
-     ;
+-- TEMP off, since I am now importing data from an OFX file directly
+-- INSERT INTO transactions (from_account_id, to_account_id, date, descr_orig, descr, cents)
+-- VALUES (1, 2, (SELECT strftime('%s', date(current_date, '+0 days'))), 'Opening balance',  'Opening balance', 100000) -- Opening balance to Checking account
+--      , (2, 6, (SELECT strftime('%s', date(current_date, '+1 days'))), 'Groceries',        'Groceries',          999) -- Checking account to Spar
+--      , (2, 8, (SELECT strftime('%s', date(current_date, '+2 days'))), 'Book purchase',    'Book purchase',     5499) -- Checking account to Amazon
+--      , (2, 6, (SELECT strftime('%s', date(current_date, '+3 days'))), 'Groceries, again', 'Groceries, again',  3742) -- Checking account to Spar
+--      , (4, 2, (SELECT strftime('%s', date(current_date, '+4 days'))), 'Salary',           'Salary',           10000) -- EmployerABC to Checking account
+--      ;
 
 /*
 

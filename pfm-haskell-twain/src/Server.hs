@@ -244,6 +244,7 @@ fromOfxTransaction tx
          in MkTransactionNewRow
                 { fromAccountId = if stAmount tx < 0 then checkingAccountId else unknownIncomeAccountId
                 , toAccountId = if stAmount tx > 0 then checkingAccountId else unknownExpenseAccountId
+                , source = OFX
                 , date = case stPosted tx of
                     FullDate tsDate -> truncate $ utcTimeToPOSIXSeconds tsDate
                     ShortDate day -> truncate $ utcTimeToPOSIXSeconds $ UTCTime day (secondsToDiffTime 0)
@@ -265,7 +266,7 @@ _wip = do
             exitFailure
     putStrLn ""
 
-    let fileName = "CA20250628_165412.ofx" :: String
+    let fileName = "CA20250630_124433.ofx" :: String
     ofxBS <- BSL.readFile (".tmp/" <> fileName)
     let ofxText = TE.decodeUtf8 $ BSL.toStrict ofxBS -- FIXME: handle decoding better
     let result = P.parse ofxParser fileName ofxText
