@@ -1,0 +1,21 @@
+# This file is required for hls to play nice with the "test-dev" ghcid workflow
+# Regenerate with `gen-hie`
+cradle:
+  cabal:
+    - path: "app/Main.hs"
+      component: "pfm-haskell-twain:exe:pfm-haskell-twain"
+
+    - path: "explore"
+      component: "pfm-haskell-twain:lib:explore"
+
+    - path: "src"
+      component: "pfm-haskell-twain:lib:pfm-haskell-twain-lib"
+
+    - path: "test"
+      component: "pfm-haskell-twain:test:pfm-haskell-twain-test"
+
+    # - path: "test"
+    #   component: "pfm-haskell-twain:test:test-dev"
+
+    # - path: "src"
+    #   component: "pfm-haskell-twain:test:test-dev"

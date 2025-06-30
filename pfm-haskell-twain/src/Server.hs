@@ -1,9 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DerivingVia #-}
 {-# LANGUAGE DuplicateRecordFields #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Server (runServer) where
@@ -22,6 +20,7 @@ import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Decimal (decimalMantissa, decimalPlaces)
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime (..), secondsToDiffTime)
@@ -31,13 +30,15 @@ import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import OfxParser
-    ( StatementTransaction
+    ( OfxBatch (MkOfxBatch)
+    , StatementTransaction
         ( stAmount
         , stName
         , stPosted
         )
     , TimeStamp (FullDate, ShortDate)
     , ofxParser
+    , stFitId
     )
 import System.Exit (ExitCode (ExitFailure, ExitSuccess), exitFailure)
 import System.Process (system)
@@ -232,8 +233,10 @@ green = "\x1b[32m"
 reset :: String
 reset = "\x1b[0m"
 
-fromOfxTransaction :: StatementTransaction -> TransactionNewRow
-fromOfxTransaction tx
+newtype AccountNumber = MkAccountNumber Text deriving (Show)
+
+fromOfxTransaction :: AccountNumber -> StatementTransaction -> TransactionNewRow
+fromOfxTransaction (MkAccountNumber accountNumber) tx
     | stAmount tx == 0 = error "Amount is 0" -- programming error, DB constraint will prevent this row from being inserted.
     | decimalPlaces (stAmount tx) /= 2 = error "Amount has more than 2 decimal places"
     | otherwise =
@@ -244,7 +247,8 @@ fromOfxTransaction tx
          in MkTransactionNewRow
                 { fromAccountId = if stAmount tx < 0 then checkingAccountId else unknownIncomeAccountId
                 , toAccountId = if stAmount tx > 0 then checkingAccountId else unknownExpenseAccountId
-                , source = OFX
+                , uniqueFitId =
+                    Just . MkUniqueFitId $ accountNumber <> ":" <> stFitId tx
                 , date = case stPosted tx of
                     FullDate tsDate -> truncate $ utcTimeToPOSIXSeconds tsDate
                     ShortDate day -> truncate $ utcTimeToPOSIXSeconds $ UTCTime day (secondsToDiffTime 0)
@@ -272,7 +276,7 @@ _wip = do
     let result = P.parse ofxParser fileName ofxText
     case result of
         Left e -> putStrLn $ P.errorBundlePretty e
-        Right transactions -> do
+        Right (MkOfxBatch accountNumber transactions) -> do
             mapM_ pPrint transactions
             putStrLn $ "Parsed " <> show (length transactions) <> " transactions"
             putStrLn $ "Chars count: " <> show (T.length ofxText)
@@ -280,5 +284,5 @@ _wip = do
             withTransaction conn $ do
                 putStrLn $ yellow <> "== Truncating prior transactions" <> reset
                 deleteAllTransactions conn
-                mapM_ (insertTransaction conn . fromOfxTransaction) transactions
+                mapM_ (insertTransaction conn . fromOfxTransaction (MkAccountNumber accountNumber)) transactions
                 putStrLn $ green <> "== Transactions inserted" <> reset

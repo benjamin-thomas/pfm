@@ -35,6 +35,19 @@ type Parser = Parsec Void Text
  -}
 -- cspell:enable
 
+{-
+
+Source: https://financialdataexchange.org/common/Uploaded%20files/OFX%20files/OFX%20Banking%20Specification%20v2.3.pdf
+
+3.2.3 Financial Institution Transaction ID <FITID>
+
+If a client performs the same type of request
+within the same scope at two different FIs, clients will need to use FI + <ACCTID> + <FITID> as a
+globally unique key in a client database. That is, the <FITID> value must be unique within the account and
+Financial Institution (independent of the service provider).
+
+ -}
+
 data StatementTransaction
   = MkStatementTransaction
   { stPosted :: TimeStamp
@@ -145,8 +158,16 @@ statementTransactionParser = do
       , stMemo = T.strip memo
       }
 
-ofxParser :: Parser [StatementTransaction]
+data OfxBatch = MkOfxBatch
+  { ofxBatchAccountNumber :: Text
+  , ofxBatchTransactions :: [StatementTransaction]
+  }
+
+ofxParser :: Parser OfxBatch
 ofxParser = do
   _ <- manyTill anySingle "<OFX>" -- quick and dirty
+  _ <- manyTill anySingle (lookAhead (string "<ACCTID>"))
+  accountNumber <- symbol "<ACCTID>" *> tagValueParser
   _ <- manyTill anySingle (lookAhead (string "<STMTTRN>"))
-  many statementTransactionParser <* manyTill anySingle "</OFX>"
+  transactions <- many statementTransactionParser <* manyTill anySingle "</OFX>"
+  pure $ MkOfxBatch accountNumber transactions

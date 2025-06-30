@@ -58,6 +58,7 @@ library pfm-haskell-twain-lib
                     , DTO.Ledger
     build-depends:    base ^>=4.18.3.0
                     , aeson
+                    , base16-bytestring
                     , bytestring
                     , Decimal
                     , elm-street
@@ -67,6 +68,7 @@ library pfm-haskell-twain-lib
                     , pretty-simple
                     , process
                     , raw-strings-qq
+                    , sha256
                     , sqlite-simple
                     , text
                     , time
@@ -114,6 +116,7 @@ test-suite test-dev
                     , raw-strings-qq
                     -- lib
                     , aeson
+                    , base16-bytestring
                     , bytestring
                     , Decimal
                     , elm-street
@@ -123,6 +126,7 @@ test-suite test-dev
                     , pretty-simple
                     , process
                     , raw-strings-qq
+                    , sha256
                     , sqlite-simple
                     , text
                     , time

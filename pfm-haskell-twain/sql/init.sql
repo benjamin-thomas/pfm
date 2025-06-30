@@ -9,7 +9,6 @@ $ litecli ./db.sqlite3
 BEGIN TRANSACTION;
 
 DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS sources;
 DROP TABLE IF EXISTS accounts;
 DROP TABLE IF EXISTS categories;
 
@@ -71,28 +70,6 @@ VALUES (1, 'OpeningBalance')      -- account_id = 1
      , (4, 'Groceries')           -- account_id = 11
      ;
 
-CREATE TABLE sources
-    ( source_id  INTEGER PRIMARY KEY
-    , name       TEXT    NOT NULL UNIQUE CHECK (TRIM(name) <> '')
-    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    )
-    ;
-
-CREATE TRIGGER update_sources_updated_at
-AFTER UPDATE ON sources
-FOR EACH ROW
-BEGIN
-    UPDATE sources
-    SET updated_at = strftime('%s', current_timestamp)
-    WHERE source_id = NEW.source_id;
-END;
-
-INSERT INTO sources (name)
-VALUES ('OFX')
-     , ('UI')
-     ;
-
 /*
 SELECT * FROM account INNER JOIN category USING (category_id);
 */
@@ -101,7 +78,7 @@ CREATE TABLE transactions
     ( transaction_id  INTEGER        PRIMARY KEY
     , from_account_id INTEGER        NOT NULL REFERENCES accounts(account_id)
     , to_account_id   INTEGER        NOT NULL REFERENCES accounts(account_id)
-    , source_id       INTEGER        NOT NULL REFERENCES sources(source_id)
+    , unique_fit_id   TEXT           NULL
     , date            INTEGER        NOT NULL
     , descr_orig      TEXT           NOT NULL -- will enable classifying if source=OFX
     , descr           TEXT           NOT NULL

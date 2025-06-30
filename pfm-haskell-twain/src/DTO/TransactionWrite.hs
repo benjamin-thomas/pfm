@@ -36,6 +36,7 @@ toTransactionNewRow tx =
   MkTransactionNewRow
     { fromAccountId = twFromAccountId tx
     , toAccountId = twToAccountId tx
+    , uniqueFitId = Nothing
     , date = twDateUnix tx
     , descr = twDescr tx
     , cents = twCents tx
