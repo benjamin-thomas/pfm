@@ -233,6 +233,56 @@ a:hover {
     color: var(--color-text-bright);
 }
 
+/* Transaction Search Form */
+.transaction-search {
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-hover);
+}
+
+.transaction-search__row {
+    display: flex;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}
+
+.transaction-search__field {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 150px;
+}
+
+.transaction-search__field label {
+    font-size: 14px;
+    margin-bottom: var(--space-xs);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.transaction-search__input {
+    padding: 8px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background-color: var(--color-card-bg);
+    color: var(--color-text);
+    font-size: 15px;
+    appearance: textfield;
+    -moz-appearance: textfield; /* Firefox */
+}
+
+/* Remove spinner buttons from number inputs */
+.transaction-search__input::-webkit-outer-spin-button,
+.transaction-search__input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.transaction-search__input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+
 .transaction-list__items {
     padding: 0;
     margin: 0;
@@ -278,6 +328,7 @@ a:hover {
 .transaction-item__description {
     font-weight: 500;
     margin-bottom: 4px;
+    white-space: pre; /* some OFX descriptions insert many whitespaces to separate related data */
 }
 
 .transaction-item__accounts {
@@ -807,4 +858,101 @@ input[type="datetime-local"]:focus {
         opacity: 1;
         transform: translateY(-50%);
     }
+}
+
+/* Transaction suggestion styles */
+.suggestion-container {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm);
+    border-left: 3px solid var(--color-primary);
+    background-color: rgba(0, 0, 0, 0.04); /* Neutral background that works in both themes */
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure suggestion container stands out when parent row is hovered */
+.transaction-item:hover .suggestion-container {
+    background-color: rgba(0, 0, 0, 0.07); /* Slightly darker when parent is hovered */
+}
+
+/* Dark theme specific styling for suggestion container */
+html.dark-theme .suggestion-container {
+    background-color: rgba(255, 255, 255, 0.08); /* Lighter in dark mode for better contrast */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+html.dark-theme .transaction-item:hover .suggestion-container {
+    background-color: rgba(255, 255, 255, 0.12); /* Even more contrast when hovered in dark mode */
+}
+
+.suggestion-text {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--color-text-secondary);
+    font-size: 0.9em;
+}
+
+.suggestion-icon {
+    color: var(--color-primary);
+}
+
+.suggestion-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.suggestion-btn {
+    border: none;
+    background: none;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.suggestion-btn-apply {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.suggestion-btn-ignore {
+    color: var(--color-text-tertiary);
+}
+
+.suggestion-btn:hover {
+    opacity: 0.9;
+}
+
+/* Apply All Suggestions button styling */
+.suggestions-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin: var(--space-md) 0;
+    padding: 0 var(--space-lg);
+}
+
+.apply-all-suggestions-button {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background-color: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: var(--space-sm) var(--space-md);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.apply-all-suggestions-button:hover {
+    background-color: #2980b9;
 }

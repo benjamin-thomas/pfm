@@ -116,14 +116,15 @@ statementTransactionParserSpec = do
     it "parses a full statement" $ do
         shouldParse
             OfxParser.statementTransactionParser
+            -- It also trims any trailing whitespace
             [r|
               <STMTTRN>
-                <TRNTYPE>DEBIT
-                <DTPOSTED>20120103120000.000
-                <TRNAMT>-49.95
-                <FITID>123-ABC
-                <NAME>PLANET BEACH AL001
-                <MEMO>RECUR DEBIT CRD PMT0
+                <TRNTYPE>DEBIT 
+                <DTPOSTED>20120103120000.000 
+                <TRNAMT>-49.95 
+                <FITID>123-ABC 
+                <NAME>PLANET BEACH AL001 
+                <MEMO>RECUR DEBIT CRD PMT0 
               </STMTTRN>
             |]
             ( MkStatementTransaction

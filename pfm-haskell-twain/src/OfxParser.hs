@@ -7,6 +7,7 @@ import Data.Decimal
   , DecimalRaw (Decimal)
   )
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Time
   ( Day
   , UTCTime (UTCTime)
@@ -139,9 +140,9 @@ statementTransactionParser = do
     MkStatementTransaction
       { stPosted = dtPosted
       , stAmount = amount
-      , stFitId = fitId
-      , stName = name
-      , stMemo = memo
+      , stFitId = T.strip fitId
+      , stName = T.strip name
+      , stMemo = T.strip memo
       }
 
 ofxParser :: Parser [StatementTransaction]

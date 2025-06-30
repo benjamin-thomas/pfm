@@ -179,6 +179,11 @@ type alias Data =
     }
 
 
+type alias SearchForm =
+    { descr : String
+    }
+
+
 type alias Model =
     { key : Nav.Key
     , url : Url
@@ -188,6 +193,7 @@ type alias Model =
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , data : Data
+    , searchForm : SearchForm
     }
 
 
@@ -231,6 +237,11 @@ type Msg
     | GotAccounts (Result Http.Error (List AccountRead))
     | GotBalances (Result Http.Error (List AccountBalanceRead))
     | GotLedgerLines (Result Http.Error (List LedgerLine))
+    | GotSearchFormMsg SearchFormMsg
+
+
+type SearchFormMsg
+    = SearchDescrChanged String
 
 
 view : Model -> Browser.Document Msg
@@ -397,11 +408,33 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
                     ]
                 ]
             ]
+        , if tx.toAccountName == "Unknown_EXPENSE" then
+            -- Suggestion UI shown for unknown expenses
+            H.div [ HA.class "suggestion-container" ]
+                [ H.div [ HA.class "suggestion-text" ]
+                    [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                    , H.span []
+                        [ H.text "Suggested category: "
+                        , H.strong [] [ H.text "Groceries" ] -- Placeholder suggestion
+                        ]
+                    ]
+                , H.div [ HA.class "suggestion-actions" ]
+                    [ H.button
+                        [ HA.class "suggestion-btn suggestion-btn-apply" ]
+                        [ H.text "Apply" ]
+                    , H.button
+                        [ HA.class "suggestion-btn suggestion-btn-ignore" ]
+                        [ H.text "Ignore" ]
+                    ]
+                ]
+
+          else
+            H.text ""
         ]
 
 
-viewLedgerLines : List LedgerLine -> Html Msg
-viewLedgerLines withRunningBalanceEntity =
+viewLedgerLines : SearchForm -> List LedgerLine -> Html Msg
+viewLedgerLines searchForm withRunningBalanceEntity =
     H.div [ HA.class "section" ]
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
@@ -412,6 +445,14 @@ viewLedgerLines withRunningBalanceEntity =
                     ]
                     [ H.text "Add Transaction" ]
                 ]
+            , H.div [ HA.class "suggestions-actions" ]
+                [ H.button
+                    [ HA.class "apply-all-suggestions-button" ]
+                    [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                    , H.text "Apply All Suggestions"
+                    ]
+                ]
+            , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
                 (List.reverse
                     -- FIXME: Compute the prior balance at the DB level.
@@ -419,9 +460,65 @@ viewLedgerLines withRunningBalanceEntity =
                     -- FIXME: Or start the first row form the current balance, rather than 0€.
                     (List.map
                         viewOneTransaction
-                        (withPriorBalance withRunningBalanceEntity)
+                        (List.filter
+                            (\( tx, _ ) ->
+                                (searchForm.descr == "")
+                                    || String.contains
+                                        (String.toLower searchForm.descr)
+                                        (String.toLower tx.descr)
+                            )
+                            (withPriorBalance withRunningBalanceEntity)
+                        )
                     )
                 )
+            ]
+        ]
+
+
+viewSearchForm : SearchForm -> Html SearchFormMsg
+viewSearchForm searchForm =
+    H.div [ HA.class "transaction-search" ]
+        [ H.div [ HA.class "transaction-search__row" ]
+            [ H.div [ HA.class "transaction-search__field" ]
+                [ H.label [ HA.for "search-description" ] [ H.text "Description" ]
+                , H.input
+                    [ HA.type_ "text"
+                    , HA.id "search-description"
+                    , HE.onInput SearchDescrChanged
+                    , HA.value searchForm.descr
+                    , HA.placeholder "Search by description"
+                    , HA.class "transaction-search__input"
+                    ]
+                    []
+                ]
+            , H.div [ HA.class "transaction-search__field" ]
+                [ H.label [ HA.for "search-amount-min" ] [ H.text "Min Amount" ]
+                , H.input
+                    [ HA.type_ "number"
+                    , HA.id "search-amount-min"
+                    , HA.placeholder "Min"
+                    , HA.class "transaction-search__input"
+                    ]
+                    []
+                ]
+            , H.div [ HA.class "transaction-search__field" ]
+                [ H.label [ HA.for "search-amount-max" ] [ H.text "Max Amount" ]
+                , H.input
+                    [ HA.type_ "number"
+                    , HA.id "search-amount-max"
+                    , HA.placeholder "Max"
+                    , HA.class "transaction-search__input"
+                    ]
+                    []
+                ]
+            , H.div [ HA.class "transaction-search__field transaction-search__field--checkbox" ]
+                [ H.label [ HA.class "checkbox-container" ]
+                    [ H.input
+                        [ HA.type_ "checkbox" ]
+                        []
+                    , H.span [ HA.class "checkbox-label" ] [ H.text "To classify" ]
+                    ]
+                ]
             ]
         ]
 
@@ -459,12 +556,13 @@ statusAndMap ma mf =
 
 
 viewLoaded :
-    Maybe Dialog
+    SearchForm
+    -> Maybe Dialog
     -> List AccountRead
     -> List AccountBalanceRead
     -> List LedgerLine
     -> Html Msg
-viewLoaded dialog_ accounts balances ledgerLines =
+viewLoaded searchForm dialog_ accounts balances ledgerLines =
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.div [ HA.class "debug-info" ]
@@ -482,7 +580,7 @@ viewLoaded dialog_ accounts balances ledgerLines =
                     balances
                 )
             ]
-        , viewLedgerLines ledgerLines
+        , viewLedgerLines searchForm ledgerLines
         , case dialog_ of
             Nothing ->
                 H.text ""
@@ -498,7 +596,7 @@ viewLoaded dialog_ accounts balances ledgerLines =
 viewHome : Model -> Html Msg
 viewHome model =
     case
-        Loaded (\a b c -> viewLoaded model.dialog a b c)
+        Loaded (\a b c -> viewLoaded model.searchForm model.dialog a b c)
             |> statusAndMap model.data.accounts
             |> statusAndMap model.data.balances
             |> statusAndMap model.data.ledgerLines
@@ -842,6 +940,9 @@ init () url key =
       , dialog = Nothing
       , isDarkTheme = False
       , data = loadingData
+      , searchForm =
+            { descr = ""
+            }
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
@@ -865,6 +966,10 @@ update msg model =
         updateData : (Data -> Data) -> Model
         updateData f =
             { model | data = f model.data }
+
+        updateSearchForm : (SearchForm -> SearchForm) -> Model
+        updateSearchForm f =
+            { model | searchForm = f model.searchForm }
     in
     case msg of
         GotBalances result ->
@@ -934,6 +1039,13 @@ update msg model =
               }
             , Cmd.none
             )
+
+        GotSearchFormMsg subMsg ->
+            case subMsg of
+                SearchDescrChanged str ->
+                    ( updateSearchForm (\sf -> { sf | descr = str })
+                    , Cmd.none
+                    )
 
         EditTransactionClicked params ->
             handleEditDialog params model

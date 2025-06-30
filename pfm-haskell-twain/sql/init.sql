@@ -68,6 +68,7 @@ VALUES (1, 'OpeningBalance')      -- account_id = 1
      , (4, 'Amazon')              -- account_id = 8
      , (3, 'Unknown_INCOME')      -- account_id = 9
      , (4, 'Unknown_EXPENSE')     -- account_id = 10
+     , (4, 'Groceries')           -- account_id = 11
      ;
 
 CREATE TABLE sources
