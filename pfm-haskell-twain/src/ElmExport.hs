@@ -5,7 +5,7 @@ module ElmExport (exportElm) where
 
 import DTO.AccountRead (AccountBalanceRead, AccountRead)
 import DTO.Category (Category)
-import DTO.Ledger (LedgerLine)
+import DTO.Ledger (LedgerLine, Suggestion, SuggestionForTransaction)
 import DTO.TransactionWrite
 import DTO.User (User)
 import Elm
@@ -22,4 +22,6 @@ type Types =
      , Category
      , LedgerLine
      , TransactionWrite
+     , Suggestion
+     , SuggestionForTransaction
      ]

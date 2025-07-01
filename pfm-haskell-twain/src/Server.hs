@@ -15,6 +15,7 @@ import DB.Transactions.Queries
     , UniqueFitId (MkUniqueFitId)
     , deleteAllTransactions
     , deleteTransaction
+    , getAllSuggestions
     , insertTransaction
     , updateTransaction
     )
@@ -22,7 +23,7 @@ import DB.Transactions.Queries qualified as TransactionQueries
 import DB.User.Queries
 import DTO.AccountRead qualified as AccountRead
 import DTO.Category (Category, fromCategoryRow)
-import DTO.Ledger (LedgerLine, fromLedgerViewRow)
+import DTO.Ledger (LedgerLine, fromLedgerViewRow, toSuggestionForTransactionDTO)
 import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
@@ -121,6 +122,15 @@ handleDeleteTransactions conn = do
     liftIO $ deleteTransaction conn transactionId
     Twain.send $ Twain.raw status204 [] BSL.empty
 
+-- http -v localhost:8080/transactions/suggestions fromAccountId==2 toAccountId==10
+handleGetAllSuggestions :: Connection -> Twain.ResponderM ()
+handleGetAllSuggestions conn = do
+    fromAccountId <- Twain.queryParam "fromAccountId"
+    toAccountId <- Twain.queryParam "toAccountId"
+    suggestionRows <- liftIO $ getAllSuggestions fromAccountId toAccountId conn
+    let suggestions = map toSuggestionForTransactionDTO suggestionRows
+    Twain.send $ Twain.json suggestions
+
 -- http -v localhost:8080/users all==1
 handleUsers :: Connection -> Twain.ResponderM ()
 handleUsers conn = do
@@ -167,6 +177,7 @@ routes conn =
     , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
     , Twain.put "/transactions/:id" $ handlePutTransactions conn
+    , Twain.get "/transactions/suggestions" $ handleGetAllSuggestions conn
     , Twain.delete "/transactions/:id" $ handleDeleteTransactions conn
     , Twain.route (Just "OPTIONS") "/transactions" $ Twain.send $ Twain.status status200 $ Twain.json ()
     , Twain.route (Just "OPTIONS") "/transactions/:id" $ Twain.send $ Twain.status status200 $ Twain.json ()

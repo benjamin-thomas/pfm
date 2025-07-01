@@ -2,19 +2,23 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module DB.Transactions.Queries where
 
 import Crypto.Sha256 qualified as Sha256
+import Data.Aeson
 import Data.ByteString.Base16 qualified as Base16
+import Data.ByteString.Lazy qualified as BL
 import Data.FileEmbed (embedFile)
 import Data.Text
 import Data.Text qualified as T
 import Data.Text.Encoding
 import Data.Text.Encoding qualified as TE
 import Database.SQLite.Simple
+import Database.SQLite.Simple.FromRow (RowParser)
 import Database.SQLite.Simple.ToField
 
 data TransactionNewRow = MkTransactionNewRow
@@ -97,26 +101,47 @@ deleteAllTransactions conn =
     (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/deleteAll.sql"))
     ()
 
-data SuggestToAccountIdRow = MkSuggestToAccountIdRow
-  { transactionId :: Int
-  , jsonValue :: Text
+data SuggestionJsonDB = MkSuggestionJsonDB
+  { suggestionAccountId :: Int
+  , suggestionAccountName :: Text
   }
   deriving (Show)
 
-instance FromRow SuggestToAccountIdRow where
+instance FromRow SuggestionJsonDB where
   fromRow =
-    MkSuggestToAccountIdRow
+    MkSuggestionJsonDB
       <$> field
       <*> field
+
+data SuggestForTransactionRow = MkSuggestForTransactionRow
+  { sftTransactionId :: Int
+  , sftSuggestions :: [SuggestionJsonDB]
+  }
+  deriving (Show)
+
+instance FromJSON SuggestionJsonDB where
+  parseJSON = withObject "SuggestionJsonDB" $ \v ->
+    MkSuggestionJsonDB
+      <$> v .: "id"
+      <*> v .: "name"
+
+instance FromRow SuggestForTransactionRow where
+  fromRow = do
+    transId <- field
+    jsonText <- field :: RowParser Text
+    let result = eitherDecode (BL.fromStrict (encodeUtf8 jsonText)) :: Either String [SuggestionJsonDB]
+    case result of
+      Left x -> error x
+      Right suggestions -> pure $ MkSuggestForTransactionRow transId suggestions
 
 {-
 
 ghci> :m +DB.Transactions.Queries
-ghci> _newConn >>= suggestToAccountId 2 10
+ghci> _newConn >>= getAllSuggestions 2 10
 
  -}
-suggestToAccountId :: Int -> Int -> Connection -> IO [SuggestToAccountIdRow]
-suggestToAccountId fromAccountId' toAccountId' conn =
+getAllSuggestions :: Int -> Int -> Connection -> IO [SuggestForTransactionRow]
+getAllSuggestions fromAccountId' toAccountId' conn =
   query conn sql (fromAccountId', toAccountId', fromAccountId', toAccountId')
  where
   sql = Query $ decodeUtf8 $(embedFile "src/DB/Transactions/suggest.sql")

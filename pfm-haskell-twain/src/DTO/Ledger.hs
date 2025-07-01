@@ -6,11 +6,23 @@
 module DTO.Ledger
     ( LedgerLine (..)
     , fromLedgerViewRow
+    , Suggestion (..)
+    , SuggestionForTransaction (..)
+    , toSuggestionForTransactionDTO
     ) where
 
 import DB.LedgerView.Queries (LedgerViewRow (..))
+import DB.Transactions.Queries
+    ( SuggestForTransactionRow
+        ( MkSuggestForTransactionRow
+        , sftSuggestions
+        , sftTransactionId
+        )
+    , SuggestionJsonDB (..)
+    )
 import DTO.Utils
 import Data.Aeson (FromJSON, Options (fieldLabelModifier), ToJSON (toJSON), defaultOptions, genericToJSON)
+import Data.Text (Text)
 import Elm
 import GHC.Generics (Generic)
 
@@ -65,4 +77,47 @@ fromLedgerViewRow MkLedgerViewRow{..} =
         , llsUpdatedAtUnix = lvrUpdatedAtUnix
         , llsUpdatedAtUtc = lvrUpdatedAtUtc
         , llsUpdatedAtTz = lvrUpdatedAtTz
+        }
+
+data Suggestion = MkSuggestion
+    { suggestionAccountId :: Int
+    , suggestionAccountName :: Text
+    }
+    deriving stock (Show, Generic)
+    deriving anyclass (Elm)
+
+instance ToJSON Suggestion where
+    toJSON =
+        genericToJSON
+            defaultOptions
+                { fieldLabelModifier = dropAndLowerHead (length "suggestion")
+                }
+
+data SuggestionForTransaction = MkSuggestionForTransaction
+    { sftTransactionId :: Int
+    , sftSuggestions :: [Suggestion]
+    }
+    deriving stock (Show, Generic)
+    deriving anyclass (Elm)
+
+instance ToJSON SuggestionForTransaction where
+    toJSON =
+        genericToJSON
+            defaultOptions
+                { fieldLabelModifier = dropAndLowerHead (length "sft")
+                }
+
+toSuggestionDto :: SuggestionJsonDB -> Suggestion
+toSuggestionDto MkSuggestionJsonDB{..} =
+    MkSuggestion
+        { suggestionAccountId = suggestionAccountId
+        , suggestionAccountName = suggestionAccountName
+        }
+
+-- FIXME: move this to another module...
+toSuggestionForTransactionDTO :: SuggestForTransactionRow -> SuggestionForTransaction
+toSuggestionForTransactionDTO MkSuggestForTransactionRow{..} =
+    MkSuggestionForTransaction
+        { sftTransactionId = sftTransactionId
+        , sftSuggestions = map toSuggestionDto sftSuggestions
         }

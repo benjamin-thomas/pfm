@@ -2,12 +2,14 @@ port module Main exposing (..)
 
 import Browser exposing (UrlRequest)
 import Browser.Navigation as Nav
+import Dict exposing (Dict)
 import Generated.Decoder
     exposing
         ( decodeAccountBalanceRead
         , decodeAccountRead
         , decodeCategory
         , decodeLedgerLine
+        , decodeSuggestionForTransaction
         )
 import Generated.Encoder exposing (encodeTransactionWrite)
 import Generated.Types
@@ -16,6 +18,8 @@ import Generated.Types
         , AccountRead
         , Category
         , LedgerLine
+        , Suggestion
+        , SuggestionForTransaction
         , TransactionWrite
         )
 import Html as H exposing (Attribute, Html, b)
@@ -75,6 +79,17 @@ fetchLedgerLines =
     Http.get
         { url = "http://localhost:8080/transactions?accountId=2"
         , expect = Http.expectJson GotLedgerLines (D.list decodeLedgerLine)
+        }
+
+
+{-| http -v localhost:8080/transactions/suggestions fromAccountId==2 toAccountId==10
+-}
+fetchSuggestions : Cmd Msg
+fetchSuggestions =
+    -- FIXME: hard coded values
+    Http.get
+        { url = "http://localhost:8080/transactions/suggestions?fromAccountId=2&toAccountId=10"
+        , expect = Http.expectJson GotSuggestions (D.list decodeSuggestionForTransaction)
         }
 
 
@@ -176,6 +191,7 @@ type alias Data =
     , accounts : Status (List AccountRead)
     , balances : Status (List AccountBalanceRead)
     , ledgerLines : Status (List LedgerLine)
+    , transactionIdToSuggestions : Status (Dict Int (List Suggestion))
     }
 
 
@@ -238,6 +254,7 @@ type Msg
     | GotAccounts (Result Http.Error (List AccountRead))
     | GotBalances (Result Http.Error (List AccountBalanceRead))
     | GotLedgerLines (Result Http.Error (List LedgerLine))
+    | GotSuggestions (Result Http.Error (List SuggestionForTransaction))
     | GotSearchFormMsg SearchFormMsg
 
 
@@ -364,9 +381,16 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
     )
 
 
-viewOneTransaction : { a | toClassify : Bool } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
-viewOneTransaction { toClassify } ( tx, ( priorBalanceCents, priorBalance ) ) =
+viewOneTransaction : { a | toClassify : Bool, transactionIdToSuggestions : Dict Int (List Suggestion) } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
+viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
+        suggestions : List Suggestion
+        suggestions =
+            Maybe.withDefault [] <|
+                Dict.get
+                    tx.transactionId
+                    transactionIdToSuggestions
+
         isPositive =
             --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
             tx.flowCents > 0
@@ -412,29 +436,34 @@ viewOneTransaction { toClassify } ( tx, ( priorBalanceCents, priorBalance ) ) =
             ]
         , when (toClassify && tx.toAccountName == "Unknown_EXPENSE") <|
             \() ->
-                -- Suggestion UI shown for unknown expenses
-                H.div [ HA.class "suggestion-container" ]
-                    [ H.div [ HA.class "suggestion-text" ]
-                        [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                        , H.span []
-                            [ H.text "Suggested category: "
-                            , H.strong [] [ H.text "Groceries" ] -- Placeholder suggestion
+                case suggestions of
+                    [] ->
+                        H.text ""
+
+                    mostCommon :: _ ->
+                        -- Suggestion UI shown for unknown expenses
+                        H.div [ HA.class "suggestion-container" ]
+                            [ H.div [ HA.class "suggestion-text" ]
+                                [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                                , H.span []
+                                    [ H.text "Suggested category: "
+                                    , H.strong [] [ H.text mostCommon.accountName ]
+                                    ]
+                                ]
+                            , H.div [ HA.class "suggestion-actions" ]
+                                [ H.button
+                                    [ HA.class "suggestion-btn suggestion-btn-apply" ]
+                                    [ H.text "Apply" ]
+                                , H.button
+                                    [ HA.class "suggestion-btn suggestion-btn-ignore" ]
+                                    [ H.text "Ignore" ]
+                                , H.button
+                                    [ HA.class "suggestion-btn suggestion-btn-ai" ]
+                                    [ H.text "Ask AI "
+                                    , H.span [ HA.class "ai-icon" ] [ H.text "✨" ]
+                                    ]
+                                ]
                             ]
-                        ]
-                    , H.div [ HA.class "suggestion-actions" ]
-                        [ H.button
-                            [ HA.class "suggestion-btn suggestion-btn-apply" ]
-                            [ H.text "Apply" ]
-                        , H.button
-                            [ HA.class "suggestion-btn suggestion-btn-ignore" ]
-                            [ H.text "Ignore" ]
-                        , H.button
-                            [ HA.class "suggestion-btn suggestion-btn-ai" ]
-                            [ H.text "Ask AI "
-                            , H.span [ HA.class "ai-icon" ] [ H.text "✨" ]
-                            ]
-                        ]
-                    ]
         ]
 
 
@@ -447,8 +476,8 @@ when condition fn =
         H.text ""
 
 
-viewLedgerLines : SearchForm -> List LedgerLine -> Html Msg
-viewLedgerLines searchForm withRunningBalanceEntity =
+viewLedgerLines : Dict Int (List Suggestion) -> SearchForm -> List LedgerLine -> Html Msg
+viewLedgerLines transactionIdToSuggestions searchForm withRunningBalanceEntity =
     let
         filteredTransactions =
             List.filter
@@ -497,7 +526,11 @@ viewLedgerLines searchForm withRunningBalanceEntity =
                     -- FIXME: That'll enable more flexibility reversing the rows order.
                     -- FIXME: Or start the first row form the current balance, rather than 0€.
                     (List.map
-                        (viewOneTransaction searchForm)
+                        (viewOneTransaction
+                            { toClassify = searchForm.toClassify
+                            , transactionIdToSuggestions = transactionIdToSuggestions
+                            }
+                        )
                         filteredTransactions
                     )
                 )
@@ -618,8 +651,9 @@ viewLoaded :
     -> List AccountRead
     -> List AccountBalanceRead
     -> List LedgerLine
+    -> Dict Int (List Suggestion)
     -> Html Msg
-viewLoaded searchForm dialog_ accounts balances ledgerLines =
+viewLoaded searchForm dialog_ accounts balances ledgerLines transactionIdToSuggestions =
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.div [ HA.class "debug-info" ]
@@ -637,7 +671,7 @@ viewLoaded searchForm dialog_ accounts balances ledgerLines =
                     balances
                 )
             ]
-        , viewLedgerLines searchForm ledgerLines
+        , viewLedgerLines transactionIdToSuggestions searchForm ledgerLines
         , case dialog_ of
             Nothing ->
                 H.text ""
@@ -653,10 +687,11 @@ viewLoaded searchForm dialog_ accounts balances ledgerLines =
 viewHome : Model -> Html Msg
 viewHome model =
     case
-        Loaded (\a b c -> viewLoaded model.searchForm model.dialog a b c)
+        Loaded (viewLoaded model.searchForm model.dialog)
             |> statusAndMap model.data.accounts
             |> statusAndMap model.data.balances
             |> statusAndMap model.data.ledgerLines
+            |> statusAndMap model.data.transactionIdToSuggestions
     of
         Loaded x ->
             x
@@ -974,6 +1009,7 @@ loadingData =
     , accounts = Loading
     , balances = Loading
     , ledgerLines = Loading
+    , transactionIdToSuggestions = Loading
     }
 
 
@@ -984,6 +1020,7 @@ fetchData =
         , fetchLedgerLines
         , fetchAccounts
         , fetchBalances
+        , fetchSuggestions
         ]
 
 
@@ -1051,6 +1088,24 @@ update msg model =
 
                 Err _ ->
                     ( updateData (\d -> { d | ledgerLines = Failed })
+                    , Cmd.none
+                    )
+
+        GotSuggestions result ->
+            case result of
+                Ok suggestions ->
+                    let
+                        dict =
+                            suggestions
+                                |> List.map (\s -> ( s.transactionId, s.suggestions ))
+                                |> Dict.fromList
+                    in
+                    ( updateData (\d -> { d | transactionIdToSuggestions = Loaded dict })
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( updateData (\d -> { d | transactionIdToSuggestions = Failed })
                     , Cmd.none
                     )
 
