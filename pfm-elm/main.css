@@ -942,11 +942,20 @@ html.dark-theme .transaction-item:hover .suggestion-container {
 }
 
 /* Apply All Suggestions button styling */
-.suggestions-actions {
+
+/* Transaction header layout */
+.transaction-list__header {
     display: flex;
-    justify-content: flex-start;
-    margin: var(--space-md) 0;
-    padding: 0 var(--space-lg);
+    align-items: center;
+    justify-content: space-between;
+}
+
+.transaction-list__header h3 {
+    margin-right: auto;
+}
+
+.transaction-list__header button {
+    margin-left: var(--space-md);
 }
 
 .apply-all-suggestions-button {

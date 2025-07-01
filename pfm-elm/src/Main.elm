@@ -453,21 +453,19 @@ viewLedgerLines searchForm withRunningBalanceEntity =
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
                 [ H.h3 [] [ H.text "Transactions" ]
+                , when searchForm.classify <|
+                    \() ->
+                        H.button
+                            [ HA.class "apply-all-suggestions-button" ]
+                            [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                            , H.text "Apply All Suggestions"
+                            ]
                 , H.button
                     [ HA.class "button button--primary"
                     , HE.onClick AddTransactionClicked
                     ]
                     [ H.text "Add Transaction" ]
                 ]
-            , when searchForm.classify <|
-                \() ->
-                    H.div [ HA.class "suggestions-actions" ]
-                        [ H.button
-                            [ HA.class "apply-all-suggestions-button" ]
-                            [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                            , H.text "Apply All Suggestions"
-                            ]
-                        ]
             , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
                 (List.reverse
