@@ -181,7 +181,7 @@ type alias Data =
 
 type alias SearchForm =
     { descr : String
-    , classify : Bool
+    , toClassify : Bool
     }
 
 
@@ -243,7 +243,7 @@ type Msg
 
 type SearchFormMsg
     = SearchDescrChanged String
-    | ClassifyClicked
+    | ToClassifyClicked
 
 
 view : Model -> Browser.Document Msg
@@ -364,8 +364,8 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
     )
 
 
-viewOneTransaction : { a | classify : Bool } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
-viewOneTransaction { classify } ( tx, ( priorBalanceCents, priorBalance ) ) =
+viewOneTransaction : { a | toClassify : Bool } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
+viewOneTransaction { toClassify } ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         isPositive =
             --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
@@ -410,7 +410,7 @@ viewOneTransaction { classify } ( tx, ( priorBalanceCents, priorBalance ) ) =
                     ]
                 ]
             ]
-        , when (classify && tx.toAccountName == "Unknown_EXPENSE") <|
+        , when (toClassify && tx.toAccountName == "Unknown_EXPENSE") <|
             \() ->
                 -- Suggestion UI shown for unknown expenses
                 H.div [ HA.class "suggestion-container" ]
@@ -449,22 +449,46 @@ when condition fn =
 
 viewLedgerLines : SearchForm -> List LedgerLine -> Html Msg
 viewLedgerLines searchForm withRunningBalanceEntity =
+    let
+        filteredTransactions =
+            List.filter
+                (transactionMatchesFilters searchForm)
+                (withPriorBalance withRunningBalanceEntity)
+
+        totalCount =
+            List.length withRunningBalanceEntity
+
+        filteredCount =
+            List.length filteredTransactions
+
+        countText =
+            if filteredCount == totalCount then
+                String.fromInt totalCount ++ " transactions"
+
+            else
+                String.fromInt filteredCount ++ " of " ++ String.fromInt totalCount ++ " transactions"
+    in
     H.div [ HA.class "section" ]
         [ H.div [ HA.class "transaction-list" ]
             [ H.div [ HA.class "transaction-list__header" ]
-                [ H.h3 [] [ H.text "Transactions" ]
-                , when searchForm.classify <|
-                    \() ->
-                        H.button
-                            [ HA.class "apply-all-suggestions-button" ]
-                            [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                            , H.text "Apply All Suggestions"
-                            ]
-                , H.button
-                    [ HA.class "button button--primary"
-                    , HE.onClick AddTransactionClicked
+                [ H.div [ HA.class "transaction-list__header-title" ]
+                    [ H.h3 [] [ H.text "Transactions" ]
+                    , H.span [ HA.class "transaction-count" ] [ H.text countText ]
                     ]
-                    [ H.text "Add Transaction" ]
+                , H.div [ HA.class "transaction-list__header-buttons" ]
+                    [ when searchForm.toClassify <|
+                        \() ->
+                            H.button
+                                [ HA.class "apply-all-suggestions-button" ]
+                                [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                                , H.text "Apply All Suggestions"
+                                ]
+                    , H.button
+                        [ HA.class "button button--primary"
+                        , HE.onClick AddTransactionClicked
+                        ]
+                        [ H.text "Add Transaction" ]
+                    ]
                 ]
             , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
@@ -474,10 +498,7 @@ viewLedgerLines searchForm withRunningBalanceEntity =
                     -- FIXME: Or start the first row form the current balance, rather than 0€.
                     (List.map
                         (viewOneTransaction searchForm)
-                        (List.filter
-                            (transactionMatchesFilters searchForm)
-                            (withPriorBalance withRunningBalanceEntity)
-                        )
+                        filteredTransactions
                     )
                 )
             ]
@@ -500,7 +521,7 @@ matchesSearchText searchForm tx =
 
 matchesClassificationFilter : SearchForm -> LedgerLine -> Bool
 matchesClassificationFilter searchForm tx =
-    not searchForm.classify
+    not searchForm.toClassify
         || (tx.toAccountName == "Unknown_EXPENSE")
 
 
@@ -545,14 +566,14 @@ viewSearchForm searchForm =
                 [ H.label [ HA.class "checkbox-container" ]
                     [ H.input
                         [ HA.type_ "checkbox"
-                        , HA.checked searchForm.classify
-                        , HE.onClick ClassifyClicked
+                        , HA.checked searchForm.toClassify
+                        , HE.onClick ToClassifyClicked
                         ]
                         []
                     , H.span
                         [ HA.class "checkbox-label"
                         ]
-                        [ H.text "Classify" ]
+                        [ H.text "To classify" ]
                     ]
                 ]
             ]
@@ -978,7 +999,7 @@ init () url key =
       , data = loadingData
       , searchForm =
             { descr = ""
-            , classify = False
+            , toClassify = False
             }
       }
     , Cmd.batch
@@ -1084,8 +1105,8 @@ update msg model =
                     , Cmd.none
                     )
 
-                ClassifyClicked ->
-                    ( updateSearchForm (\sf -> { sf | classify = not sf.classify })
+                ToClassifyClicked ->
+                    ( updateSearchForm (\sf -> { sf | toClassify = not sf.toClassify })
                     , Cmd.none
                     )
 

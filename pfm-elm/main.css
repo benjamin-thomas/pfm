@@ -950,12 +950,29 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     justify-content: space-between;
 }
 
-.transaction-list__header h3 {
-    margin-right: auto;
+.transaction-list__header-title {
+    display: flex;
+    align-items: baseline;
 }
 
-.transaction-list__header button {
+.transaction-list__header h3 {
+    margin: 0;
+}
+
+.transaction-list__header-buttons {
+    display: flex;
+    align-items: center;
+}
+
+.transaction-list__header-buttons button:not(:first-child) {
     margin-left: var(--space-md);
+}
+
+.transaction-count {
+    margin-left: var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
 }
 
 .apply-all-suggestions-button {
