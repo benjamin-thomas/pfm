@@ -96,3 +96,27 @@ deleteAllTransactions conn =
     conn
     (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/deleteAll.sql"))
     ()
+
+data SuggestToAccountIdRow = MkSuggestToAccountIdRow
+  { transactionId :: Int
+  , jsonValue :: Text
+  }
+  deriving (Show)
+
+instance FromRow SuggestToAccountIdRow where
+  fromRow =
+    MkSuggestToAccountIdRow
+      <$> field
+      <*> field
+
+{-
+
+ghci> :m +DB.Transactions.Queries
+ghci> _newConn >>= suggestToAccountId 2 10
+
+ -}
+suggestToAccountId :: Int -> Int -> Connection -> IO [SuggestToAccountIdRow]
+suggestToAccountId fromAccountId' toAccountId' conn =
+  query conn sql (fromAccountId', toAccountId', fromAccountId', toAccountId')
+ where
+  sql = Query $ decodeUtf8 $(embedFile "src/DB/Transactions/suggest.sql")

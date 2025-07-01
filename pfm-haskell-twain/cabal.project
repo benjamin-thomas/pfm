@@ -1,0 +1,6 @@
+packages:
+  .
+
+-- SOUNDEX is not provided by this underlying package
+package direct-sqlite
+  flags: +systemlib

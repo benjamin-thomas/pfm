@@ -1,3 +1,4 @@
+- restore cursor position on tx reload
 - segment the ledger book my accounting_period (monthly typically)
   - that could mean I'll have to redeclare opening balances on each new period.
 - enable listing the accounts

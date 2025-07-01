@@ -926,8 +926,19 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     color: var(--color-text-tertiary);
 }
 
+.suggestion-btn-ai {
+    color: var(--color-text-tertiary);
+}
+
 .suggestion-btn:hover {
     opacity: 0.9;
+}
+
+.suggestion-btn-ignore:hover,
+.suggestion-btn-ai:hover {
+    background-color: var(--color-hover);
+    color: var(--color-text-secondary);
+    opacity: 0.7;
 }
 
 /* Apply All Suggestions button styling */

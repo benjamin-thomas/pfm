@@ -425,6 +425,11 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
                     , H.button
                         [ HA.class "suggestion-btn suggestion-btn-ignore" ]
                         [ H.text "Ignore" ]
+                    , H.button
+                        [ HA.class "suggestion-btn suggestion-btn-ai" ]
+                        [ H.text "Ask AI "
+                        , H.span [ HA.class "ai-icon" ] [ H.text "✨" ]
+                        ]
                     ]
                 ]
 
