@@ -1304,7 +1304,7 @@ update msg model =
                     )
 
                 Ok _ ->
-                    ( { model | data = loadingData }
+                    ( model
                     , fetchData { scrollY = model.scrollY }
                     )
 
