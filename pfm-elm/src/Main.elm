@@ -22,7 +22,7 @@ import Generated.Types
         , SuggestionForTransaction
         , TransactionWrite
         )
-import Html as H exposing (Attribute, Html, b)
+import Html as H exposing (Attribute, Html)
 import Html.Attributes as HA
 import Html.Events as HE
 import Http
@@ -32,13 +32,16 @@ import Json.Encode as E
 import Page.UI as UI_Page
 import Process
 import Route exposing (Route)
-import Task
+import Task exposing (Task)
 import Time
 import Url exposing (Url)
 import Utils
 
 
 port enterPressed : (() -> msg) -> Sub msg
+
+
+port rcvScrollY : (Int -> msg) -> Sub msg
 
 
 port consoleLogRaw : E.Value -> Cmd msg
@@ -62,10 +65,17 @@ port showDialog : () -> Cmd msg
 port closeDialog : () -> Cmd msg
 
 
+port restoreScrollY : Int -> Cmd msg
+
+
 {-| http -v localhost:8080/categories
 -}
 fetchCategories : Cmd Msg
 fetchCategories =
+    let
+        _ =
+            Debug.log "fetchCategories" 1
+    in
     Http.get
         { url = "http://localhost:8080/categories"
         , expect = Http.expectJson GotCategories (D.list decodeCategory)
@@ -120,16 +130,15 @@ postTransaction transaction =
         }
 
 
-putTransaction : ( Int, TransactionWrite ) -> Cmd Msg
-putTransaction ( transactionId, transaction ) =
+putTransaction : ( Int, TransactionWrite ) -> (Result Http.Error () -> msg) -> Cmd msg
+putTransaction ( transactionId, transaction ) nextMsg =
     Http.request
         { method = "PUT"
         , headers = []
         , url = "http://localhost:8080/transactions/" ++ String.fromInt transactionId
         , body = Http.jsonBody (encodeTransactionWrite transaction)
         , expect =
-            Http.expectWhatever
-                (EditDialogChanged << GotEditSaveResponse)
+            Http.expectWhatever nextMsg
         , timeout = Nothing
         , tracker = Nothing
         }
@@ -207,6 +216,7 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
+    , scrollY : Int
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , data : Data
@@ -240,16 +250,21 @@ type MkCreateDialogChanged
 
 type Msg
     = NoOp
+    | RequestCursorRestore { scrollY : Int }
+    | Fetching { scrollY : Int } (List (Cmd Msg))
+      -- | Continue (List (Cmd Msg))
     | UrlRequested UrlRequest
     | UrlChanged Url
     | EditTransactionClicked ( Int, TransactionWrite )
     | AutoClassifyTransactionClicked { ledgerLine : LedgerLine, toAccountId : Int }
+    | GotClassifySaveResponse (Result Http.Error ())
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
     | OpenCreateDialog Time.Posix
     | CloseDialogPressed
     | EnterPressed
+    | RcvScrollY Int
     | GotZone Time.Zone
     | ToggleTheme
     | GotCategories (Result Http.Error (List Category))
@@ -450,7 +465,7 @@ viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalan
                         H.div
                             [ HA.class "suggestion-container"
 
-                            -- Don't open the dialog when clicking on the suggestion div
+                            -- Don't open the edit dialog
                             , HE.stopPropagationOn "click" (D.succeed ( NoOp, True ))
                             ]
                             [ H.div [ HA.class "suggestion-text" ]
@@ -463,11 +478,14 @@ viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalan
                             , H.div [ HA.class "suggestion-actions" ]
                                 [ H.button
                                     [ HA.class "suggestion-btn suggestion-btn-apply"
-                                    , HE.onClick
-                                        (AutoClassifyTransactionClicked
-                                            { ledgerLine = tx
-                                            , toAccountId = mostCommon.accountId
-                                            }
+
+                                    -- Don't open the edit dialog
+                                    , HE.stopPropagationOn "click"
+                                        (D.succeed
+                                            ( AutoClassifyTransactionClicked
+                                                { ledgerLine = tx, toAccountId = mostCommon.accountId }
+                                            , True
+                                            )
                                         )
                                     ]
                                     [ H.text "Apply" ]
@@ -643,8 +661,8 @@ statusMap f ma =
             Loading
 
 
-statusAndMap : Status a -> Status (a -> b) -> Status b
-statusAndMap ma mf =
+applyStatus : Status a -> Status (a -> b) -> Status b
+applyStatus ma mf =
     case ( mf, ma ) of
         ( Loaded f, Loaded a ) ->
             Loaded (f a)
@@ -704,11 +722,20 @@ viewLoaded searchForm dialog_ accounts balances ledgerLines transactionIdToSugge
 viewHome : Model -> Html Msg
 viewHome model =
     case
+        {-
+
+           To my surprise, this technique scales well.
+           If, let's say, fetching ledgerLines takes 4s AND fetching balances takes 4s too,
+           then the overall request time will be ~4s. So the data will display after ~4s, not 4s + 4s.
+
+           I suppose this makes sens since we're "mapping", we're not sequencing.
+
+        -}
         Loaded (viewLoaded model.searchForm model.dialog)
-            |> statusAndMap model.data.accounts
-            |> statusAndMap model.data.balances
-            |> statusAndMap model.data.ledgerLines
-            |> statusAndMap model.data.transactionIdToSuggestions
+            |> applyStatus model.data.accounts
+            |> applyStatus model.data.balances
+            |> applyStatus model.data.ledgerLines
+            |> applyStatus model.data.transactionIdToSuggestions
     of
         Loaded x ->
             x
@@ -1030,15 +1057,38 @@ loadingData =
     }
 
 
-fetchData : Cmd Msg
-fetchData =
-    Cmd.batch
-        [ fetchCategories
-        , fetchLedgerLines
-        , fetchAccounts
-        , fetchBalances
-        , fetchSuggestions
-        ]
+
+-- fetchData : Cmd Msg
+-- fetchData =
+--     Cmd.batch
+--         [ saveScrollPosition ()
+--         , Task.perform Continue
+--             (Process.sleep 0
+--                 |> Task.andThen
+--                     (\_ ->
+--                         Task.succeed
+--                             [ fetchCategories
+--                             , fetchLedgerLines
+--                             , fetchAccounts
+--                             , fetchBalances
+--                             , fetchSuggestions
+--                             ]
+--                     )
+--             )
+--         ]
+
+
+fetchData : { scrollY : Int } -> Cmd Msg
+fetchData { scrollY } =
+    Task.perform (Fetching { scrollY = scrollY })
+        (Task.succeed
+            [ fetchCategories
+            , fetchLedgerLines
+            , fetchAccounts
+            , fetchBalances
+            , fetchSuggestions
+            ]
+        )
 
 
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -1051,6 +1101,7 @@ init () url key =
       , dialog = Nothing
       , isDarkTheme = False
       , data = loadingData
+      , scrollY = 0
       , searchForm =
             { descr = ""
             , toClassify = False
@@ -1059,7 +1110,7 @@ init () url key =
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
-        , fetchData
+        , fetchData { scrollY = 0 }
         ]
     )
 
@@ -1087,6 +1138,43 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
+        RcvScrollY scrollY ->
+            ( { model | scrollY = scrollY }
+            , Cmd.none
+            )
+
+        RequestCursorRestore { scrollY } ->
+            let
+                _ =
+                    Debug.log "Actually restoring scrollY" scrollY
+            in
+            ( model
+            , restoreScrollY scrollY
+            )
+
+        Fetching { scrollY } [] ->
+            let
+                _ =
+                    Debug.log "Fetching done! Restoring scrollY" scrollY
+            in
+            ( model
+            , Process.sleep 0 |> Task.perform (\() -> RequestCursorRestore { scrollY = scrollY })
+            )
+
+        Fetching params (cmd :: rest) ->
+            let
+                _ =
+                    Debug.log "Fetching..." (List.length rest)
+            in
+            ( model
+            , Cmd.batch
+                [ cmd
+                , Task.perform (Fetching params) (Task.succeed rest)
+                ]
+            )
+
+        -- Continue cmds ->
+        --     ( model, Cmd.batch cmds )
         GotBalances result ->
             case result of
                 Ok balances ->
@@ -1204,7 +1292,21 @@ update msg model =
                 ( ledgerLine.transactionId
                 , transactionWrite
                 )
+                GotClassifySaveResponse
             )
+
+        GotClassifySaveResponse result ->
+            case result of
+                Err _ ->
+                    ( model
+                      -- TODO: display toast error or similar
+                    , Cmd.none
+                    )
+
+                Ok _ ->
+                    ( { model | data = loadingData }
+                    , fetchData { scrollY = model.scrollY }
+                    )
 
         EditDialogChanged subMsg ->
             case model.dialog of
@@ -1251,11 +1353,7 @@ update msg model =
                         EditDialogSave ->
                             ( model
                             , Cmd.batch
-                                [ --closeDialog ()
-                                  --   Task.attempt
-                                  --     (EditDialogChanged << GotEditSaveResponse)
-                                  --     (Task.succeed ())
-                                  let
+                                [ let
                                     transactionWrite : TransactionWrite
                                     transactionWrite =
                                         { fromAccountId = data.fromAccountId
@@ -1272,6 +1370,7 @@ update msg model =
                                     ( data.transactionId
                                     , transactionWrite
                                     )
+                                    (EditDialogChanged << GotEditSaveResponse)
                                 ]
                             )
 
@@ -1290,7 +1389,7 @@ update msg model =
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData
+                                        , fetchData { scrollY = model.scrollY }
                                         ]
                                     )
 
@@ -1314,7 +1413,7 @@ update msg model =
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData
+                                        , fetchData { scrollY = model.scrollY }
                                         ]
                                     )
 
@@ -1421,7 +1520,7 @@ update msg model =
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData
+                                        , fetchData { scrollY = model.scrollY }
                                         ]
                                     )
 
@@ -1494,6 +1593,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ enterPressed (\() -> EnterPressed)
+        , rcvScrollY RcvScrollY
         ]
 
 

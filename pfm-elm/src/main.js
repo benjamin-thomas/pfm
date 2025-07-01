@@ -15,13 +15,13 @@ if (import.meta.env.DEV) {
      There's no need to track the loaded state of the registry here either, there's no "double registry".
     */
     import('elm-debug-transformer').then((transformer) => {
-        transformer.register({theme: sysColorScheme}); // must always use the system color scheme to match chrome devtools
+        transformer.register({ theme: sysColorScheme }); // must always use the system color scheme to match chrome devtools
         console.log('[BOOT] Elm debugger transformer activated');
     });
 }
 
 // noinspection JSUnresolvedReference
-import {Elm} from './Main.elm';
+import { Elm } from './Main.elm';
 
 import '../main.css';
 
@@ -90,6 +90,29 @@ app.ports["showDialog"].subscribe(() => {
 
 app.ports["closeDialog"].subscribe(() => {
     getDialogExn().close();
+});
+
+const debounce = (func, delay) => {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), delay);
+    };
+};
+
+window.addEventListener("scroll", debounce(() => {
+    app.ports["rcvScrollY"].send(window.scrollY);
+}, 50));
+
+app.ports["restoreScrollY"].subscribe((scrollY) => {
+    // Using two RAFs ensures DOM has settled
+    window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+            console.log(`[APP] Restoring scroll position: ${scrollY}px`);
+            window.scrollTo(0, scrollY);
+            console.log(`[APP] Restored scroll position: ${scrollY}px`);
+        });
+    });
 });
 
 document.addEventListener("keyup", (event) => {
