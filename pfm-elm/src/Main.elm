@@ -181,6 +181,7 @@ type alias Data =
 
 type alias SearchForm =
     { descr : String
+    , classify : Bool
     }
 
 
@@ -242,6 +243,7 @@ type Msg
 
 type SearchFormMsg
     = SearchDescrChanged String
+    | ClassifyClicked
 
 
 view : Model -> Browser.Document Msg
@@ -362,8 +364,8 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
     )
 
 
-viewOneTransaction : ( LedgerLine, ( Int, String ) ) -> Html Msg
-viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
+viewOneTransaction : { a | classify : Bool } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
+viewOneTransaction { classify } ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         isPositive =
             --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
@@ -408,34 +410,41 @@ viewOneTransaction ( tx, ( priorBalanceCents, priorBalance ) ) =
                     ]
                 ]
             ]
-        , if tx.toAccountName == "Unknown_EXPENSE" then
-            -- Suggestion UI shown for unknown expenses
-            H.div [ HA.class "suggestion-container" ]
-                [ H.div [ HA.class "suggestion-text" ]
-                    [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                    , H.span []
-                        [ H.text "Suggested category: "
-                        , H.strong [] [ H.text "Groceries" ] -- Placeholder suggestion
+        , when (classify && tx.toAccountName == "Unknown_EXPENSE") <|
+            \() ->
+                -- Suggestion UI shown for unknown expenses
+                H.div [ HA.class "suggestion-container" ]
+                    [ H.div [ HA.class "suggestion-text" ]
+                        [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                        , H.span []
+                            [ H.text "Suggested category: "
+                            , H.strong [] [ H.text "Groceries" ] -- Placeholder suggestion
+                            ]
+                        ]
+                    , H.div [ HA.class "suggestion-actions" ]
+                        [ H.button
+                            [ HA.class "suggestion-btn suggestion-btn-apply" ]
+                            [ H.text "Apply" ]
+                        , H.button
+                            [ HA.class "suggestion-btn suggestion-btn-ignore" ]
+                            [ H.text "Ignore" ]
+                        , H.button
+                            [ HA.class "suggestion-btn suggestion-btn-ai" ]
+                            [ H.text "Ask AI "
+                            , H.span [ HA.class "ai-icon" ] [ H.text "✨" ]
+                            ]
                         ]
                     ]
-                , H.div [ HA.class "suggestion-actions" ]
-                    [ H.button
-                        [ HA.class "suggestion-btn suggestion-btn-apply" ]
-                        [ H.text "Apply" ]
-                    , H.button
-                        [ HA.class "suggestion-btn suggestion-btn-ignore" ]
-                        [ H.text "Ignore" ]
-                    , H.button
-                        [ HA.class "suggestion-btn suggestion-btn-ai" ]
-                        [ H.text "Ask AI "
-                        , H.span [ HA.class "ai-icon" ] [ H.text "✨" ]
-                        ]
-                    ]
-                ]
-
-          else
-            H.text ""
         ]
+
+
+when : Bool -> (() -> Html msg) -> Html msg
+when condition fn =
+    if condition then
+        fn ()
+
+    else
+        H.text ""
 
 
 viewLedgerLines : SearchForm -> List LedgerLine -> Html Msg
@@ -450,13 +459,15 @@ viewLedgerLines searchForm withRunningBalanceEntity =
                     ]
                     [ H.text "Add Transaction" ]
                 ]
-            , H.div [ HA.class "suggestions-actions" ]
-                [ H.button
-                    [ HA.class "apply-all-suggestions-button" ]
-                    [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                    , H.text "Apply All Suggestions"
-                    ]
-                ]
+            , when searchForm.classify <|
+                \() ->
+                    H.div [ HA.class "suggestions-actions" ]
+                        [ H.button
+                            [ HA.class "apply-all-suggestions-button" ]
+                            [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
+                            , H.text "Apply All Suggestions"
+                            ]
+                        ]
             , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
                 (List.reverse
@@ -464,20 +475,35 @@ viewLedgerLines searchForm withRunningBalanceEntity =
                     -- FIXME: That'll enable more flexibility reversing the rows order.
                     -- FIXME: Or start the first row form the current balance, rather than 0€.
                     (List.map
-                        viewOneTransaction
+                        (viewOneTransaction searchForm)
                         (List.filter
-                            (\( tx, _ ) ->
-                                (searchForm.descr == "")
-                                    || String.contains
-                                        (String.toLower searchForm.descr)
-                                        (String.toLower tx.descr)
-                            )
+                            (transactionMatchesFilters searchForm)
                             (withPriorBalance withRunningBalanceEntity)
                         )
                     )
                 )
             ]
         ]
+
+
+transactionMatchesFilters : SearchForm -> ( LedgerLine, a ) -> Bool
+transactionMatchesFilters searchForm ( tx, _ ) =
+    matchesSearchText searchForm tx
+        && matchesClassificationFilter searchForm tx
+
+
+matchesSearchText : SearchForm -> LedgerLine -> Bool
+matchesSearchText searchForm tx =
+    String.isEmpty searchForm.descr
+        || String.contains
+            (String.toLower searchForm.descr)
+            (String.toLower tx.descr)
+
+
+matchesClassificationFilter : SearchForm -> LedgerLine -> Bool
+matchesClassificationFilter searchForm tx =
+    not searchForm.classify
+        || (tx.toAccountName == "Unknown_EXPENSE")
 
 
 viewSearchForm : SearchForm -> Html SearchFormMsg
@@ -492,6 +518,7 @@ viewSearchForm searchForm =
                     , HE.onInput SearchDescrChanged
                     , HA.value searchForm.descr
                     , HA.placeholder "Search by description"
+                    , HA.autocomplete False
                     , HA.class "transaction-search__input"
                     ]
                     []
@@ -519,9 +546,15 @@ viewSearchForm searchForm =
             , H.div [ HA.class "transaction-search__field transaction-search__field--checkbox" ]
                 [ H.label [ HA.class "checkbox-container" ]
                     [ H.input
-                        [ HA.type_ "checkbox" ]
+                        [ HA.type_ "checkbox"
+                        , HA.checked searchForm.classify
+                        , HE.onClick ClassifyClicked
+                        ]
                         []
-                    , H.span [ HA.class "checkbox-label" ] [ H.text "To classify" ]
+                    , H.span
+                        [ HA.class "checkbox-label"
+                        ]
+                        [ H.text "Classify" ]
                     ]
                 ]
             ]
@@ -947,6 +980,7 @@ init () url key =
       , data = loadingData
       , searchForm =
             { descr = ""
+            , classify = False
             }
       }
     , Cmd.batch
@@ -1049,6 +1083,11 @@ update msg model =
             case subMsg of
                 SearchDescrChanged str ->
                     ( updateSearchForm (\sf -> { sf | descr = str })
+                    , Cmd.none
+                    )
+
+                ClassifyClicked ->
+                    ( updateSearchForm (\sf -> { sf | classify = not sf.classify })
                     , Cmd.none
                     )
 
