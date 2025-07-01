@@ -239,9 +239,11 @@ type MkCreateDialogChanged
 
 
 type Msg
-    = UrlRequested UrlRequest
+    = NoOp
+    | UrlRequested UrlRequest
     | UrlChanged Url
     | EditTransactionClicked ( Int, TransactionWrite )
+    | AutoClassifyTransactionClicked { ledgerLine : LedgerLine, toAccountId : Int }
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
@@ -381,7 +383,10 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
     )
 
 
-viewOneTransaction : { a | toClassify : Bool, transactionIdToSuggestions : Dict Int (List Suggestion) } -> ( LedgerLine, ( Int, String ) ) -> Html Msg
+viewOneTransaction :
+    { a | toClassify : Bool, transactionIdToSuggestions : Dict Int (List Suggestion) }
+    -> ( LedgerLine, ( Int, String ) )
+    -> Html Msg
 viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         suggestions : List Suggestion
@@ -442,7 +447,12 @@ viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalan
 
                     mostCommon :: _ ->
                         -- Suggestion UI shown for unknown expenses
-                        H.div [ HA.class "suggestion-container" ]
+                        H.div
+                            [ HA.class "suggestion-container"
+
+                            -- Don't open the dialog when clicking on the suggestion div
+                            , HE.stopPropagationOn "click" (D.succeed ( NoOp, True ))
+                            ]
                             [ H.div [ HA.class "suggestion-text" ]
                                 [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
                                 , H.span []
@@ -452,7 +462,14 @@ viewOneTransaction { toClassify, transactionIdToSuggestions } ( tx, ( priorBalan
                                 ]
                             , H.div [ HA.class "suggestion-actions" ]
                                 [ H.button
-                                    [ HA.class "suggestion-btn suggestion-btn-apply" ]
+                                    [ HA.class "suggestion-btn suggestion-btn-apply"
+                                    , HE.onClick
+                                        (AutoClassifyTransactionClicked
+                                            { ledgerLine = tx
+                                            , toAccountId = mostCommon.accountId
+                                            }
+                                        )
+                                    ]
                                     [ H.text "Apply" ]
                                 , H.button
                                     [ HA.class "suggestion-btn suggestion-btn-ignore" ]
@@ -1067,6 +1084,9 @@ update msg model =
             { model | searchForm = f model.searchForm }
     in
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         GotBalances result ->
             case result of
                 Ok balances ->
@@ -1167,6 +1187,24 @@ update msg model =
 
         EditTransactionClicked params ->
             handleEditDialog params model
+
+        AutoClassifyTransactionClicked { ledgerLine, toAccountId } ->
+            let
+                transactionWrite : TransactionWrite
+                transactionWrite =
+                    { fromAccountId = ledgerLine.fromAccountId
+                    , toAccountId = toAccountId
+                    , dateUnix = ledgerLine.dateUnix
+                    , descr = ledgerLine.descr
+                    , cents = abs ledgerLine.flowCents
+                    }
+            in
+            ( model
+            , putTransaction
+                ( ledgerLine.transactionId
+                , transactionWrite
+                )
+            )
 
         EditDialogChanged subMsg ->
             case model.dialog of
