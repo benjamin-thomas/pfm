@@ -102,7 +102,7 @@ const debounce = (func, delay) => {
 
 window.addEventListener("scroll", debounce(() => {
     app.ports["rcvScrollY"].send(window.scrollY);
-}, 50));
+}, 100));
 
 app.ports["restoreScrollY"].subscribe((scrollY) => {
     // Using two RAFs ensures DOM has settled

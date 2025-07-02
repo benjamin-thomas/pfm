@@ -261,7 +261,7 @@ type alias Model =
     , route : Route
     , now : Time.Posix
     , zone : Time.Zone
-    , scrollY : Int
+    , scrollY : Maybe Int
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , data : Status Data
@@ -1118,7 +1118,7 @@ init () url key =
       , dialog = Nothing
       , isDarkTheme = False
       , data = Loading
-      , scrollY = 0
+      , scrollY = Nothing
       , searchForm =
             { descr = ""
             , toClassify = False
@@ -1152,7 +1152,7 @@ update msg model =
             ( model, Cmd.none )
 
         RcvScrollY scrollY ->
-            ( { model | scrollY = scrollY }
+            ( { model | scrollY = Just scrollY }
             , Cmd.none
             )
 
@@ -1165,7 +1165,9 @@ update msg model =
 
                 Ok data ->
                     ( { model | data = Loaded data }
-                    , restoreScrollY model.scrollY
+                    , Maybe.withDefault
+                        Cmd.none
+                        (Maybe.map restoreScrollY model.scrollY)
                     )
 
         RequestCursorRestore { scrollY } ->
