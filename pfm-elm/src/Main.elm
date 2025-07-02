@@ -70,52 +70,97 @@ port restoreScrollY : Int -> Cmd msg
 
 {-| http -v localhost:8080/categories
 -}
-fetchCategories : Cmd Msg
-fetchCategories =
-    let
-        _ =
-            Debug.log "fetchCategories" 1
-    in
-    Http.get
-        { url = "http://localhost:8080/categories"
-        , expect = Http.expectJson GotCategories (D.list decodeCategory)
+fetchCategoriesTask : Task Http.Error (List Category)
+fetchCategoriesTask =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = baseUrl ++ "categories"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeCategory
+        , timeout = Nothing
         }
+
+
+baseUrl : String
+baseUrl =
+    "http://localhost:8080/"
+
+
+handleJsonResponse : D.Decoder a -> Http.Response String -> Result Http.Error a
+handleJsonResponse decoder response =
+    case response of
+        Http.BadUrl_ url ->
+            Err (Http.BadUrl url)
+
+        Http.Timeout_ ->
+            Err Http.Timeout
+
+        Http.BadStatus_ { statusCode } _ ->
+            Err (Http.BadStatus statusCode)
+
+        Http.NetworkError_ ->
+            Err Http.NetworkError
+
+        Http.GoodStatus_ _ body ->
+            case D.decodeString decoder body of
+                Err _ ->
+                    Err (Http.BadBody body)
+
+                Ok result ->
+                    Ok result
 
 
 {-| http -v localhost:8080/transactions/ accountId==2
 -}
-fetchLedgerLines : Cmd Msg
-fetchLedgerLines =
-    Http.get
-        { url = "http://localhost:8080/transactions?accountId=2"
-        , expect = Http.expectJson GotLedgerLines (D.list decodeLedgerLine)
+fetchLedgerLinesTask : Task Http.Error (List LedgerLine)
+fetchLedgerLinesTask =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = baseUrl ++ "transactions?accountId=2"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeLedgerLine
+        , timeout = Nothing
         }
 
 
 {-| http -v localhost:8080/transactions/suggestions fromAccountId==2 toAccountId==10
 -}
-fetchSuggestions : Cmd Msg
-fetchSuggestions =
+fetchSuggestionsTask : Task Http.Error (List Suggestion)
+fetchSuggestionsTask =
     -- FIXME: hard coded values
-    Http.get
-        { url = "http://localhost:8080/transactions/suggestions?fromAccountId=2&toAccountId=10"
-        , expect = Http.expectJson GotSuggestions (D.list decodeSuggestion)
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = baseUrl ++ "transactions/suggestions?fromAccountId=2&toAccountId=10"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeSuggestion
+        , timeout = Nothing
         }
 
 
-fetchAccounts : Cmd Msg
-fetchAccounts =
-    Http.get
-        { url = "http://localhost:8080/accounts"
-        , expect = Http.expectJson GotAccounts (D.list decodeAccountRead)
+fetchAccountsTask : Task Http.Error (List AccountRead)
+fetchAccountsTask =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = baseUrl ++ "accounts"
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeAccountRead
+        , timeout = Nothing
         }
 
 
-fetchBalances : Cmd Msg
-fetchBalances =
-    Http.get
-        { url = "http://localhost:8080/accounts/balances?accountIds=2,3" -- FIXME: find a way this param
-        , expect = Http.expectJson GotBalances (D.list decodeAccountBalanceRead)
+fetchBalancesTask : Task Http.Error (List AccountBalanceRead)
+fetchBalancesTask =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = baseUrl ++ "accounts/balances?accountIds=2,3" -- FIXME: find a way this param
+        , body = Http.emptyBody
+        , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeAccountBalanceRead
+        , timeout = Nothing
         }
 
 
@@ -195,18 +240,18 @@ type Status a
     | Loaded a
 
 
-type alias Data =
-    { categories : Status (List Category)
-    , accounts : Status (List AccountRead)
-    , balances : Status (List AccountBalanceRead)
-    , ledgerLines : Status (List LedgerLine)
-    , suggestions : Status (List Suggestion)
-    }
-
-
 type alias SearchForm =
     { descr : String
     , toClassify : Bool
+    }
+
+
+type alias Data =
+    { categories : List Category
+    , ledgerLines : List LedgerLine
+    , accounts : List AccountRead
+    , balances : List AccountBalanceRead
+    , suggestions : List Suggestion
     }
 
 
@@ -219,7 +264,7 @@ type alias Model =
     , scrollY : Int
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
-    , data : Data
+    , data : Status Data
     , searchForm : SearchForm
     }
 
@@ -252,6 +297,7 @@ type Msg
     = NoOp
     | RequestCursorRestore { scrollY : Int }
     | Fetching { scrollY : Int } (List (Cmd Msg))
+    | GotData (Result Http.Error Data)
       -- | Continue (List (Cmd Msg))
     | UrlRequested UrlRequest
     | UrlChanged Url
@@ -267,11 +313,6 @@ type Msg
     | RcvScrollY Int
     | GotZone Time.Zone
     | ToggleTheme
-    | GotCategories (Result Http.Error (List Category))
-    | GotAccounts (Result Http.Error (List AccountRead))
-    | GotBalances (Result Http.Error (List AccountBalanceRead))
-    | GotLedgerLines (Result Http.Error (List LedgerLine))
-    | GotSuggestions (Result Http.Error (List Suggestion))
     | GotSearchFormMsg SearchFormMsg
 
 
@@ -727,24 +768,15 @@ viewLoaded searchForm dialog_ accounts balances ledgerLines suggestions =
 
 viewHome : Model -> Html Msg
 viewHome model =
-    case
-        {-
-
-           To my surprise, this technique scales well.
-           If, let's say, fetching ledgerLines takes 4s AND fetching balances takes 4s too,
-           then the overall request time will be ~4s. So the data will display after ~4s, not 4s + 4s.
-
-           I suppose this makes sens since we're "mapping", we're not sequencing.
-
-        -}
-        Loaded (viewLoaded model.searchForm model.dialog)
-            |> applyStatus model.data.accounts
-            |> applyStatus model.data.balances
-            |> applyStatus model.data.ledgerLines
-            |> applyStatus model.data.suggestions
-    of
-        Loaded x ->
-            x
+    case model.data of
+        Loaded loadedData ->
+            viewLoaded
+                model.searchForm
+                model.dialog
+                loadedData.accounts
+                loadedData.balances
+                loadedData.ledgerLines
+                loadedData.suggestions
 
         Failed ->
             H.text "Failed to load data."
@@ -1053,48 +1085,27 @@ type alias Flags =
     }
 
 
-loadingData : Data
-loadingData =
-    { categories = Loading
-    , accounts = Loading
-    , balances = Loading
-    , ledgerLines = Loading
-    , suggestions = Loading
-    }
+
+--fetchAllAndRestoreCursorPosition : Task (Result Http.Error TaskAllResult)
 
 
-
--- fetchData : Cmd Msg
--- fetchData =
---     Cmd.batch
---         [ saveScrollPosition ()
---         , Task.perform Continue
---             (Process.sleep 0
---                 |> Task.andThen
---                     (\_ ->
---                         Task.succeed
---                             [ fetchCategories
---                             , fetchLedgerLines
---                             , fetchAccounts
---                             , fetchBalances
---                             , fetchSuggestions
---                             ]
---                     )
---             )
---         ]
-
-
-fetchData : { scrollY : Int } -> Cmd Msg
-fetchData { scrollY } =
-    Task.perform (Fetching { scrollY = scrollY })
-        (Task.succeed
-            [ fetchCategories
-            , fetchLedgerLines
-            , fetchAccounts
-            , fetchBalances
-            , fetchSuggestions
-            ]
-        )
+fetchData : Cmd Msg
+fetchData =
+    let
+        fetchTask : Task Http.Error Data
+        fetchTask =
+            let
+                apply =
+                    Task.map2 (\x f -> f x)
+            in
+            Task.succeed Data
+                |> apply fetchCategoriesTask
+                |> apply fetchLedgerLinesTask
+                |> apply fetchAccountsTask
+                |> apply fetchBalancesTask
+                |> apply fetchSuggestionsTask
+    in
+    Task.attempt GotData fetchTask
 
 
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -1106,7 +1117,7 @@ init () url key =
       , zone = Time.utc
       , dialog = Nothing
       , isDarkTheme = False
-      , data = loadingData
+      , data = Loading
       , scrollY = 0
       , searchForm =
             { descr = ""
@@ -1116,7 +1127,7 @@ init () url key =
     , Cmd.batch
         [ Task.perform GotZone Time.here
         , consoleLog "Booting up..." E.null
-        , fetchData { scrollY = 0 }
+        , fetchData
         ]
     )
 
@@ -1132,10 +1143,6 @@ simulateResponse =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
-        updateData : (Data -> Data) -> Model
-        updateData f =
-            { model | data = f model.data }
-
         updateSearchForm : (SearchForm -> SearchForm) -> Model
         updateSearchForm f =
             { model | searchForm = f model.searchForm }
@@ -1148,6 +1155,18 @@ update msg model =
             ( { model | scrollY = scrollY }
             , Cmd.none
             )
+
+        GotData result ->
+            case result of
+                Err _ ->
+                    ( { model | data = Failed }
+                    , Cmd.none
+                    )
+
+                Ok data ->
+                    ( { model | data = Loaded data }
+                    , restoreScrollY model.scrollY
+                    )
 
         RequestCursorRestore { scrollY } ->
             let
@@ -1178,68 +1197,6 @@ update msg model =
                 , Task.perform (Fetching params) (Task.succeed rest)
                 ]
             )
-
-        -- Continue cmds ->
-        --     ( model, Cmd.batch cmds )
-        GotBalances result ->
-            case result of
-                Ok balances ->
-                    ( updateData (\d -> { d | balances = Loaded balances })
-                    , Cmd.none
-                    )
-
-                Err _ ->
-                    ( updateData (\d -> { d | balances = Failed })
-                    , Cmd.none
-                    )
-
-        GotLedgerLines result ->
-            case result of
-                Ok ledgerLines ->
-                    ( updateData (\d -> { d | ledgerLines = Loaded ledgerLines })
-                    , Cmd.none
-                    )
-
-                Err _ ->
-                    ( updateData (\d -> { d | ledgerLines = Failed })
-                    , Cmd.none
-                    )
-
-        GotSuggestions result ->
-            case result of
-                Ok suggestions ->
-                    ( updateData (\d -> { d | suggestions = Loaded suggestions })
-                    , Cmd.none
-                    )
-
-                Err _ ->
-                    ( updateData (\d -> { d | suggestions = Failed })
-                    , Cmd.none
-                    )
-
-        GotAccounts result ->
-            case result of
-                Ok accounts ->
-                    ( updateData (\d -> { d | accounts = Loaded accounts })
-                    , Cmd.none
-                    )
-
-                Err _ ->
-                    ( updateData (\d -> { d | accounts = Failed })
-                    , Cmd.none
-                    )
-
-        GotCategories result ->
-            case result of
-                Ok categories ->
-                    ( updateData (\d -> { d | categories = Loaded categories })
-                    , Cmd.none
-                    )
-
-                Err _ ->
-                    ( updateData (\d -> { d | categories = Failed })
-                    , Cmd.none
-                    )
 
         UrlRequested urlRequest ->
             case urlRequest of
@@ -1305,7 +1262,7 @@ update msg model =
 
                 Ok _ ->
                     ( model
-                    , fetchData { scrollY = model.scrollY }
+                    , fetchData
                     )
 
         EditDialogChanged subMsg ->
@@ -1385,11 +1342,12 @@ update msg model =
                                 Ok _ ->
                                     ( { model
                                         | dialog = Nothing
-                                        , data = loadingData
+
+                                        --, data = Loading -- FIXME: does it flicker?
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData { scrollY = model.scrollY }
+                                        , fetchData
                                         ]
                                     )
 
@@ -1409,11 +1367,12 @@ update msg model =
                                 Ok _ ->
                                     ( { model
                                         | dialog = Nothing
-                                        , data = loadingData
+
+                                        --, data = Loading -- FIXME: does it flicker?
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData { scrollY = model.scrollY }
+                                        , fetchData
                                         ]
                                     )
 
@@ -1516,11 +1475,12 @@ update msg model =
                                 Ok _ ->
                                     ( { model
                                         | dialog = Nothing
-                                        , data = loadingData
+
+                                        --, data = Loading -- FIXME: does it flicker?
                                       }
                                     , Cmd.batch
                                         [ closeDialog ()
-                                        , fetchData { scrollY = model.scrollY }
+                                        , fetchData
                                         ]
                                     )
 
