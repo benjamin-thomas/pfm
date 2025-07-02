@@ -6,6 +6,7 @@ SELECT y.transaction_id
      , y.date AS date_unix
      , date(y.date, 'unixepoch') AS date
      , y.descr
+     , SOUNDEX(y.descr) AS soundex_descr
      , y.flow_cents
      , printf('%.2f', y.flow_cents / 100.0) AS flow
      , y.running_balance_cents

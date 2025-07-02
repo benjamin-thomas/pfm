@@ -7,18 +7,18 @@ module DTO.Ledger
     ( LedgerLine (..)
     , fromLedgerViewRow
     , Suggestion (..)
-    , SuggestionForTransaction (..)
-    , toSuggestionForTransactionDTO
+    , SuggestedAccount (..)
+    , toSuggestionDTO
     ) where
 
 import DB.LedgerView.Queries (LedgerViewRow (..))
 import DB.Transactions.Queries
-    ( SuggestForTransactionRow
-        ( MkSuggestForTransactionRow
-        , sftSuggestions
-        , sftTransactionId
+    ( SuggestedAccountJsonDb (..)
+    , SuggestionRow
+        ( MkSuggestionRow
+        , srSoundexDescr
+        , srSuggestedAccounts
         )
-    , SuggestionJsonDB (..)
     )
 import DTO.Utils
 import Data.Aeson (FromJSON, Options (fieldLabelModifier), ToJSON (toJSON), defaultOptions, genericToJSON)
@@ -35,6 +35,7 @@ data LedgerLine = MkLedgerLine
     , llsDateUnix :: Int
     , llsDate :: String
     , llsDescr :: String
+    , llsSoundexDescr :: String
     , llsFlowCents :: Int
     , llsFlow :: String
     , llsRunningBalanceCents :: Int
@@ -67,6 +68,7 @@ fromLedgerViewRow MkLedgerViewRow{..} =
         , llsDateUnix = lvrDateUnix
         , llsDate = lvrDate
         , llsDescr = lvrDescr
+        , llsSoundexDescr = lvrSoundexDescr
         , llsFlowCents = lvrFlowCents
         , llsFlow = lvrFlow
         , llsRunningBalanceCents = lvrRunningBalanceCents
@@ -79,9 +81,23 @@ fromLedgerViewRow MkLedgerViewRow{..} =
         , llsUpdatedAtTz = lvrUpdatedAtTz
         }
 
+data SuggestedAccount = MkSuggestedAccount
+    { saAccountId :: Int
+    , saAccountName :: Text
+    }
+    deriving stock (Show, Generic)
+    deriving anyclass (Elm)
+
+instance ToJSON SuggestedAccount where
+    toJSON =
+        genericToJSON
+            defaultOptions
+                { fieldLabelModifier = dropAndLowerHead (length "sa")
+                }
+
 data Suggestion = MkSuggestion
-    { suggestionAccountId :: Int
-    , suggestionAccountName :: Text
+    { sSoundexDescr :: Text
+    , sSuggestedAccounts :: [SuggestedAccount]
     }
     deriving stock (Show, Generic)
     deriving anyclass (Elm)
@@ -90,34 +106,20 @@ instance ToJSON Suggestion where
     toJSON =
         genericToJSON
             defaultOptions
-                { fieldLabelModifier = dropAndLowerHead (length "suggestion")
+                { fieldLabelModifier = dropAndLowerHead (length "s")
                 }
 
-data SuggestionForTransaction = MkSuggestionForTransaction
-    { sftTransactionId :: Int
-    , sftSuggestions :: [Suggestion]
-    }
-    deriving stock (Show, Generic)
-    deriving anyclass (Elm)
-
-instance ToJSON SuggestionForTransaction where
-    toJSON =
-        genericToJSON
-            defaultOptions
-                { fieldLabelModifier = dropAndLowerHead (length "sft")
-                }
-
-toSuggestionDto :: SuggestionJsonDB -> Suggestion
-toSuggestionDto MkSuggestionJsonDB{..} =
-    MkSuggestion
-        { suggestionAccountId = suggestionAccountId
-        , suggestionAccountName = suggestionAccountName
+toSuggestedAccount :: SuggestedAccountJsonDb -> SuggestedAccount
+toSuggestedAccount MkSuggestedAccountJsonDb{..} =
+    MkSuggestedAccount
+        { saAccountId = saAccountId
+        , saAccountName = saAccountName
         }
 
 -- FIXME: move this to another module...
-toSuggestionForTransactionDTO :: SuggestForTransactionRow -> SuggestionForTransaction
-toSuggestionForTransactionDTO MkSuggestForTransactionRow{..} =
-    MkSuggestionForTransaction
-        { sftTransactionId = sftTransactionId
-        , sftSuggestions = map toSuggestionDto sftSuggestions
+toSuggestionDTO :: SuggestionRow -> Suggestion
+toSuggestionDTO MkSuggestionRow{..} =
+    MkSuggestion
+        { sSoundexDescr = srSoundexDescr
+        , sSuggestedAccounts = map toSuggestedAccount srSuggestedAccounts
         }

@@ -23,7 +23,7 @@ import DB.Transactions.Queries qualified as TransactionQueries
 import DB.User.Queries
 import DTO.AccountRead qualified as AccountRead
 import DTO.Category (Category, fromCategoryRow)
-import DTO.Ledger (LedgerLine, fromLedgerViewRow, toSuggestionForTransactionDTO)
+import DTO.Ledger (LedgerLine, fromLedgerViewRow, toSuggestionDTO)
 import DTO.TransactionWrite (toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
@@ -128,7 +128,7 @@ handleGetAllSuggestions conn = do
     fromAccountId <- Twain.queryParam "fromAccountId"
     toAccountId <- Twain.queryParam "toAccountId"
     suggestionRows <- liftIO $ getAllSuggestions fromAccountId toAccountId conn
-    let suggestions = map toSuggestionForTransactionDTO suggestionRows
+    let suggestions = map toSuggestionDTO suggestionRows
     Twain.send $ Twain.json suggestions
 
 -- http -v localhost:8080/users all==1

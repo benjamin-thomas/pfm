@@ -101,38 +101,41 @@ deleteAllTransactions conn =
     (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/deleteAll.sql"))
     ()
 
-data SuggestionJsonDB = MkSuggestionJsonDB
-  { suggestionAccountId :: Int
-  , suggestionAccountName :: Text
+data SuggestedAccountJsonDb = MkSuggestedAccountJsonDb
+  { saAccountId :: Int
+  , saAccountName :: Text
+  , saOccurrenceCount :: Int
   }
   deriving (Show)
 
-instance FromRow SuggestionJsonDB where
+instance FromRow SuggestedAccountJsonDb where
   fromRow =
-    MkSuggestionJsonDB
+    MkSuggestedAccountJsonDb
       <$> field
       <*> field
+      <*> field
 
-data SuggestForTransactionRow = MkSuggestForTransactionRow
-  { sftTransactionId :: Int
-  , sftSuggestions :: [SuggestionJsonDB]
+data SuggestionRow = MkSuggestionRow
+  { srSoundexDescr :: Text
+  , srSuggestedAccounts :: [SuggestedAccountJsonDb]
   }
   deriving (Show)
 
-instance FromJSON SuggestionJsonDB where
-  parseJSON = withObject "SuggestionJsonDB" $ \v ->
-    MkSuggestionJsonDB
+instance FromJSON SuggestedAccountJsonDb where
+  parseJSON = withObject "suggestedAccounts" $ \v ->
+    MkSuggestedAccountJsonDb
       <$> v .: "id"
       <*> v .: "name"
+      <*> v .: "occurrences"
 
-instance FromRow SuggestForTransactionRow where
+instance FromRow SuggestionRow where
   fromRow = do
-    transId <- field
+    soundexDescr <- field
     jsonText <- field :: RowParser Text
-    let result = eitherDecode (BL.fromStrict (encodeUtf8 jsonText)) :: Either String [SuggestionJsonDB]
+    let result = eitherDecode (BL.fromStrict (encodeUtf8 jsonText)) :: Either String [SuggestedAccountJsonDb]
     case result of
       Left x -> error x
-      Right suggestions -> pure $ MkSuggestForTransactionRow transId suggestions
+      Right suggestions -> pure $ MkSuggestionRow soundexDescr suggestions
 
 {-
 
@@ -140,8 +143,8 @@ ghci> :m +DB.Transactions.Queries
 ghci> _newConn >>= getAllSuggestions 2 10
 
  -}
-getAllSuggestions :: Int -> Int -> Connection -> IO [SuggestForTransactionRow]
+getAllSuggestions :: Int -> Int -> Connection -> IO [SuggestionRow]
 getAllSuggestions fromAccountId' toAccountId' conn =
-  query conn sql (fromAccountId', toAccountId', fromAccountId', toAccountId')
+  query conn sql (fromAccountId', toAccountId')
  where
-  sql = Query $ decodeUtf8 $(embedFile "src/DB/Transactions/suggest.sql")
+  sql = Query $ decodeUtf8 $(embedFile "src/DB/Transactions/suggestions.sql")

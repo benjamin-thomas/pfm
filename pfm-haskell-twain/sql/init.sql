@@ -68,6 +68,19 @@ VALUES (1, 'OpeningBalance')      -- account_id = 1
      , (3, 'Unknown_INCOME')      -- account_id = 9
      , (4, 'Unknown_EXPENSE')     -- account_id = 10
      , (4, 'Groceries')           -- account_id = 11
+     , (4, 'Communications')      -- account_id = 12
+     , (4, 'Transport')           -- account_id = 13
+     , (4, 'Health')              -- account_id = 14
+     , (4, 'Leisure')             -- account_id = 15
+     , (4, 'Energy')              -- account_id = 16
+     , (4, 'Clothing')            -- account_id = 17
+     ;
+
+-- 12,4,Tel,1751409812,1751409812
+-- 13,3,Transport,1751460272,1751460272
+-- 14,3,Health,1751460311,1751460311
+-- 15,3,Leisure,1751460360,1751460360
+
      ;
 
 /*

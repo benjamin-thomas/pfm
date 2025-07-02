@@ -9,7 +9,7 @@ SELECT x.soundex_descr
 FROM (
      SELECT b.account_id AS suggested_account_id
           , COUNT(*) AS occurrences
-          , SOUNDEX('X4321 CARREFOUR EXPRESS TR 07/08') AS soundex_descr
+          , SOUNDEX('ORANGE SA-ORANGE') AS soundex_descr
      FROM transactions AS t
 
      INNER JOIN accounts AS a

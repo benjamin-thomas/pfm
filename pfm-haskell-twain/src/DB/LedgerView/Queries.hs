@@ -23,6 +23,7 @@ data LedgerViewRow = MkLedgerViewRow
   , lvrDateUnix :: Int
   , lvrDate :: String
   , lvrDescr :: String
+  , lvrSoundexDescr :: String
   , lvrFlowCents :: Int
   , lvrFlow :: String
   , lvrRunningBalanceCents :: Int
@@ -57,13 +58,14 @@ instance FromRow LedgerViewRow where
       <*> field
       <*> field
       <*> field
+      <*> field
 
 {-
 
 cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple
 
 ghci> :m + DB.LedgerView.Queries
-ghci> newConn  >>= getLedgerViewRows (MkAccountId 2)
+ghci> _newConn  >>= getLedgerViewRows (MkAccountId 2)
 
  -}
 
