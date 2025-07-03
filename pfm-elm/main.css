@@ -1006,6 +1006,28 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     background-color: #2980b9;
 }
 
+/* Similar Transactions Info */
+.similar-transactions-info {
+    margin: var(--space-lg) 0 var(--space-sm) 0;
+    padding: var(--space-md);
+    background-color: var(--color-hover);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.similar-transactions-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.similar-transactions-value {
+    color: var(--color-text-bright);
+    font-weight: 600;
+}
+
 /* Context Menu */
 .context-menu {
     position: absolute;

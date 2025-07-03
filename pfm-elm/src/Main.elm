@@ -542,8 +542,7 @@ viewOneTransaction { suggestedAccounts } ( tx, ( priorBalanceCents, priorBalance
                 (D.field "pageY" D.int)
             )
         ]
-        [ H.text (Debug.toString { txId = tx.transactionId, soundex = tx.soundexDescr })
-        , H.div [ HA.class "transaction-item__row" ]
+        [ H.div [ HA.class "transaction-item__row" ]
             [ H.div [ HA.class "transaction-item__main-content" ]
                 [ H.div [ HA.class "transaction-item__details" ]
                     [ H.div [ HA.class "transaction-item__description" ]
@@ -793,6 +792,15 @@ viewSearchForm searchMode =
                     ]
                 ]
             ]
+        , case searchMode of
+            SimilarTo data ->
+                H.div [ HA.class "similar-transactions-info" ]
+                    [ H.span [ HA.class "similar-transactions-label" ] [ H.text "Displaying transactions similar to:" ]
+                    , H.span [ HA.class "similar-transactions-value" ] [ H.text data.descr ]
+                    ]
+
+            _ ->
+                H.text ""
         ]
 
 
