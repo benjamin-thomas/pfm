@@ -258,11 +258,27 @@ type alias Data =
     }
 
 
-type alias ContextMenu =
+type alias ContextMenuPos =
     { x : Int
     , y : Int
-    , soundex : String
     }
+
+
+type alias ContextMenuData =
+    { soundexDescr : String
+    , descr : String
+    }
+
+
+type alias ContextMenu =
+    { pos : ContextMenuPos
+    , data : ContextMenuData
+    }
+
+
+type SearchMode
+    = MkSearchForm SearchForm
+    | SimilarTo ContextMenuData
 
 
 type alias Model =
@@ -276,7 +292,7 @@ type alias Model =
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , data : Status Data
-    , searchForm : SearchForm
+    , searchMode : SearchMode
     }
 
 
@@ -308,10 +324,10 @@ type Msg
     = NoOp
     | ShowContextMenu ContextMenu
     | HideContextMenu
+    | FindSimilarSelected ContextMenuData
     | RequestCursorRestore { scrollY : Int }
     | Fetching { scrollY : Int } (List (Cmd Msg))
     | GotData (Result Http.Error Data)
-      -- | Continue (List (Cmd Msg))
     | UrlRequested UrlRequest
     | UrlChanged Url
     | EditTransactionClicked ( Int, TransactionWrite )
@@ -338,16 +354,20 @@ type SearchFormMsg
 viewContextMenu : Maybe ContextMenu -> Html Msg
 viewContextMenu contextMenu =
     case contextMenu of
-        Just { x, y, soundex } ->
+        Just { pos, data } ->
             H.div
                 [ HA.class "context-menu"
-                , HA.style "top" (String.fromInt y ++ "px")
-                , HA.style "left" (String.fromInt x ++ "px")
+                , HA.style "top" (String.fromInt pos.y ++ "px")
+                , HA.style "left" (String.fromInt pos.x ++ "px")
                 ]
                 [ H.div [ HA.class "context-menu-debug" ]
-                    [ H.text <| "DEBUG: " ++ soundex ]
+                    [ H.text <| "DEBUG: " ++ data.soundexDescr ]
                 , H.ul []
-                    [ H.li [] [ H.text "Find similar transactions" ]
+                    [ H.li
+                        [ HE.onClick
+                            (FindSimilarSelected data)
+                        ]
+                        [ H.text "Find similar transactions" ]
                     , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 2" ]
                     , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 3" ]
                     ]
@@ -476,10 +496,10 @@ toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr,
 
 
 viewOneTransaction :
-    { a | toClassify : Bool, suggestedAccounts : List SuggestedAccount }
+    { a | suggestedAccounts : List SuggestedAccount }
     -> ( LedgerLine, ( Int, String ) )
     -> Html Msg
-viewOneTransaction { toClassify, suggestedAccounts } ( tx, ( priorBalanceCents, priorBalance ) ) =
+viewOneTransaction { suggestedAccounts } ( tx, ( priorBalanceCents, priorBalance ) ) =
     let
         isPositive =
             --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
@@ -506,9 +526,14 @@ viewOneTransaction { toClassify, suggestedAccounts } ( tx, ( priorBalanceCents, 
             (D.map2
                 (\x y ->
                     ( ShowContextMenu
-                        { x = x
-                        , y = y
-                        , soundex = tx.soundexDescr
+                        { pos =
+                            { x = x
+                            , y = y
+                            }
+                        , data =
+                            { soundexDescr = tx.soundexDescr
+                            , descr = tx.descr
+                            }
                         }
                     , True
                     )
@@ -539,7 +564,7 @@ viewOneTransaction { toClassify, suggestedAccounts } ( tx, ( priorBalanceCents, 
                     ]
                 ]
             ]
-        , when (toClassify && tx.toAccountName == "Unknown_EXPENSE") <|
+        , viewIf (tx.toAccountName == "Unknown_EXPENSE") <|
             \() ->
                 case suggestedAccounts of
                     [] ->
@@ -587,8 +612,8 @@ viewOneTransaction { toClassify, suggestedAccounts } ( tx, ( priorBalanceCents, 
         ]
 
 
-when : Bool -> (() -> Html msg) -> Html msg
-when condition fn =
+viewIf : Bool -> (() -> Html msg) -> Html msg
+viewIf condition fn =
     if condition then
         fn ()
 
@@ -596,12 +621,21 @@ when condition fn =
         H.text ""
 
 
-viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchForm -> List LedgerLine -> Html Msg
-viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
+isJust ma =
+    case ma of
+        Just _ ->
+            True
+
+        Nothing ->
+            False
+
+
+viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchMode -> List LedgerLine -> Html Msg
+viewLedgerLines contextMenu suggestions searchMode withRunningBalanceEntity =
     let
         filteredTransactions =
             List.filter
-                (transactionMatchesFilters searchForm)
+                (transactionMatchesFilters searchMode)
                 (withPriorBalance withRunningBalanceEntity)
 
         totalCount =
@@ -631,7 +665,7 @@ viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
                     , H.span [ HA.class "transaction-count" ] [ H.text countText ]
                     ]
                 , H.div [ HA.class "transaction-list__header-buttons" ]
-                    [ when searchForm.toClassify <|
+                    [ viewIf (isJust <| List.head suggestions) <|
                         \() ->
                             H.button
                                 [ HA.class "apply-all-suggestions-button" ]
@@ -645,7 +679,7 @@ viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
                         [ H.text "Add Transaction" ]
                     ]
                 ]
-            , H.map GotSearchFormMsg (viewSearchForm searchForm)
+            , H.map GotSearchFormMsg (viewSearchForm searchMode)
             , H.ul [ HA.class "transaction-list__items" ]
                 (List.reverse
                     -- FIXME: Compute the prior balance at the DB level.
@@ -654,8 +688,7 @@ viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
                     (List.map
                         (\( tx, tup2 ) ->
                             viewOneTransaction
-                                { toClassify = searchForm.toClassify
-                                , suggestedAccounts =
+                                { suggestedAccounts =
                                     Maybe.withDefault [] <|
                                         Dict.get
                                             tx.soundexDescr
@@ -671,10 +704,15 @@ viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
         ]
 
 
-transactionMatchesFilters : SearchForm -> ( LedgerLine, a ) -> Bool
-transactionMatchesFilters searchForm ( tx, _ ) =
-    matchesSearchText searchForm tx
-        && matchesClassificationFilter searchForm tx
+transactionMatchesFilters : SearchMode -> ( LedgerLine, a ) -> Bool
+transactionMatchesFilters searchMode ( tx, _ ) =
+    case searchMode of
+        MkSearchForm searchForm ->
+            matchesSearchText searchForm tx
+                && matchesClassificationFilter searchForm tx
+
+        SimilarTo data ->
+            data.soundexDescr == tx.soundexDescr
 
 
 matchesSearchText : SearchForm -> LedgerLine -> Bool
@@ -691,8 +729,8 @@ matchesClassificationFilter searchForm tx =
         || (tx.toAccountName == "Unknown_EXPENSE")
 
 
-viewSearchForm : SearchForm -> Html SearchFormMsg
-viewSearchForm searchForm =
+viewSearchForm : SearchMode -> Html SearchFormMsg
+viewSearchForm searchMode =
     H.div [ HA.class "transaction-search" ]
         [ H.div [ HA.class "transaction-search__row" ]
             [ H.div [ HA.class "transaction-search__field" ]
@@ -701,7 +739,13 @@ viewSearchForm searchForm =
                     [ HA.type_ "text"
                     , HA.id "search-description"
                     , HE.onInput SearchDescrChanged
-                    , HA.value searchForm.descr
+                    , HA.value <|
+                        case searchMode of
+                            MkSearchForm searchForm ->
+                                searchForm.descr
+
+                            _ ->
+                                ""
                     , HA.placeholder "Search by description"
                     , HA.autocomplete False
                     , HA.class "transaction-search__input"
@@ -732,7 +776,13 @@ viewSearchForm searchForm =
                 [ H.label [ HA.class "checkbox-container" ]
                     [ H.input
                         [ HA.type_ "checkbox"
-                        , HA.checked searchForm.toClassify
+                        , HA.checked <|
+                            case searchMode of
+                                MkSearchForm searchForm ->
+                                    searchForm.toClassify
+
+                                _ ->
+                                    False
                         , HE.onClick ToClassifyClicked
                         ]
                         []
@@ -748,14 +798,14 @@ viewSearchForm searchForm =
 
 viewLoaded :
     Maybe ContextMenu
-    -> SearchForm
+    -> SearchMode
     -> Maybe Dialog
     -> List AccountRead
     -> List AccountBalanceRead
     -> List LedgerLine
     -> List Suggestion
     -> Html Msg
-viewLoaded contextMenu searchForm dialog_ accounts balances ledgerLines suggestions =
+viewLoaded contextMenu searchMode dialog_ accounts balances ledgerLines suggestions =
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.div [ HA.class "debug-info" ]
@@ -773,7 +823,7 @@ viewLoaded contextMenu searchForm dialog_ accounts balances ledgerLines suggesti
                     balances
                 )
             ]
-        , viewLedgerLines contextMenu suggestions searchForm ledgerLines
+        , viewLedgerLines contextMenu suggestions searchMode ledgerLines
         , case dialog_ of
             Nothing ->
                 H.text ""
@@ -792,7 +842,7 @@ viewHome model =
         Loaded loadedData ->
             viewLoaded
                 model.contextMenu
-                model.searchForm
+                model.searchMode
                 model.dialog
                 loadedData.accounts
                 loadedData.balances
@@ -1129,6 +1179,13 @@ fetchData =
     Task.attempt GotData fetchTask
 
 
+initSearchForm : SearchForm
+initSearchForm =
+    { descr = ""
+    , toClassify = False
+    }
+
+
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
     ( { key = key
@@ -1141,10 +1198,9 @@ init () url key =
       , data = Loading
       , scrollY = Nothing
       , contextMenu = Nothing
-      , searchForm =
-            { descr = ""
-            , toClassify = False
-            }
+      , searchMode =
+            MkSearchForm
+                initSearchForm
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
@@ -1167,7 +1223,16 @@ update msg model =
     let
         updateSearchForm : (SearchForm -> SearchForm) -> Model
         updateSearchForm f =
-            { model | searchForm = f model.searchForm }
+            { model
+                | searchMode =
+                    case model.searchMode of
+                        MkSearchForm data ->
+                            MkSearchForm (f data)
+
+                        _ ->
+                            MkSearchForm
+                                (f initSearchForm)
+            }
     in
     case msg of
         NoOp ->
@@ -1178,6 +1243,14 @@ update msg model =
 
         HideContextMenu ->
             ( { model | contextMenu = Nothing }, Cmd.none )
+
+        FindSimilarSelected data ->
+            ( { model
+                | searchMode = SimilarTo data
+                , contextMenu = Nothing
+              }
+            , Cmd.none
+            )
 
         RcvScrollY scrollY ->
             ( { model | scrollY = Just scrollY }
