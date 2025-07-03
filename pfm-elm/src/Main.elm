@@ -336,12 +336,13 @@ viewContextMenu contextMenu =
     case contextMenu of
         Just { x, y, soundex } ->
             H.div
-                [ HA.style "position" "absolute"
+                [ HA.class "context-menu"
                 , HA.style "top" (String.fromInt y ++ "px")
                 , HA.style "left" (String.fromInt x ++ "px")
                 , HE.onClick HideContextMenu
                 ]
-                [ H.text <| "DEBUG" ++ Debug.toString { soundex = soundex, x = x, y = y }
+                [ H.div [ HA.class "context-menu-debug" ]
+                    [ H.text <| "DEBUG: " ++ soundex ]
                 , H.ul []
                     [ H.li [] [ H.text "Find similar transactions" ]
                     , H.li [] [ H.text "Option 2" ]
