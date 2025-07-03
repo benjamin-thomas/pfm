@@ -41,6 +41,9 @@ import Utils
 port enterPressed : (() -> msg) -> Sub msg
 
 
+port escapePressed : (() -> msg) -> Sub msg
+
+
 port rcvScrollY : (Int -> msg) -> Sub msg
 
 
@@ -320,6 +323,7 @@ type Msg
     | OpenCreateDialog Time.Posix
     | CloseDialogPressed
     | EnterPressed
+    | EscapePressed
     | RcvScrollY Int
     | GotZone Time.Zone
     | ToggleTheme
@@ -339,14 +343,13 @@ viewContextMenu contextMenu =
                 [ HA.class "context-menu"
                 , HA.style "top" (String.fromInt y ++ "px")
                 , HA.style "left" (String.fromInt x ++ "px")
-                , HE.onClick HideContextMenu
                 ]
                 [ H.div [ HA.class "context-menu-debug" ]
                     [ H.text <| "DEBUG: " ++ soundex ]
                 , H.ul []
                     [ H.li [] [ H.text "Find similar transactions" ]
-                    , H.li [] [ H.text "Option 2" ]
-                    , H.li [] [ H.text "Option 3" ]
+                    , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 2" ]
+                    , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 3" ]
                     ]
                 ]
 
@@ -1425,7 +1428,10 @@ update msg model =
                         , showTime = True
                         }
             in
-            ( { model | dialog = Just dialog_ }
+            ( { model
+                | dialog = Just dialog_
+                , contextMenu = Nothing
+              }
             , showDialog ()
             )
 
@@ -1534,6 +1540,11 @@ update msg model =
                     , Cmd.none
                     )
 
+        EscapePressed ->
+            ( { model | contextMenu = Nothing }
+            , Cmd.none
+            )
+
         GotZone zone ->
             ( { model | zone = zone }
             , Cmd.none
@@ -1571,6 +1582,7 @@ handleEditDialog ( transactionId, tx ) model =
         | dialog =
             Just
                 (EditDialog editDialogModel)
+        , contextMenu = Nothing
       }
     , showDialog ()
     )
@@ -1580,6 +1592,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ enterPressed (\() -> EnterPressed)
+        , escapePressed (\() -> EscapePressed)
         , rcvScrollY RcvScrollY
         ]
 

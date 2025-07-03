@@ -116,7 +116,12 @@ app.ports["restoreScrollY"].subscribe((scrollY) => {
 });
 
 document.addEventListener("keyup", (event) => {
-    if (event.key === "Enter") {
-        app.ports["enterPressed"].send(null);
+    switch (event.key) {
+        case "Enter":
+            app.ports["enterPressed"].send(null);
+            break;
+        case "Escape":
+            app.ports["escapePressed"].send(null);
+            break;
     }
 });
