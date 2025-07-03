@@ -245,7 +245,7 @@ type Status a
 
 type alias SearchForm =
     { descr : String
-    , toClassify : Bool
+    , filterUnknownExpenses : Bool
     }
 
 
@@ -331,8 +331,8 @@ type Msg
     | UrlRequested UrlRequest
     | UrlChanged Url
     | EditTransactionClicked ( Int, TransactionWrite )
-    | AutoClassifyTransactionClicked { ledgerLine : LedgerLine, toAccountId : Int }
-    | GotClassifySaveResponse (Result Http.Error ())
+    | AutoClassifyExpenseClicked { ledgerLine : LedgerLine, toAccountId : Int }
+    | GotClassifyExpenseSaveResponse (Result Http.Error ())
     | EditDialogChanged MkEditDialogChanged
     | CreateDialogChanged MkCreateDialogChanged
     | AddTransactionClicked
@@ -348,7 +348,7 @@ type Msg
 
 type SearchFormMsg
     = SearchDescrChanged String
-    | ToClassifyClicked
+    | SearchUnknownExpensesClicked
 
 
 viewContextMenu : Maybe ContextMenu -> Html Msg
@@ -361,15 +361,14 @@ viewContextMenu contextMenu =
                 , HA.style "left" (String.fromInt pos.x ++ "px")
                 ]
                 [ H.div [ HA.class "context-menu-debug" ]
-                    [ H.text <| "DEBUG: " ++ data.soundexDescr ]
+                    [ H.text <| "SOUNDEX: " ++ data.soundexDescr ]
                 , H.ul []
                     [ H.li
                         [ HE.onClick
                             (FindSimilarSelected data)
                         ]
                         [ H.text "Find similar transactions" ]
-                    , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 2" ]
-                    , H.li [ HE.onClick HideContextMenu ] [ H.text "Option 3" ]
+                    , H.li [ HE.onClick HideContextMenu ] [ H.text "Something else..." ]
                     ]
                 ]
 
@@ -591,7 +590,7 @@ viewOneTransaction { suggestedAccounts } ( tx, ( priorBalanceCents, priorBalance
                                     -- Don't open the edit dialog
                                     , HE.stopPropagationOn "click"
                                         (D.succeed
-                                            ( AutoClassifyTransactionClicked
+                                            ( AutoClassifyExpenseClicked
                                                 { ledgerLine = tx, toAccountId = mostLikely.accountId }
                                             , True
                                             )
@@ -669,7 +668,7 @@ viewLedgerLines contextMenu suggestions searchMode withRunningBalanceEntity =
                             H.button
                                 [ HA.class "apply-all-suggestions-button" ]
                                 [ H.span [ HA.class "suggestion-icon" ] [ H.text "💡" ]
-                                , H.text "Apply All Suggestions"
+                                , H.text "Apply All Suggestions (TODO)"
                                 ]
                     , H.button
                         [ HA.class "button button--primary"
@@ -724,7 +723,7 @@ matchesSearchText searchForm tx =
 
 matchesClassificationFilter : SearchForm -> LedgerLine -> Bool
 matchesClassificationFilter searchForm tx =
-    not searchForm.toClassify
+    not searchForm.filterUnknownExpenses
         || (tx.toAccountName == "Unknown_EXPENSE")
 
 
@@ -778,17 +777,18 @@ viewSearchForm searchMode =
                         , HA.checked <|
                             case searchMode of
                                 MkSearchForm searchForm ->
-                                    searchForm.toClassify
+                                    searchForm.filterUnknownExpenses
 
                                 _ ->
                                     False
-                        , HE.onClick ToClassifyClicked
+                        , HE.onClick SearchUnknownExpensesClicked
                         ]
                         []
                     , H.span
                         [ HA.class "checkbox-label"
+                        , HA.style "margin-left" "3px"
                         ]
-                        [ H.text "To classify" ]
+                        [ H.text "Unknown expenses" ]
                     ]
                 ]
             ]
@@ -1190,7 +1190,7 @@ fetchData =
 initSearchForm : SearchForm
 initSearchForm =
     { descr = ""
-    , toClassify = False
+    , filterUnknownExpenses = False
     }
 
 
@@ -1336,15 +1336,15 @@ update msg model =
                     , Cmd.none
                     )
 
-                ToClassifyClicked ->
-                    ( updateSearchForm (\sf -> { sf | toClassify = not sf.toClassify })
+                SearchUnknownExpensesClicked ->
+                    ( updateSearchForm (\sf -> { sf | filterUnknownExpenses = not sf.filterUnknownExpenses })
                     , Cmd.none
                     )
 
         EditTransactionClicked params ->
             handleEditDialog params model
 
-        AutoClassifyTransactionClicked { ledgerLine, toAccountId } ->
+        AutoClassifyExpenseClicked { ledgerLine, toAccountId } ->
             let
                 transactionWrite : TransactionWrite
                 transactionWrite =
@@ -1360,10 +1360,10 @@ update msg model =
                 ( ledgerLine.transactionId
                 , transactionWrite
                 )
-                GotClassifySaveResponse
+                GotClassifyExpenseSaveResponse
             )
 
-        GotClassifySaveResponse result ->
+        GotClassifyExpenseSaveResponse result ->
             case result of
                 Err _ ->
                     ( model
