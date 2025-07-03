@@ -349,6 +349,7 @@ type Msg
 type SearchFormMsg
     = SearchDescrChanged String
     | SearchUnknownExpensesClicked
+    | ClearSearchFormBtnPressed
 
 
 viewContextMenu : Maybe ContextMenu -> Html Msg
@@ -770,7 +771,9 @@ viewSearchForm searchMode =
                     ]
                     []
                 ]
-            , H.div [ HA.class "transaction-search__field transaction-search__field--checkbox" ]
+            ]
+        , H.div [ HA.class "transaction-search__row transaction-search__row--bottom" ]
+            [ H.div [ HA.class "transaction-search__field transaction-search__field--checkbox" ]
                 [ H.label [ HA.class "checkbox-container" ]
                     [ H.input
                         [ HA.type_ "checkbox"
@@ -790,6 +793,15 @@ viewSearchForm searchMode =
                         ]
                         [ H.text "Unknown expenses" ]
                     ]
+                ]
+            , H.div [ HA.class "transaction-search__field--button" ]
+                [ H.button
+                    [ HA.class "search-clear-button"
+                    , HA.type_ "button"
+                    , HA.id "form-clear-button"
+                    , HE.onClick ClearSearchFormBtnPressed
+                    ]
+                    [ H.text "Clear" ]
                 ]
             ]
         , case searchMode of
@@ -1338,6 +1350,11 @@ update msg model =
 
                 SearchUnknownExpensesClicked ->
                     ( updateSearchForm (\sf -> { sf | filterUnknownExpenses = not sf.filterUnknownExpenses })
+                    , Cmd.none
+                    )
+
+                ClearSearchFormBtnPressed ->
+                    ( updateSearchForm (\_ -> initSearchForm)
                     , Cmd.none
                     )
 
