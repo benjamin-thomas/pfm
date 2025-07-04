@@ -148,3 +148,46 @@ getAllSuggestions fromAccountId' toAccountId' conn =
   query conn sql (fromAccountId', toAccountId')
  where
   sql = Query $ decodeUtf8 $(embedFile "src/DB/Transactions/suggestions.sql")
+
+data SuggestionInsert = MkSuggestionInsert
+  { siTransactionId :: Int
+  , siToAccountId :: Int
+  }
+  deriving (Show)
+
+instance ToRow SuggestionInsert where
+  toRow (MkSuggestionInsert transactionId toAccountId') =
+    [ toField transactionId
+    , toField toAccountId'
+    ]
+
+insertSuggestions :: Connection -> [SuggestionInsert] -> IO ()
+insertSuggestions conn suggestions =
+  -- executeMany
+  --   conn
+  --   (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/insertSuggestions.sql"))
+  --   suggestions
+
+  -- Start a transaction
+  withTransaction conn $ do
+    -- Create and populate temp table
+    execute_ conn "CREATE TEMPORARY TABLE tmp (transaction_id INTEGER, to_account_id INTEGER)"
+
+    -- Batch insert all updates
+    executeMany
+      conn
+      "INSERT INTO tmp (transaction_id, to_account_id) VALUES (?,?)"
+      suggestions
+
+    -- Perform the update
+    execute_ conn $
+      Query $
+        T.unlines
+          [ "UPDATE transactions AS t"
+          , "SET to_account_id = tmp.to_account_id"
+          , "FROM tmp"
+          , "WHERE t.transaction_id = tmp.transaction_id"
+          ]
+
+    -- Clean up (optional - temp tables are dropped at end of session)
+    execute_ conn "DROP TABLE tmp"

@@ -5,9 +5,11 @@
 module DTO.TransactionWrite
   ( TransactionWrite
   , toTransactionNewRow
+  , SuggestionWrite
+  , toSuggestionsInsert
   ) where
 
-import DB.Transactions.Queries (TransactionNewRow (..))
+import DB.Transactions.Queries (SuggestionInsert (MkSuggestionInsert, siToAccountId, siTransactionId), TransactionNewRow (..))
 import DTO.Utils
 import Data.Aeson (FromJSON, defaultOptions, fieldLabelModifier, genericParseJSON)
 import Data.Aeson.Types (FromJSON (parseJSON))
@@ -40,4 +42,25 @@ toTransactionNewRow tx =
     , date = twDateUnix tx
     , descr = twDescr tx
     , cents = twCents tx
+    }
+
+data SuggestionWrite = MkSuggestionWrite
+  { swTransactionId :: Int
+  , swToAccountId :: Int
+  }
+  deriving stock (Generic, Show)
+  deriving anyclass (Elm)
+
+instance FromJSON SuggestionWrite where
+  parseJSON =
+    genericParseJSON
+      defaultOptions
+        { fieldLabelModifier = dropAndLowerHead (length "sw")
+        }
+
+toSuggestionsInsert :: SuggestionWrite -> SuggestionInsert
+toSuggestionsInsert sw =
+  MkSuggestionInsert
+    { siTransactionId = swTransactionId sw
+    , siToAccountId = swToAccountId sw
     }

@@ -16,6 +16,7 @@ import DB.Transactions.Queries
     , deleteAllTransactions
     , deleteTransaction
     , getAllSuggestions
+    , insertSuggestions
     , insertTransaction
     , updateTransaction
     )
@@ -24,7 +25,7 @@ import DB.User.Queries
 import DTO.AccountRead qualified as AccountRead
 import DTO.Category (Category, fromCategoryRow)
 import DTO.Ledger (LedgerLine, fromLedgerViewRow, toSuggestionDTO)
-import DTO.TransactionWrite (toTransactionNewRow)
+import DTO.TransactionWrite (toSuggestionsInsert, toTransactionNewRow)
 import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
@@ -109,6 +110,12 @@ handlePostTransactions conn = do
     liftIO $ insertTransaction conn toInsert
     Twain.send $ Twain.raw status201 [] BSL.empty
 
+handleApplyAllSuggestions :: Connection -> Twain.ResponderM ()
+handleApplyAllSuggestions conn = do
+    toInserts <- map toSuggestionsInsert <$> Twain.fromBody
+    liftIO $ insertSuggestions conn toInserts
+    Twain.send $ Twain.raw status204 [] BSL.empty
+
 handlePutTransactions :: Connection -> Twain.ResponderM ()
 handlePutTransactions conn = do
     transactionId :: Int <- Twain.param "id"
@@ -176,6 +183,7 @@ routes conn =
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
+    , Twain.patch "/transactions/apply-all-suggestions" $ handleApplyAllSuggestions conn
     , Twain.put "/transactions/:id" $ handlePutTransactions conn
     , Twain.get "/transactions/suggestions" $ handleGetAllSuggestions conn
     , Twain.delete "/transactions/:id" $ handleDeleteTransactions conn
