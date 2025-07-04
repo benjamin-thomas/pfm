@@ -243,8 +243,13 @@ type Status a
     | Loaded a
 
 
+type SearchBy
+    = ByDescr String
+    | BySimilarTo ContextMenuData
+
+
 type alias SearchForm =
-    { descr : String
+    { searchBy : SearchBy
     , filterUnknownExpenses : Bool
     }
 
@@ -276,11 +281,6 @@ type alias ContextMenu =
     }
 
 
-type SearchMode
-    = MkSearchForm SearchForm
-    | SimilarTo ContextMenuData
-
-
 type alias Model =
     { key : Nav.Key
     , url : Url
@@ -292,7 +292,7 @@ type alias Model =
     , dialog : Maybe Dialog
     , isDarkTheme : Bool
     , data : Status Data
-    , searchMode : SearchMode
+    , searchForm : SearchForm
     }
 
 
@@ -620,6 +620,7 @@ viewIf condition fn =
         H.text ""
 
 
+isJust : Maybe a -> Bool
 isJust ma =
     case ma of
         Just _ ->
@@ -629,12 +630,12 @@ isJust ma =
             False
 
 
-viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchMode -> List LedgerLine -> Html Msg
-viewLedgerLines contextMenu suggestions searchMode withRunningBalanceEntity =
+viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchForm -> List LedgerLine -> Html Msg
+viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
     let
         filteredTransactions =
             List.filter
-                (transactionMatchesFilters searchMode)
+                (transactionMatchesFilters searchForm)
                 (withPriorBalance withRunningBalanceEntity)
 
         totalCount =
@@ -678,7 +679,7 @@ viewLedgerLines contextMenu suggestions searchMode withRunningBalanceEntity =
                         [ H.text "Add Transaction" ]
                     ]
                 ]
-            , H.map GotSearchFormMsg (viewSearchForm searchMode)
+            , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
                 (List.reverse
                     -- FIXME: Compute the prior balance at the DB level.
@@ -703,22 +704,25 @@ viewLedgerLines contextMenu suggestions searchMode withRunningBalanceEntity =
         ]
 
 
-transactionMatchesFilters : SearchMode -> ( LedgerLine, a ) -> Bool
-transactionMatchesFilters searchMode ( tx, _ ) =
-    case searchMode of
-        MkSearchForm searchForm ->
-            matchesSearchText searchForm tx
-                && matchesClassificationFilter searchForm tx
+transactionMatchesFilters : SearchForm -> ( LedgerLine, a ) -> Bool
+transactionMatchesFilters searchForm ( tx, _ ) =
+    List.foldl (&&)
+        True
+        [ matchesClassificationFilter searchForm tx
+        , case searchForm.searchBy of
+            ByDescr descr ->
+                matchesSearchText { descr = descr } tx
 
-        SimilarTo data ->
-            data.soundexDescr == tx.soundexDescr
+            BySimilarTo data ->
+                data.soundexDescr == tx.soundexDescr
+        ]
 
 
-matchesSearchText : SearchForm -> LedgerLine -> Bool
-matchesSearchText searchForm tx =
-    String.isEmpty searchForm.descr
+matchesSearchText : { descr : String } -> LedgerLine -> Bool
+matchesSearchText { descr } tx =
+    String.isEmpty descr
         || String.contains
-            (String.toLower searchForm.descr)
+            (String.toLower descr)
             (String.toLower tx.descr)
 
 
@@ -728,8 +732,8 @@ matchesClassificationFilter searchForm tx =
         || (tx.toAccountName == "Unknown_EXPENSE")
 
 
-viewSearchForm : SearchMode -> Html SearchFormMsg
-viewSearchForm searchMode =
+viewSearchForm : SearchForm -> Html SearchFormMsg
+viewSearchForm searchForm =
     H.div [ HA.class "transaction-search" ]
         [ H.div [ HA.class "transaction-search__row" ]
             [ H.div [ HA.class "transaction-search__field" ]
@@ -739,9 +743,9 @@ viewSearchForm searchMode =
                     , HA.id "search-description"
                     , HE.onInput SearchDescrChanged
                     , HA.value <|
-                        case searchMode of
-                            MkSearchForm searchForm ->
-                                searchForm.descr
+                        case searchForm.searchBy of
+                            ByDescr descr ->
+                                descr
 
                             _ ->
                                 ""
@@ -778,12 +782,7 @@ viewSearchForm searchMode =
                     [ H.input
                         [ HA.type_ "checkbox"
                         , HA.checked <|
-                            case searchMode of
-                                MkSearchForm searchForm ->
-                                    searchForm.filterUnknownExpenses
-
-                                _ ->
-                                    False
+                            searchForm.filterUnknownExpenses
                         , HE.onClick SearchUnknownExpensesClicked
                         ]
                         []
@@ -804,8 +803,8 @@ viewSearchForm searchMode =
                     [ H.text "Clear" ]
                 ]
             ]
-        , case searchMode of
-            SimilarTo data ->
+        , case searchForm.searchBy of
+            BySimilarTo data ->
                 H.div [ HA.class "similar-transactions-info" ]
                     [ H.span [ HA.class "similar-transactions-label" ] [ H.text "Displaying transactions similar to:" ]
                     , H.span [ HA.class "similar-transactions-value" ] [ H.text data.descr ]
@@ -818,7 +817,7 @@ viewSearchForm searchMode =
 
 viewLoaded :
     Maybe ContextMenu
-    -> SearchMode
+    -> SearchForm
     -> Maybe Dialog
     -> List AccountRead
     -> List AccountBalanceRead
@@ -862,7 +861,7 @@ viewHome model =
         Loaded loadedData ->
             viewLoaded
                 model.contextMenu
-                model.searchMode
+                model.searchForm
                 model.dialog
                 loadedData.accounts
                 loadedData.balances
@@ -1201,7 +1200,7 @@ fetchData =
 
 initSearchForm : SearchForm
 initSearchForm =
-    { descr = ""
+    { searchBy = ByDescr ""
     , filterUnknownExpenses = False
     }
 
@@ -1218,9 +1217,8 @@ init () url key =
       , data = Loading
       , scrollY = Nothing
       , contextMenu = Nothing
-      , searchMode =
-            MkSearchForm
-                initSearchForm
+      , searchForm =
+            initSearchForm
       }
     , Cmd.batch
         [ Task.perform GotZone Time.here
@@ -1241,18 +1239,9 @@ simulateResponse =
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     let
-        updateSearchForm : (SearchForm -> SearchForm) -> Model
+        updateSearchForm : (SearchForm -> SearchForm) -> SearchForm
         updateSearchForm f =
-            { model
-                | searchMode =
-                    case model.searchMode of
-                        MkSearchForm data ->
-                            MkSearchForm (f data)
-
-                        _ ->
-                            MkSearchForm
-                                (f initSearchForm)
-            }
+            f model.searchForm
     in
     case msg of
         NoOp ->
@@ -1266,7 +1255,7 @@ update msg model =
 
         FindSimilarSelected data ->
             ( { model
-                | searchMode = SimilarTo data
+                | searchForm = updateSearchForm (\sf -> { sf | searchBy = BySimilarTo data })
                 , contextMenu = Nothing
               }
             , Cmd.none
@@ -1344,17 +1333,17 @@ update msg model =
         GotSearchFormMsg subMsg ->
             case subMsg of
                 SearchDescrChanged str ->
-                    ( updateSearchForm (\sf -> { sf | descr = str })
+                    ( { model | searchForm = updateSearchForm (\sf -> { sf | searchBy = ByDescr str }) }
                     , Cmd.none
                     )
 
                 SearchUnknownExpensesClicked ->
-                    ( updateSearchForm (\sf -> { sf | filterUnknownExpenses = not sf.filterUnknownExpenses })
+                    ( { model | searchForm = updateSearchForm (\sf -> { sf | filterUnknownExpenses = not sf.filterUnknownExpenses }) }
                     , Cmd.none
                     )
 
                 ClearSearchFormBtnPressed ->
-                    ( updateSearchForm (\_ -> initSearchForm)
+                    ( { model | searchForm = updateSearchForm (\_ -> initSearchForm) }
                     , Cmd.none
                     )
 
