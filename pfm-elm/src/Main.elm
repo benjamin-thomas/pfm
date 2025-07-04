@@ -250,6 +250,8 @@ type SearchBy
 
 type alias SearchForm =
     { searchBy : SearchBy
+    , minAmount : String
+    , maxAmount : String
     , filterUnknownExpenses : Bool
     }
 
@@ -348,6 +350,8 @@ type Msg
 
 type SearchFormMsg
     = SearchDescrChanged String
+    | SearchMinAmountChanged String
+    | SearchMaxAmountChanged String
     | SearchUnknownExpensesClicked
     | ClearSearchFormBtnPressed
 
@@ -706,30 +710,54 @@ viewLedgerLines contextMenu suggestions searchForm withRunningBalanceEntity =
 
 transactionMatchesFilters : SearchForm -> ( LedgerLine, a ) -> Bool
 transactionMatchesFilters searchForm ( tx, _ ) =
+    let
+        matchesUnknownExpenses : Bool
+        matchesUnknownExpenses =
+            not searchForm.filterUnknownExpenses
+                || (tx.toAccountName == "Unknown_EXPENSE")
+
+        matchesSearchBy : Bool
+        matchesSearchBy =
+            let
+                matchesSearchText : { descr : String } -> Bool
+                matchesSearchText { descr } =
+                    String.isEmpty descr
+                        || String.contains
+                            (String.toLower descr)
+                            (String.toLower tx.descr)
+            in
+            case searchForm.searchBy of
+                ByDescr descr ->
+                    matchesSearchText { descr = descr }
+
+                BySimilarTo data ->
+                    data.soundexDescr == tx.soundexDescr
+
+        matchesMin : Bool
+        matchesMin =
+            case String.toInt searchForm.minAmount of
+                Nothing ->
+                    True
+
+                Just minAmount ->
+                    abs tx.flowCents >= minAmount
+
+        matchesMax : Bool
+        matchesMax =
+            case String.toInt searchForm.maxAmount of
+                Nothing ->
+                    True
+
+                Just maxAmount ->
+                    abs tx.flowCents <= maxAmount
+    in
     List.foldl (&&)
         True
-        [ matchesClassificationFilter searchForm tx
-        , case searchForm.searchBy of
-            ByDescr descr ->
-                matchesSearchText { descr = descr } tx
-
-            BySimilarTo data ->
-                data.soundexDescr == tx.soundexDescr
+        [ matchesUnknownExpenses
+        , matchesSearchBy
+        , matchesMin
+        , matchesMax
         ]
-
-
-matchesSearchText : { descr : String } -> LedgerLine -> Bool
-matchesSearchText { descr } tx =
-    String.isEmpty descr
-        || String.contains
-            (String.toLower descr)
-            (String.toLower tx.descr)
-
-
-matchesClassificationFilter : SearchForm -> LedgerLine -> Bool
-matchesClassificationFilter searchForm tx =
-    not searchForm.filterUnknownExpenses
-        || (tx.toAccountName == "Unknown_EXPENSE")
 
 
 viewSearchForm : SearchForm -> Html SearchFormMsg
@@ -761,6 +789,8 @@ viewSearchForm searchForm =
                     [ HA.type_ "number"
                     , HA.id "search-amount-min"
                     , HA.placeholder "Min"
+                    , HE.onInput SearchMinAmountChanged
+                    , HA.value searchForm.minAmount
                     , HA.class "transaction-search__input"
                     ]
                     []
@@ -771,6 +801,8 @@ viewSearchForm searchForm =
                     [ HA.type_ "number"
                     , HA.id "search-amount-max"
                     , HA.placeholder "Max"
+                    , HE.onInput SearchMaxAmountChanged
+                    , HA.value searchForm.maxAmount
                     , HA.class "transaction-search__input"
                     ]
                     []
@@ -1201,6 +1233,8 @@ fetchData =
 initSearchForm : SearchForm
 initSearchForm =
     { searchBy = ByDescr ""
+    , minAmount = ""
+    , maxAmount = ""
     , filterUnknownExpenses = False
     }
 
@@ -1334,6 +1368,16 @@ update msg model =
             case subMsg of
                 SearchDescrChanged str ->
                     ( { model | searchForm = updateSearchForm (\sf -> { sf | searchBy = ByDescr str }) }
+                    , Cmd.none
+                    )
+
+                SearchMinAmountChanged str ->
+                    ( { model | searchForm = updateSearchForm (\sf -> { sf | minAmount = str }) }
+                    , Cmd.none
+                    )
+
+                SearchMaxAmountChanged str ->
+                    ( { model | searchForm = updateSearchForm (\sf -> { sf | maxAmount = str }) }
                     , Cmd.none
                     )
 
