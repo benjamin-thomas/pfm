@@ -231,12 +231,6 @@ type Dialog
     | CreateDialog MkCreateDialog
 
 
-type Page
-    = NotFound
-    | Home
-    | UI
-
-
 type Status a
     = Loading
     | Failed
@@ -503,7 +497,7 @@ viewOneTransaction :
     { a | suggestedAccounts : List SuggestedAccount }
     -> ( LedgerLine, ( Int, String ) )
     -> Html Msg
-viewOneTransaction { suggestedAccounts } ( tx, ( priorBalanceCents, priorBalance ) ) =
+viewOneTransaction { suggestedAccounts } ( tx, ( _, priorBalance ) ) =
     let
         isPositive =
             --Decimal.gt tx.amount Decimal.zero && tx.from /= checkingAccount
@@ -1183,32 +1177,9 @@ accountSelect { onInput, text, value, accounts, excludeAccountId } =
         ]
 
 
-onDay : Int -> Time.Posix
-onDay n =
-    {-
-       $ date -d '1 week ago 14:00'
-       dim. 23 mars 2025 14:00:00 CET
-
-       $ date -d '1 week ago 14:00' +%s
-       1742734800
-    -}
-    let
-        offset =
-            1742734800 * 1000
-
-        oneDay =
-            60 * 60 * 24 * 1000
-    in
-    Time.millisToPosix <| n * oneDay + offset
-
-
 type alias Flags =
     { language : String
     }
-
-
-
---fetchAllAndRestoreCursorPosition : Task (Result Http.Error TaskAllResult)
 
 
 fetchData : Cmd Msg
@@ -1262,12 +1233,13 @@ init () url key =
     )
 
 
-simulateResponse : Cmd Msg
-simulateResponse =
-    Process.sleep 0
-        |> Task.andThen (\() -> Task.succeed ())
-        -- |> Task.andThen (\() -> Task.fail <| Http.BadStatus 500)
-        |> Task.attempt (CreateDialogChanged << GotCreateSaveResponse)
+
+--simulateResponse : Cmd Msg
+--simulateResponse =
+--    Process.sleep 0
+--        |> Task.andThen (\() -> Task.succeed ())
+--        -- |> Task.andThen (\() -> Task.fail <| Http.BadStatus 500)
+--        |> Task.attempt (CreateDialogChanged << GotCreateSaveResponse)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
