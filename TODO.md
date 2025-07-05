@@ -1,0 +1,4 @@
+- try to implement a fullstack solution in Gleam/Lustre
+- try to implement a fullstack solution in OCaml (dream on the back, fmlib browser on the front)
+- try to implement a fullstack solution in Gren (if the language advances far enough for it to be practical)
+- try to implement a fullstack solution in F# (SAFE stack?)
