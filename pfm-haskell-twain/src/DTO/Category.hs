@@ -9,7 +9,7 @@ module DTO.Category
   , fmtCategory
   ) where
 
-import DB.Category.Queries (CategoryRow (..))
+import DB.Categories.Queries (CategoryRow (..))
 import DTO.Utils (dropAndLowerHead)
 import Data.Aeson
 import Elm

@@ -12,7 +12,9 @@ build-type:         Simple
 extra-source-files:
 
 common warnings
-    ghc-options: -Wall
+    ghc-options:
+        -Wall
+        -Werror
 
 common extensions
     default-extensions: ImportQualifiedPost
@@ -46,7 +48,8 @@ library pfm-haskell-twain-lib
                     , ElmExport
                     , OfxParser
                     , DB.User.Queries
-                    , DB.Category.Queries
+                    , DB.Budgets.Queries
+                    , DB.Categories.Queries
                     , DB.LedgerView.Queries
                     , DB.Transactions.Queries
                     , DB.Accounts.Queries
@@ -60,11 +63,13 @@ library pfm-haskell-twain-lib
                     , aeson
                     , base16-bytestring
                     , bytestring
+                    , containers
                     , Decimal
                     , elm-street
                     , file-embed
                     , http-types
                     , megaparsec
+                    , mtl
                     , pretty-simple
                     , process
                     , raw-strings-qq
@@ -118,11 +123,13 @@ test-suite test-dev
                     , aeson
                     , base16-bytestring
                     , bytestring
+                    , containers
                     , Decimal
                     , elm-street
                     , file-embed
                     , http-types
                     , megaparsec
+                    , mtl
                     , pretty-simple
                     , process
                     , raw-strings-qq

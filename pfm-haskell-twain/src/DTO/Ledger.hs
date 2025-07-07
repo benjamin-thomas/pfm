@@ -28,6 +28,7 @@ import GHC.Generics (Generic)
 
 data LedgerLine = MkLedgerLine
     { llsTransactionId :: Int
+    , llsBudgetId :: Int
     , llsFromAccountId :: Int
     , llsFromAccountName :: String
     , llsToAccountId :: Int
@@ -61,6 +62,7 @@ fromLedgerViewRow :: LedgerViewRow -> LedgerLine
 fromLedgerViewRow MkLedgerViewRow{..} =
     MkLedgerLine
         { llsTransactionId = lvrTransactionId
+        , llsBudgetId = lvrBudgetId
         , llsFromAccountId = lvrFromAccountId
         , llsFromAccountName = lvrFromAccountName
         , llsToAccountId = lvrToAccountId

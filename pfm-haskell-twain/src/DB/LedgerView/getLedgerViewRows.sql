@@ -1,4 +1,5 @@
 SELECT y.transaction_id
+     , y.budget_id
      , y.from_account_id
      , y.from_account_name
      , y.to_account_id
@@ -22,6 +23,7 @@ FROM (
       , SUM(x.flow_cents) OVER (ORDER BY x.date ASC, x.transaction_id ASC) AS running_balance_cents
         FROM (
         SELECT t.transaction_id
+                , t.budget_id
                 , a.name AS from_account_name
                 , a.account_id AS from_account_id
                 , b.name AS to_account_name
@@ -38,6 +40,9 @@ FROM (
 
         INNER JOIN accounts AS b
                 ON t.to_account_id = b.account_id
+
+        INNER JOIN budgets AS bu
+                ON t.budget_id = bu.budget_id
 
         WHERE t.to_account_id = ? OR t.from_account_id = ?
         )x

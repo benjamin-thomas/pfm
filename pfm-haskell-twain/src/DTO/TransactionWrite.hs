@@ -17,7 +17,8 @@ import Elm.Generic (Elm)
 import GHC.Generics (Generic)
 
 data TransactionWrite = MkTransactionWrite
-  { twFromAccountId :: Int
+  { twBudgetId :: Maybe Int -- present if editing
+  , twFromAccountId :: Int
   , twToAccountId :: Int
   , twDateUnix :: Int
   , twDescr :: String
@@ -36,7 +37,8 @@ instance FromJSON TransactionWrite where
 toTransactionNewRow :: TransactionWrite -> TransactionNewRow
 toTransactionNewRow tx =
   MkTransactionNewRow
-    { fromAccountId = twFromAccountId tx
+    { budgetId = twBudgetId tx
+    , fromAccountId = twFromAccountId tx
     , toAccountId = twToAccountId tx
     , uniqueFitId = Nothing
     , date = twDateUnix tx

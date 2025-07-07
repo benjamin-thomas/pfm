@@ -8,21 +8,19 @@
 
 module DB.Transactions.Queries where
 
-import Crypto.Sha256 qualified as Sha256
 import Data.Aeson
-import Data.ByteString.Base16 qualified as Base16
 import Data.ByteString.Lazy qualified as BL
 import Data.FileEmbed (embedFile)
 import Data.Text
 import Data.Text qualified as T
 import Data.Text.Encoding
-import Data.Text.Encoding qualified as TE
 import Database.SQLite.Simple
 import Database.SQLite.Simple.FromRow (RowParser)
 import Database.SQLite.Simple.ToField
 
 data TransactionNewRow = MkTransactionNewRow
-  { fromAccountId :: Int
+  { budgetId :: Maybe Int
+  , fromAccountId :: Int
   , toAccountId :: Int
   , uniqueFitId :: Maybe UniqueFitId
   , date :: Int
@@ -37,26 +35,18 @@ instance ToField UniqueFitId where
 
 insertTransaction :: Connection -> TransactionNewRow -> IO ()
 insertTransaction conn newRow =
-  let uniqueFitId' = uniqueFitId newRow
-      hexDigest = case uniqueFitId' of
-        Nothing -> T.pack ""
-        Just (MkUniqueFitId t) -> TE.decodeUtf8 $ Base16.encode $ Sha256.hash $ TE.encodeUtf8 t
-
-      toAccountId' =
-        if hexDigest == T.pack "2dae108a57793798de95a6c46c43250a578661e7a477979dd319eed94c4d11d6"
-          then 11 -- TEMP: to test classification suggestions after reimport
-          else toAccountId newRow
-   in execute
-        conn
-        (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/insert.sql"))
-        ( fromAccountId newRow
-        , toAccountId'
-        , uniqueFitId'
-        , date newRow
-        , descr newRow -- descr_orig
-        , descr newRow
-        , cents newRow
-        )
+  execute
+    conn
+    (Query $ decodeUtf8 $(embedFile "src/DB/Transactions/insert.sql"))
+    ( budgetId newRow
+    , fromAccountId newRow
+    , toAccountId newRow
+    , uniqueFitId newRow
+    , date newRow
+    , descr newRow -- descr_orig
+    , descr newRow
+    , cents newRow
+    )
 
 -- instance ToRow (Int, TransactionNewRow) where
 --   toRow (transactionId, newRow) =

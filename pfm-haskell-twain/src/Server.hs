@@ -6,13 +6,16 @@
 
 module Server (runServer) where
 
+import Control.Monad (foldM)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Accounts.Queries qualified as AccountQueries
-import DB.Category.Queries (CategoryRow, getNonStaleCategories)
+import DB.Budgets.Queries (getBudgetIdForDateTry, insertForDateExn)
+import DB.Categories.Queries (CategoryRow, getNonStaleCategories)
 import DB.LedgerView.Queries (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
 import DB.Transactions.Queries
-    ( TransactionNewRow (MkTransactionNewRow)
+    ( TransactionNewRow (MkTransactionNewRow, date)
     , UniqueFitId (MkUniqueFitId)
+    , budgetId
     , deleteAllTransactions
     , deleteTransaction
     , getAllSuggestions
@@ -30,11 +33,13 @@ import DTO.User (fromUserRow)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Decimal (decimalMantissa, decimalPlaces)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Time (UTCTime (..), secondsToDiffTime)
-import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
+import Data.Time (Day, UTCTime (..), secondsToDiffTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime, utcTimeToPOSIXSeconds)
 import Database.SQLite.Simple (Connection, execute_, open, withTransaction)
 import Network.HTTP.Types (status200, status201, status204)
 import Network.Wai.Handler.Warp (Port, run)
@@ -95,7 +100,7 @@ handleCategories conn = do
 {- FOURMOLU_ENABLE -}
 
 {- FOURMOLU_DISABLE -}
--- http -v localhost:8080/transactions/ accountId==2
+-- http -v localhost:8080/transactions accountId==2
 handleGetTransactions :: Connection -> Twain.ResponderM ()
 handleGetTransactions conn = do
     accountId <- Twain.queryParam "accountId"
@@ -106,8 +111,16 @@ handleGetTransactions conn = do
 
 handlePostTransactions :: Connection -> Twain.ResponderM ()
 handlePostTransactions conn = do
-    toInsert <- toTransactionNewRow <$> Twain.fromBody
-    liftIO $ insertTransaction conn toInsert
+    toInsert :: TransactionNewRow <- toTransactionNewRow <$> Twain.fromBody
+    let dateUnix :: Int = date toInsert
+    let transactionDay :: Day = utctDay $ posixSecondsToUTCTime $ fromIntegral dateUnix
+    budgetId' <- do
+        mBudgetId <- liftIO $ getBudgetIdForDateTry conn transactionDay
+        maybe
+            (liftIO $ insertForDateExn conn transactionDay)
+            pure
+            mBudgetId
+    liftIO $ insertTransaction conn toInsert{budgetId = Just budgetId'}
     Twain.send $ Twain.raw status201 [] BSL.empty
 
 handleApplyAllSuggestions :: Connection -> Twain.ResponderM ()
@@ -176,12 +189,12 @@ handleAccountsBalances conn = do
 
 routes :: Connection -> [Twain.Middleware]
 routes conn =
-    [ Twain.get "/" $ Twain.send $ Twain.text "hi"
+    [ Twain.get "/" $ Twain.send $ Twain.text "hi (from pfm-haskell-twain)"
     , Twain.get "/accounts" $ handleAccounts conn
     , Twain.get "/accounts/:id/balance" $ handleAccountsBalance conn
     , Twain.get "/accounts/balances" $ handleAccountsBalances conn
     , Twain.get "/categories" $ handleCategories conn
-    , Twain.get "/transactions" $ handleGetTransactions conn
+    , Twain.get "/transactions/" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
     , Twain.patch "/transactions/apply-all-suggestions" $ handleApplyAllSuggestions conn
     , Twain.put "/transactions/:id" $ handlePutTransactions conn
@@ -262,17 +275,24 @@ reset = "\x1b[0m"
 
 newtype AccountNumber = MkAccountNumber Text deriving (Show)
 
-fromOfxTransaction :: AccountNumber -> StatementTransaction -> TransactionNewRow
-fromOfxTransaction (MkAccountNumber accountNumber) tx
+fromOfxTransactionExn :: Map Day Int -> AccountNumber -> StatementTransaction -> TransactionNewRow
+fromOfxTransactionExn postedToBudgetIdMap (MkAccountNumber accountNumber) tx
     | stAmount tx == 0 = error "Amount is 0" -- programming error, DB constraint will prevent this row from being inserted.
     | decimalPlaces (stAmount tx) /= 2 = error "Amount has more than 2 decimal places"
     | otherwise =
         let cents = decimalMantissa $ stAmount tx
+            -- FIXME: hard coded account IDs
             checkingAccountId = 2
-            unknownIncomeAccountId = 9
-            unknownExpenseAccountId = 10
+            unknownIncomeAccountId = 4
+            unknownExpenseAccountId = 6
+            budgetId' =
+                Map.findWithDefault
+                    (error "ABNORMAL: budgetId not found")
+                    (timestampToDay $ stPosted tx)
+                    postedToBudgetIdMap
          in MkTransactionNewRow
-                { fromAccountId = if stAmount tx < 0 then checkingAccountId else unknownIncomeAccountId
+                { budgetId = Just budgetId'
+                , fromAccountId = if stAmount tx < 0 then checkingAccountId else unknownIncomeAccountId
                 , toAccountId = if stAmount tx > 0 then checkingAccountId else unknownExpenseAccountId
                 , uniqueFitId =
                     Just . MkUniqueFitId $ accountNumber <> ":" <> stFitId tx
@@ -282,6 +302,11 @@ fromOfxTransaction (MkAccountNumber accountNumber) tx
                 , descr = T.unpack $ stName tx
                 , cents = fromIntegral $ abs cents
                 }
+
+timestampToDay :: TimeStamp -> Day
+timestampToDay ts = case ts of
+    FullDate tsDate -> utctDay tsDate
+    ShortDate d -> d
 
 _wip :: IO ()
 _wip = do
@@ -304,12 +329,40 @@ _wip = do
     case result of
         Left e -> putStrLn $ P.errorBundlePretty e
         Right (MkOfxBatch accountNumber transactions) -> do
-            mapM_ pPrint transactions
-            putStrLn $ "Parsed " <> show (length transactions) <> " transactions"
-            putStrLn $ "Chars count: " <> show (T.length ofxText)
+            let n = 3
+            let counter = show n <> "/" <> show (length transactions)
+            putStrLn $ yellow <> "== Showing the shape of " <> counter <> " parsed transactions ==" <> reset
+            mapM_ pPrint (take n transactions)
+            putStrLn ""
             conn <- _newConn
+            let
+                stPostedToBudgetId :: IO (Map Day Int)
+                stPostedToBudgetId = do
+                    foldM step Map.empty transactions
+                  where
+                    step :: Map Day Int -> StatementTransaction -> IO (Map Day Int)
+                    step acc tx = do
+                        let
+                            day :: Day
+                            day = timestampToDay $ stPosted tx
+
+                        case Map.lookup day acc of
+                            Just _ ->
+                                pure acc
+                            Nothing -> do
+                                mBid <- getBudgetIdForDateTry conn day
+                                budgetId' <- maybe (insertForDateExn conn day) pure mBid
+                                pure $ Map.insert day budgetId' acc
+
             withTransaction conn $ do
                 putStrLn $ yellow <> "== Truncating prior transactions" <> reset
                 deleteAllTransactions conn
-                mapM_ (insertTransaction conn . fromOfxTransaction (MkAccountNumber accountNumber)) transactions
+                postedToBudgetIdMap <- stPostedToBudgetId
+                mapM_
+                    ( insertTransaction conn
+                        . fromOfxTransactionExn
+                            postedToBudgetIdMap
+                            (MkAccountNumber accountNumber)
+                    )
+                    transactions
                 putStrLn $ green <> "== Transactions inserted" <> reset

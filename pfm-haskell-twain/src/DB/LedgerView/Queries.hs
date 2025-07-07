@@ -16,6 +16,7 @@ newtype AccountId = MkAccountId Int deriving (Show)
 
 data LedgerViewRow = MkLedgerViewRow
   { lvrTransactionId :: Int
+  , lvrBudgetId :: Int
   , lvrFromAccountId :: Int
   , lvrFromAccountName :: String
   , lvrToAccountId :: Int
@@ -41,6 +42,7 @@ instance FromRow LedgerViewRow where
   fromRow =
     MkLedgerViewRow
       <$> field
+      <*> field
       <*> field
       <*> field
       <*> field

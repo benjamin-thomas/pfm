@@ -119,7 +119,10 @@ fetchLedgerLinesTask =
         }
 
 
-{-| http -v localhost:8080/transactions/suggestions fromAccountId==2 toAccountId==10
+{-| http -v localhost:8080/transactions/suggestions fromAccountId==2 toAccountId==6
+
+FIXME: hard coded values
+
 -}
 fetchSuggestionsTask : Task Http.Error (List Suggestion)
 fetchSuggestionsTask =
@@ -127,7 +130,7 @@ fetchSuggestionsTask =
     Http.task
         { method = "GET"
         , headers = []
-        , url = baseUrl ++ "transactions/suggestions?fromAccountId=2&toAccountId=10"
+        , url = baseUrl ++ "transactions/suggestions?fromAccountId=2&toAccountId=6"
         , body = Http.emptyBody
         , resolver = Http.stringResolver <| handleJsonResponse <| D.list decodeSuggestion
         , timeout = Nothing
@@ -225,6 +228,7 @@ deleteTransaction { transactionId } =
 
 type alias MkEditDialog =
     { transactionId : Int
+    , budgetId : Int
     , fromAccountId : Int
     , toAccountId : Int
     , amount : String
@@ -502,9 +506,10 @@ attachPriorBalance transactions =
 
 
 toTransactionWrite : LedgerLine -> ( Int, TransactionWrite )
-toTransactionWrite { transactionId, fromAccountId, toAccountId, dateUnix, descr, flowCents } =
+toTransactionWrite { budgetId, transactionId, fromAccountId, toAccountId, dateUnix, descr, flowCents } =
     ( transactionId
-    , { fromAccountId = fromAccountId
+    , { budgetId = Just budgetId
+      , fromAccountId = fromAccountId
       , toAccountId = toAccountId
       , dateUnix = dateUnix
       , descr = descr
@@ -1423,7 +1428,8 @@ update msg model =
             let
                 transactionWrite : TransactionWrite
                 transactionWrite =
-                    { fromAccountId = ledgerLine.fromAccountId
+                    { budgetId = Just ledgerLine.budgetId
+                    , fromAccountId = ledgerLine.fromAccountId
                     , toAccountId = toAccountId
                     , dateUnix = ledgerLine.dateUnix
                     , descr = ledgerLine.descr
@@ -1517,7 +1523,8 @@ update msg model =
                                 [ let
                                     transactionWrite : TransactionWrite
                                     transactionWrite =
-                                        { fromAccountId = data.fromAccountId
+                                        { budgetId = Just data.budgetId
+                                        , fromAccountId = data.fromAccountId
                                         , toAccountId = data.toAccountId
                                         , dateUnix = Time.posixToMillis data.date // 1000
                                         , descr = data.descr
@@ -1652,7 +1659,8 @@ update msg model =
                                 newTransaction : TransactionWrite
                                 newTransaction =
                                     Debug.log "newTransaction" <|
-                                        { fromAccountId = data.fromAccountId
+                                        { budgetId = Nothing
+                                        , fromAccountId = data.fromAccountId
                                         , toAccountId = data.toAccountId
 
                                         -- We remove sub-second values, as only JS does that and we don't need it!
@@ -1731,7 +1739,7 @@ update msg model =
 
 
 handleEditDialog : ( Int, TransactionWrite ) -> Model -> ( Model, Cmd Msg )
-handleEditDialog ( transactionId, tx ) model =
+handleEditDialog ( transactionId, tw ) model =
     -- let
     --     dateString =
     --         Iso8601.fromTime tx.date
@@ -1743,12 +1751,17 @@ handleEditDialog ( transactionId, tx ) model =
     let
         editDialogModel : MkEditDialog
         editDialogModel =
-            { transactionId = transactionId
-            , fromAccountId = tx.fromAccountId
-            , toAccountId = tx.toAccountId
-            , amount = String.fromInt tx.cents
-            , date = Time.millisToPosix (tx.dateUnix * 1000)
-            , descr = tx.descr
+            { budgetId =
+                Maybe.withDefault
+                    -- FIXME: yuck!
+                    0
+                    tw.budgetId
+            , transactionId = transactionId
+            , fromAccountId = tw.fromAccountId
+            , toAccountId = tw.toAccountId
+            , amount = String.fromInt tw.cents
+            , date = Time.millisToPosix (tw.dateUnix * 1000)
+            , descr = tw.descr
             , showTime = True -- FIXME: observe the unix ts trailing info
             }
     in

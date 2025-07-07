@@ -1,3 +1,18 @@
+## Coding style
+
+There are 2 types of error handling: throw or return an Either.
+
+I should always make my intentions clear, by suffixing the potentially failing
+functions with:
+
+- "try", to signal a Maybe/Either
+- "exn", to signal that it is expected the function may throw
+
+Examples:
+
+- `fetchDataTry` => Either FetchError Int
+- `fetchDataExn` => Int
+
 ## Warning
 
 We store cents as Integers in the `transactions` table.

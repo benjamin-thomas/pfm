@@ -1,5 +1,6 @@
 INSERT INTO transactions
-    ( from_account_id
+    ( budget_id
+    , from_account_id
     , to_account_id
     , unique_fit_id
     , date
@@ -9,6 +10,7 @@ INSERT INTO transactions
     )
 VALUES
     ( ?
+    , ?
     , ?
     , ?
     , ?
