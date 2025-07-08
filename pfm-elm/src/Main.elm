@@ -662,13 +662,12 @@ viewLedgerLines contextMenu allSuggestions searchForm withRunningBalanceEntity =
     let
         filteredWithPriorBalance : List ( LedgerLine, ( Int, String ) )
         filteredWithPriorBalance =
-            attachPriorBalance <|
-                List.filter
-                    (transactionMatchesFilters searchForm)
-                    withRunningBalanceEntity
+            withRunningBalanceEntity
+                |> List.filter (transactionMatchesFilters searchForm)
+                |> attachPriorBalance
 
-        filteredWithPriorBalanceWithSuggestions : List ( LedgerLine, ( Int, String ), List SuggestedAccount )
-        filteredWithPriorBalanceWithSuggestions =
+        filteredData : ( List ( LedgerLine, ( Int, String ), List SuggestedAccount ), Int )
+        filteredData =
             let
                 soundDescrToSuggestedAccounts : Dict String (List SuggestedAccount)
                 soundDescrToSuggestedAccounts =
@@ -677,21 +676,29 @@ viewLedgerLines contextMenu allSuggestions searchForm withRunningBalanceEntity =
                         |> Dict.fromList
             in
             filteredWithPriorBalance
-                |> List.map
-                    (\( ledgerLine, tup2balance ) ->
-                        ( ledgerLine
-                        , tup2balance
-                        , if shouldSuggest ledgerLine then
-                            Maybe.withDefault [] <|
-                                Dict.get
-                                    ledgerLine.soundexDescr
-                                    soundDescrToSuggestedAccounts
+                |> List.foldl
+                    (\( ledgerLine, tup2balance ) ( accList, accCnt ) ->
+                        let
+                            suggestedAccounts =
+                                if shouldSuggest ledgerLine then
+                                    Maybe.withDefault [] <|
+                                        Dict.get
+                                            ledgerLine.soundexDescr
+                                            soundDescrToSuggestedAccounts
 
-                          else
-                            []
+                                else
+                                    []
+                        in
+                        ( ( ledgerLine, tup2balance, suggestedAccounts ) :: accList
+                        , accCnt + List.length suggestedAccounts
                         )
                     )
+                    ( [], 0 )
 
+        ( filteredWithPriorBalanceWithSuggestions, totalSuggestedCount ) =
+            filteredData
+
+        -- FIXME: I could avoid a second loop here!
         totalCount =
             List.length withRunningBalanceEntity
 
@@ -713,7 +720,7 @@ viewLedgerLines contextMenu allSuggestions searchForm withRunningBalanceEntity =
                     , H.span [ HA.class "transaction-count" ] [ H.text countText ]
                     ]
                 , H.div [ HA.class "transaction-list__header-buttons" ]
-                    [ viewIf (isJust <| List.head allSuggestions) <|
+                    [ viewIf (totalSuggestedCount > 0) <|
                         \() ->
                             H.button
                                 [ HA.class "apply-all-suggestions-button"
