@@ -4,4 +4,4 @@ SELECT budget_id
      , DATETIME(created_at, 'unixepoch') AS created_at_utc
      , DATETIME(updated_at, 'unixepoch') AS updated_at_utc
 FROM budgets
-ORDER BY starts_on
+ORDER BY starts_on DESC

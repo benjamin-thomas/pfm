@@ -3,10 +3,12 @@ module Page.Budgets exposing (Model, Msg, init, update, view)
 import Generated.Decoder exposing (decodeBudgetJSON)
 import Generated.Types exposing (BudgetJSON)
 import Html as H exposing (Html)
+import Html.Attributes as HA
 import Html.Events as HE
 import Http
 import Json.Decode as D
 import Route
+import Time exposing (Month(..))
 
 
 type alias Model =
@@ -33,18 +35,12 @@ init =
 
 
 type Msg
-    = Inc
-    | GotBudgetsResponse (Result Http.Error (List BudgetJSON))
+    = GotBudgetsResponse (Result Http.Error (List BudgetJSON))
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Inc ->
-            ( { model | counter = model.counter + 1 }
-            , Cmd.none
-            )
-
         GotBudgetsResponse response ->
             case response of
                 Ok budgets ->
@@ -55,26 +51,99 @@ update msg model =
                     ( model, Cmd.none )
 
 
+formatDate : Int -> String
+formatDate timestamp =
+    let
+        date =
+            Time.millisToPosix (timestamp * 1000)
+
+        month =
+            case Time.toMonth Time.utc date of
+                Jan ->
+                    "Jan"
+
+                Feb ->
+                    "Feb"
+
+                Mar ->
+                    "Mar"
+
+                Apr ->
+                    "Apr"
+
+                May ->
+                    "May"
+
+                Jun ->
+                    "Jun"
+
+                Jul ->
+                    "Jul"
+
+                Aug ->
+                    "Aug"
+
+                Sep ->
+                    "Sep"
+
+                Oct ->
+                    "Oct"
+
+                Nov ->
+                    "Nov"
+
+                Dec ->
+                    "Dec"
+
+        day =
+            Time.toDay Time.utc date |> String.fromInt
+
+        year =
+            Time.toYear Time.utc date |> String.fromInt
+    in
+    month ++ " " ++ day ++ ", " ++ year
+
+
 viewOneBudget : BudgetJSON -> Html msg
 viewOneBudget budget =
-    H.li [] [ H.text <| Debug.toString budget ]
+    H.li [ HA.class "budget-item" ]
+        [ H.div [ HA.class "budget-item__listing" ]
+            [ H.div [ HA.class "budget-item__id" ]
+                [ H.text ("Budget #" ++ String.fromInt budget.id) ]
+            , H.div [ HA.class "budget-item__period" ]
+                [ H.text (formatDate budget.startsOn ++ " - " ++ formatDate budget.endsOn) ]
+            ]
+        , H.div [ HA.class "budget-item__actions" ]
+            [ H.button [ HA.class "button button--small" ]
+                [ H.text "Edit" ]
+            ]
+        ]
 
 
 view : Model -> Html Msg
 view model =
-    H.div []
-        [ H.text "hello budgets"
-        , H.div []
-            [ H.text "Counter: "
-            , H.text (String.fromInt model.counter)
-            , H.button
-                [ HE.onClick Inc ]
-                [ H.text "+" ]
+    H.div [ HA.class "container" ]
+        [ H.div [ HA.class "page-header" ]
+            [ H.div [ HA.class "page-header__title" ]
+                [ H.h1 [] [ H.text "Budget Listing" ]
+                ]
+            , H.div [ HA.class "page-header__actions" ]
+                [ H.a
+                    [ Route.href Route.Home
+                    , HA.class "button button--secondary"
+                    ]
+                    [ H.text "Go back" ]
+                , H.button
+                    [ HA.class "button button--primary" ]
+                    [ H.text "Add Budget" ]
+                ]
             ]
-        , H.div []
-            [ H.a [ Route.href Route.Home ] [ H.text "Go back" ]
+        , H.div [ HA.class "budget-list" ]
+            [ H.div [ HA.class "budget-list__header" ]
+                [ H.div [] [ H.text "Budget Listing" ]
+                , H.div [] [ H.text "Actions" ]
+                ]
+            , H.ul [ HA.class "budget-list__items" ]
+                (List.map viewOneBudget model.budgets)
             ]
-        , H.h2 [] [ H.text <| "Budgets " ++ String.fromInt (List.length model.budgets) ]
-        , H.ul []
-            (List.map viewOneBudget model.budgets)
         ]

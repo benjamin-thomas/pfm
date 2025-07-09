@@ -358,7 +358,8 @@ _wip = do
     let result = P.parse ofxParser fileName ofxText
     case result of
         Left e -> putStrLn $ P.errorBundlePretty e
-        Right (MkOfxBatch accountNumber transactions) -> do
+        Right (MkOfxBatch accountNumber transactionsAsc) -> do
+            let transactions = reverse transactionsAsc -- to have budget ids in a logical order
             let n = 3
             let counter = show n <> "/" <> show (length transactions)
             putStrLn $ yellow <> "== Showing the shape of " <> counter <> " parsed transactions ==" <> reset

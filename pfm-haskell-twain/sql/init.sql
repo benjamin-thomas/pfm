@@ -69,7 +69,7 @@ BEGIN
      WHERE EXISTS (
          SELECT 1 FROM budgets
           WHERE NEW.starts_on <= ends_on
-            AND NEW.ends_on   MkStatementTransaction>= starts_on
+            AND NEW.ends_on   >= starts_on
     );
 END;
 
@@ -82,7 +82,7 @@ BEGIN
      WHERE EXISTS (
          SELECT 1 FROM budgets
           WHERE NEW.starts_on <= ends_on
-            AND NEW.ends_on   MkStatementTransaction>= starts_on
+            AND NEW.ends_on   >= starts_on
     );
 END;
 
@@ -151,6 +151,7 @@ VALUES (1, 'OpeningBalance')    -- account_id =  1
      , (4, 'Health')            -- account_id = 10
      , (4, 'Energy')            -- account_id = 11
      , (4, 'Clothing')          -- account_id = 12
+     , (4, 'Leisure')           -- account_id = 13
      ;
 
 CREATE TABLE transactions
