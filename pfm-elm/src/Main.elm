@@ -20,7 +20,8 @@ import Http
 import Iso8601
 import Json.Decode as D
 import Json.Encode as E
-import Page.Budgets as BudgetsPage
+import Page.Budget.Edit as BudgetEditPage
+import Page.Budget.List as BudgetListPage
 import Page.UI as UI_Page
 import Process
 import Route exposing (Route)
@@ -359,7 +360,8 @@ type HomeMsg
 
 type Msg
     = GotHomeMsg HomeMsg
-    | GotBudgetsPageMsg BudgetsPage.Msg
+    | GotBudgetListPageMsg BudgetListPage.Msg
+    | GotBudgetEditPageMsg BudgetEditPage.Msg
     | ToggleTheme
     | UrlRequested UrlRequest
     | UrlChanged Url
@@ -402,7 +404,8 @@ viewContextMenu contextMenu =
 type Page
     = MkHomePage HomeModel
     | MkUI_Page ()
-    | MkBudgetsPage BudgetsPage.Model
+    | MkBudgetListPage BudgetListPage.Model
+    | MkBudgetEditPage BudgetEditPage.Model
     | MkNotFoundPage
 
 
@@ -412,6 +415,9 @@ view model =
         viewPage : Html Msg
         viewPage =
             case model.page of
+                MkNotFoundPage ->
+                    H.div [] [ H.text "Not Found" ]
+
                 MkHomePage pageModel ->
                     H.map
                         GotHomeMsg
@@ -420,13 +426,15 @@ view model =
                 MkUI_Page () ->
                     UI_Page.view
 
-                MkBudgetsPage pageModel ->
+                MkBudgetListPage pageModel ->
                     H.map
-                        GotBudgetsPageMsg
-                        (BudgetsPage.view pageModel)
+                        GotBudgetListPageMsg
+                        (BudgetListPage.view pageModel)
 
-                MkNotFoundPage ->
-                    H.div [] [ H.text "Not Found" ]
+                MkBudgetEditPage pageModel ->
+                    H.map
+                        GotBudgetEditPageMsg
+                        (BudgetEditPage.view pageModel)
     in
     { title = "Personal Finance Manager"
     , body =
@@ -927,7 +935,7 @@ viewLoaded contextMenu searchMode dialog_ accounts balances ledgerLines suggesti
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
             [ H.ul []
-                [ link Route.Budgets "Budgets"
+                [ link Route.BudgetList "Budgets"
                 ]
             ]
         , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
@@ -1337,11 +1345,17 @@ initPage url =
         Route.UI ->
             ( MkUI_Page (), Cmd.none )
 
-        Route.Budgets ->
-            BudgetsPage.init
+        Route.BudgetList ->
+            BudgetListPage.init
                 |> Tuple.mapBoth
-                    MkBudgetsPage
-                    (Cmd.map GotBudgetsPageMsg)
+                    MkBudgetListPage
+                    (Cmd.map GotBudgetListPageMsg)
+
+        Route.BudgetEdit id ->
+            BudgetEditPage.init { id = id }
+                |> Tuple.mapBoth
+                    MkBudgetEditPage
+                    (Cmd.map GotBudgetEditPageMsg)
 
 
 
@@ -1404,13 +1418,24 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
-        GotBudgetsPageMsg pageMsg ->
+        GotBudgetListPageMsg pageMsg ->
             case model.page of
-                MkBudgetsPage pageModel ->
-                    BudgetsPage.update pageMsg pageModel
+                MkBudgetListPage pageModel ->
+                    BudgetListPage.update pageMsg pageModel
                         |> Tuple.mapBoth
-                            (mapPage MkBudgetsPage)
-                            (Cmd.map GotBudgetsPageMsg)
+                            (mapPage MkBudgetListPage)
+                            (Cmd.map GotBudgetListPageMsg)
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotBudgetEditPageMsg pageMsg ->
+            case model.page of
+                MkBudgetEditPage pageModel ->
+                    BudgetEditPage.update pageMsg pageModel
+                        |> Tuple.mapBoth
+                            (mapPage MkBudgetEditPage)
+                            (Cmd.map GotBudgetEditPageMsg)
 
                 _ ->
                     ( model, Cmd.none )

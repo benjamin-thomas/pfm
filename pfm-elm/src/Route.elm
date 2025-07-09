@@ -15,14 +15,16 @@ type Route
     = NotFound
     | Home
     | UI
-    | Budgets
+    | BudgetList
+    | BudgetEdit Int
 
 
 parser : Parser (Route -> a) a
 parser =
     P.oneOf
         [ P.map Home P.top
-        , P.map Budgets (P.s "budgets")
+        , P.map BudgetEdit (P.s "budgets" </> P.int) </> P.s "edit"
+        , P.map BudgetList (P.s "budgets")
         , P.map UI (P.s "ui")
         ]
 
@@ -48,8 +50,11 @@ routeToString route =
         Home ->
             "/"
 
-        Budgets ->
+        BudgetList ->
             "/budgets"
+
+        BudgetEdit id ->
+            "/budgets/" ++ String.fromInt id ++ "/edit"
 
         UI ->
             "/ui"

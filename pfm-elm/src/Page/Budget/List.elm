@@ -1,4 +1,4 @@
-module Page.Budgets exposing (Model, Msg, init, update, view)
+module Page.Budget.List exposing (Model, Msg, init, update, view)
 
 import Generated.Decoder exposing (decodeBudgetJSON)
 import Generated.Types exposing (BudgetJSON)
@@ -114,7 +114,10 @@ viewOneBudget budget =
                 [ H.text (formatDate budget.startsOn ++ " - " ++ formatDate budget.endsOn) ]
             ]
         , H.div [ HA.class "budget-item__actions" ]
-            [ H.button [ HA.class "button button--small" ]
+            [ H.a
+                [ HA.class "button button--small"
+                , Route.href (Route.BudgetEdit budget.id)
+                ]
                 [ H.text "Edit" ]
             ]
         ]

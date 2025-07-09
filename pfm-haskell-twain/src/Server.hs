@@ -206,15 +206,14 @@ handleBudgets =
         >>> liftIO
         >=> Twain.send
 
--- handleBudgets :: Connection -> Twain.ResponderM ()
--- handleBudgets conn = do
---     Twain.send =<< liftIO (Twain.json . map BudgetJSON.fromBudgetDB <$> BudgetQueries.getAll conn)
-
--- handleBudgets :: Connection -> Twain.ResponderM ()
--- handleBudgets =
---     (Twain.send <=< liftIO)
---         . fmap (Twain.json . map BudgetJSON.fromBudgetDB)
---         . BudgetQueries.getAll
+handleBudget :: Connection -> Twain.ResponderM ()
+handleBudget conn = do
+    budgetId' :: Int <- Twain.param "id"
+    budgetRow <- liftIO $ BudgetQueries.getOne budgetId' conn
+    let budgets = BudgetJSON.fromBudgetDB budgetRow
+    Twain.send
+        . Twain.json
+        $ budgets
 
 routes :: Connection -> [Twain.Middleware]
 routes conn =
@@ -222,6 +221,7 @@ routes conn =
     , Twain.get "/accounts" $ handleAccounts conn
     , Twain.get "/accounts/:id/balance" $ handleAccountsBalance conn
     , Twain.get "/accounts/balances" $ handleAccountsBalances conn
+    , Twain.get "/budgets/:id" $ handleBudget conn
     , Twain.get "/budgets/" $ handleBudgets conn
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions/" $ handleGetTransactions conn

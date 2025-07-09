@@ -77,3 +77,17 @@ getAll conn =
     query_
         conn
         (Query $ decodeUtf8 $(embedFile "src/DB/Budgets/getAll.sql"))
+
+{-
+ghci> :m + DB.Budgets.Queries
+ghci> _newConn >>= getOne 1
+ -}
+getOne :: Int -> Connection -> IO BudgetDB
+getOne budgetId' conn =
+    fmap
+        head
+        ( query
+            conn
+            (Query $ decodeUtf8 $(embedFile "src/DB/Budgets/getOne.sql"))
+            (Only budgetId')
+        )
