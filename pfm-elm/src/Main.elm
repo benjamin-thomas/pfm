@@ -20,6 +20,7 @@ import Http
 import Iso8601
 import Json.Decode as D
 import Json.Encode as E
+import Page.Budgets as BudgetsPage
 import Page.UI as UI_Page
 import Process
 import Route exposing (Route)
@@ -161,7 +162,7 @@ fetchBalancesTask =
         }
 
 
-postTransaction : TransactionWrite -> Cmd Msg
+postTransaction : TransactionWrite -> Cmd HomeMsg
 postTransaction transaction =
     Http.post
         { url = "http://localhost:8080/transactions"
@@ -186,7 +187,7 @@ putTransaction ( transactionId, transaction ) nextMsg =
         }
 
 
-applyAllSuggestions : List ( Int, SuggestedAccount ) -> Cmd Msg
+applyAllSuggestions : List ( Int, SuggestedAccount ) -> Cmd HomeMsg
 applyAllSuggestions toUpdate =
     let
         toSuggestionWrite : ( Int, SuggestedAccount ) -> SuggestionWrite
@@ -213,7 +214,7 @@ applyAllSuggestions toUpdate =
         }
 
 
-deleteTransaction : { transactionId : Int } -> Cmd Msg
+deleteTransaction : { transactionId : Int } -> Cmd HomeMsg
 deleteTransaction { transactionId } =
     Http.request
         { method = "DELETE"
@@ -301,16 +302,10 @@ type alias ContextMenu =
 
 type alias Model =
     { key : Nav.Key
-    , url : Url
-    , route : Route
+    , page : Page
     , now : Time.Posix
     , zone : Time.Zone
-    , scrollY : Maybe Int
-    , contextMenu : Maybe ContextMenu
-    , dialog : Maybe Dialog
     , isDarkTheme : Bool
-    , data : Status Data
-    , searchForm : SearchForm
     }
 
 
@@ -338,16 +333,14 @@ type MkCreateDialogChanged
     | GotCreateSaveResponse (Result Http.Error ())
 
 
-type Msg
+type HomeMsg
     = NoOp
     | ShowContextMenu ContextMenu
     | HideContextMenu
     | FindSimilarSelected ContextMenuData
     | RequestCursorRestore { scrollY : Int }
-    | Fetching { scrollY : Int } (List (Cmd Msg))
+    | Fetching { scrollY : Int } (List (Cmd HomeMsg))
     | GotData (Result Http.Error Data)
-    | UrlRequested UrlRequest
-    | UrlChanged Url
     | EditTransactionClicked ( Int, TransactionWrite )
     | ApplySuggestedExpenseClicked { ledgerLine : LedgerLine, toAccountId : Int }
     | ApplyAllSuggestionsBtnClicked (List ( Int, SuggestedAccount ))
@@ -361,9 +354,16 @@ type Msg
     | EnterPressed
     | EscapePressed
     | RcvScrollY Int
-    | GotZone Time.Zone
-    | ToggleTheme
     | GotSearchFormMsg SearchFormMsg
+
+
+type Msg
+    = GotHomeMsg HomeMsg
+    | GotBudgetsPageMsg BudgetsPage.Msg
+    | ToggleTheme
+    | UrlRequested UrlRequest
+    | UrlChanged Url
+    | GotZone Time.Zone
 
 
 type SearchFormMsg
@@ -374,7 +374,7 @@ type SearchFormMsg
     | ClearSearchFormBtnPressed
 
 
-viewContextMenu : Maybe ContextMenu -> Html Msg
+viewContextMenu : Maybe ContextMenu -> Html HomeMsg
 viewContextMenu contextMenu =
     case contextMenu of
         Just { pos, data } ->
@@ -399,19 +399,34 @@ viewContextMenu contextMenu =
             H.text ""
 
 
+type Page
+    = MkHomePage HomeModel
+    | MkUI_Page ()
+    | MkBudgetsPage BudgetsPage.Model
+    | MkNotFoundPage
+
+
 view : Model -> Browser.Document Msg
 view model =
     let
+        viewPage : Html Msg
         viewPage =
-            case model.route of
-                Route.NotFound ->
-                    H.div [] [ H.text "Not Found" ]
+            case model.page of
+                MkHomePage pageModel ->
+                    H.map
+                        GotHomeMsg
+                        (viewHome pageModel)
 
-                Route.Home ->
-                    viewHome model
-
-                Route.UI ->
+                MkUI_Page () ->
                     UI_Page.view
+
+                MkBudgetsPage pageModel ->
+                    H.map
+                        GotBudgetsPageMsg
+                        (BudgetsPage.view pageModel)
+
+                MkNotFoundPage ->
+                    H.div [] [ H.text "Not Found" ]
     in
     { title = "Personal Finance Manager"
     , body =
@@ -458,7 +473,7 @@ dialog =
     H.node "dialog"
 
 
-balanceCard : AccountBalanceRead -> Html Msg
+balanceCard : AccountBalanceRead -> Html HomeMsg
 balanceCard { categoryName, accountName, accountBalance } =
     let
         colorAccent =
@@ -520,7 +535,7 @@ toTransactionWrite { budgetId, transactionId, fromAccountId, toAccountId, dateUn
 
 viewOneTransaction :
     ( LedgerLine, ( Int, String ), List SuggestedAccount )
-    -> Html Msg
+    -> Html HomeMsg
 viewOneTransaction ( ledgerLine, ( _, priorBalance ), suggestedAccounts ) =
     let
         isPositive =
@@ -642,22 +657,12 @@ viewIf condition fn =
         H.text ""
 
 
-isJust : Maybe a -> Bool
-isJust ma =
-    case ma of
-        Just _ ->
-            True
-
-        Nothing ->
-            False
-
-
 shouldSuggest : LedgerLine -> Bool
 shouldSuggest tx =
     tx.toAccountName == "Unknown_EXPENSE"
 
 
-viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchForm -> List LedgerLine -> Html Msg
+viewLedgerLines : Maybe ContextMenu -> List Suggestion -> SearchForm -> List LedgerLine -> Html HomeMsg
 viewLedgerLines contextMenu allSuggestions searchForm withRunningBalanceEntity =
     let
         filteredWithPriorBalance : List ( LedgerLine, ( Int, String ) )
@@ -753,14 +758,12 @@ viewLedgerLines contextMenu allSuggestions searchForm withRunningBalanceEntity =
                 ]
             , H.map GotSearchFormMsg (viewSearchForm searchForm)
             , H.ul [ HA.class "transaction-list__items" ]
-                (List.reverse
-                    -- FIXME: Compute the prior balance at the DB level.
-                    -- FIXME: That'll enable more flexibility reversing the rows order.
-                    -- FIXME: Or start the first row form the current balance, rather than 0€.
-                    (List.map
-                        viewOneTransaction
-                        filteredWithPriorBalanceWithSuggestions
-                    )
+                -- FIXME: Compute the prior balance at the DB level.
+                -- FIXME: That'll enable more flexibility reversing the rows order.
+                -- FIXME: Or start the first row form the current balance, rather than 0€.
+                (List.map
+                    viewOneTransaction
+                    filteredWithPriorBalanceWithSuggestions
                 )
             , viewContextMenu contextMenu
             ]
@@ -914,12 +917,18 @@ viewLoaded :
     -> List AccountBalanceRead
     -> List LedgerLine
     -> List Suggestion
-    -> Html Msg
+    -> Html HomeMsg
 viewLoaded contextMenu searchMode dialog_ accounts balances ledgerLines suggestions =
+    let
+        link : Route -> String -> Html msg
+        link route text =
+            H.li [] [ H.a [ Route.href route ] [ H.text text ] ]
+    in
     H.div [ HA.class "container" ]
         [ H.div [ HA.class "section" ]
-            [ H.div [ HA.class "debug-info" ]
-                [ H.a [ Route.href Route.UI ] [ H.text "Go to UI" ] ]
+            [ H.ul []
+                [ link Route.Budgets "Budgets"
+                ]
             ]
         , H.h1 [ HA.style "margin-bottom" "0" ] [ H.text "PFM" ]
         , H.h4 [ HA.style "margin-top" "3px", HA.style "margin-bottom" "8px" ] [ H.text "In Elm" ]
@@ -946,14 +955,14 @@ viewLoaded contextMenu searchMode dialog_ accounts balances ledgerLines suggesti
         ]
 
 
-viewHome : Model -> Html Msg
-viewHome model =
-    case model.data of
+viewHome : HomeModel -> Html HomeMsg
+viewHome homeModel =
+    case homeModel.data of
         Loaded loadedData ->
             viewLoaded
-                model.contextMenu
-                model.searchForm
-                model.dialog
+                homeModel.contextMenu
+                homeModel.searchForm
+                homeModel.dialog
                 loadedData.accounts
                 loadedData.balances
                 loadedData.ledgerLines
@@ -966,7 +975,7 @@ viewHome model =
             H.text "Loading..."
 
 
-viewEditDialog : List AccountRead -> MkEditDialog -> Html Msg
+viewEditDialog : List AccountRead -> MkEditDialog -> Html HomeMsg
 viewEditDialog allAccounts2 data =
     dialog
         [ HA.id "transaction-dialog"
@@ -1040,7 +1049,7 @@ viewEditDialog allAccounts2 data =
         ]
 
 
-viewCreateDialog : List AccountRead -> MkCreateDialog -> Html Msg
+viewCreateDialog : List AccountRead -> MkCreateDialog -> Html HomeMsg
 viewCreateDialog allAccounts2 data =
     dialog
         [ HA.id "transaction-dialog"
@@ -1247,7 +1256,7 @@ type alias Flags =
     }
 
 
-fetchData : Cmd Msg
+fetchData : Cmd HomeMsg
 fetchData =
     let
         fetchTask : Task Http.Error Data
@@ -1275,27 +1284,64 @@ initSearchForm =
     }
 
 
+type alias HomeModel =
+    { data : Status Data
+    , scrollY : Maybe Int
+    , contextMenu : Maybe ContextMenu
+    , searchForm : SearchForm
+    , dialog : Maybe Dialog
+    }
+
+
+homeInit : HomeModel
+homeInit =
+    { data = Loading
+    , scrollY = Nothing
+    , contextMenu = Nothing
+    , searchForm = initSearchForm
+    , dialog = Nothing
+    }
+
+
 init : () -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init () url key =
-    ( { key = key
-      , url = url
-      , route = Route.fromUrl url
-      , now = Time.millisToPosix 0
-      , zone = Time.utc
-      , dialog = Nothing
-      , isDarkTheme = False
-      , data = Loading
-      , scrollY = Nothing
-      , contextMenu = Nothing
-      , searchForm =
-            initSearchForm
-      }
-    , Cmd.batch
-        [ Task.perform GotZone Time.here
-        , consoleLog "Booting up..." E.null
-        , fetchData
-        ]
-    )
+    let
+        build ( page, pageCmd ) =
+            ( { key = key
+              , page = page
+              , now = Time.millisToPosix 0
+              , zone = Time.utc
+              , isDarkTheme = False
+              }
+            , pageCmd
+            )
+    in
+    build <| initPage url
+
+
+initPage : Url -> ( Page, Cmd Msg )
+initPage url =
+    case Route.fromUrl url of
+        Route.NotFound ->
+            ( MkNotFoundPage, Cmd.none )
+
+        Route.Home ->
+            ( MkHomePage homeInit
+            , Cmd.batch
+                [ Task.perform GotZone Time.here
+                , consoleLog "Booting up..." E.null
+                , Cmd.map GotHomeMsg fetchData
+                ]
+            )
+
+        Route.UI ->
+            ( MkUI_Page (), Cmd.none )
+
+        Route.Budgets ->
+            BudgetsPage.init
+                |> Tuple.mapBoth
+                    MkBudgetsPage
+                    (Cmd.map GotBudgetsPageMsg)
 
 
 
@@ -1309,6 +1355,69 @@ init () url key =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        mapPage : (m -> Page) -> m -> Model
+        mapPage constructor =
+            \m -> { model | page = constructor m }
+
+        setPage : Page -> Model
+        setPage =
+            \p -> { model | page = p }
+    in
+    case msg of
+        UrlRequested urlRequest ->
+            case urlRequest of
+                Browser.Internal url ->
+                    ( model
+                    , Nav.pushUrl model.key (Url.toString url)
+                    )
+
+                Browser.External href ->
+                    ( model
+                    , Nav.load href
+                    )
+
+        UrlChanged url ->
+            initPage url
+                |> Tuple.mapBoth
+                    setPage
+                    identity
+
+        GotZone zone ->
+            ( { model | zone = zone }
+            , Cmd.none
+            )
+
+        ToggleTheme ->
+            ( { model | isDarkTheme = not model.isDarkTheme }
+            , toggleTheme ()
+            )
+
+        GotHomeMsg homeMsg ->
+            case model.page of
+                MkHomePage homeModel ->
+                    updateHome homeMsg homeModel
+                        |> Tuple.mapBoth
+                            (mapPage MkHomePage)
+                            (Cmd.map GotHomeMsg)
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotBudgetsPageMsg pageMsg ->
+            case model.page of
+                MkBudgetsPage pageModel ->
+                    BudgetsPage.update pageMsg pageModel
+                        |> Tuple.mapBoth
+                            (mapPage MkBudgetsPage)
+                            (Cmd.map GotBudgetsPageMsg)
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+updateHome : HomeMsg -> HomeModel -> ( HomeModel, Cmd HomeMsg )
+updateHome msg model =
     let
         updateSearchForm : (SearchForm -> SearchForm) -> SearchForm
         updateSearchForm f =
@@ -1379,26 +1488,6 @@ update msg model =
                 [ cmd
                 , Task.perform (Fetching params) (Task.succeed rest)
                 ]
-            )
-
-        UrlRequested urlRequest ->
-            case urlRequest of
-                Browser.Internal url ->
-                    ( model
-                    , Nav.pushUrl model.key (Url.toString url)
-                    )
-
-                Browser.External href ->
-                    ( model
-                    , Nav.load href
-                    )
-
-        UrlChanged url ->
-            ( { model
-                | url = url
-                , route = Route.fromUrl url
-              }
-            , Cmd.none
             )
 
         GotSearchFormMsg subMsg ->
@@ -1719,10 +1808,10 @@ update msg model =
         EnterPressed ->
             case model.dialog of
                 Just (EditDialog _) ->
-                    update (EditDialogChanged EditDialogSave) model
+                    updateHome (EditDialogChanged EditDialogSave) model
 
                 Just (CreateDialog _) ->
-                    update (CreateDialogChanged CreateDialogSave) model
+                    updateHome (CreateDialogChanged CreateDialogSave) model
 
                 _ ->
                     ( model
@@ -1734,18 +1823,8 @@ update msg model =
             , Cmd.none
             )
 
-        GotZone zone ->
-            ( { model | zone = zone }
-            , Cmd.none
-            )
 
-        ToggleTheme ->
-            ( { model | isDarkTheme = not model.isDarkTheme }
-            , toggleTheme ()
-            )
-
-
-handleEditDialog : ( Int, TransactionWrite ) -> Model -> ( Model, Cmd Msg )
+handleEditDialog : ( Int, TransactionWrite ) -> HomeModel -> ( HomeModel, Cmd HomeMsg )
 handleEditDialog ( transactionId, tw ) model =
     -- let
     --     dateString =
@@ -1785,9 +1864,9 @@ handleEditDialog ( transactionId, tw ) model =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ enterPressed (\() -> EnterPressed)
-        , escapePressed (\() -> EscapePressed)
-        , rcvScrollY RcvScrollY
+        [ enterPressed (\() -> GotHomeMsg EnterPressed)
+        , escapePressed (\() -> GotHomeMsg EscapePressed)
+        , rcvScrollY (GotHomeMsg << RcvScrollY)
         ]
 
 

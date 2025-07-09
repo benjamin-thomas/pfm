@@ -9,15 +9,18 @@ author:
 maintainer:
 copyright:
 build-type:         Simple
-extra-source-files:
+
+-- Listing files here makes reloading the REPL work properly.
+extra-source-files: src/**/*.sql
 
 common warnings
     ghc-options:
         -Wall
-        -Werror
+        -- -Werror
 
 common extensions
     default-extensions: ImportQualifiedPost
+
 
 executable pfm-haskell-twain
     import:           warnings
@@ -49,6 +52,7 @@ library pfm-haskell-twain-lib
                     , OfxParser
                     , DB.User.Queries
                     , DB.Budgets.Queries
+                    , DB.Budgets.JSON
                     , DB.Categories.Queries
                     , DB.LedgerView.Queries
                     , DB.Transactions.Queries

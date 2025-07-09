@@ -6,10 +6,13 @@
 
 module Server (runServer) where
 
-import Control.Monad (foldM)
+import Control.Arrow ((>>>))
+import Control.Monad (foldM, (>=>))
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import DB.Accounts.Queries qualified as AccountQueries
+import DB.Budgets.JSON qualified as BudgetJSON
 import DB.Budgets.Queries (getBudgetIdForDateTry, insertForDateExn)
+import DB.Budgets.Queries qualified as BudgetQueries
 import DB.Categories.Queries (CategoryRow, getNonStaleCategories)
 import DB.LedgerView.Queries (AccountId (MkAccountId), LedgerViewRow, getLedgerViewRows)
 import DB.Transactions.Queries
@@ -187,12 +190,39 @@ handleAccountsBalances conn = do
     let balances = map AccountRead.toAccountBalanceRead balanceRows
     Twain.send $ Twain.json balances
 
+-- handleBudgets1 :: Connection -> Twain.ResponderM ()
+-- handleBudgets1 conn = do
+--     budgetRows <- liftIO $ BudgetQueries.getAll conn
+--     let budgets = map BudgetJSON.fromBudgetDB budgetRows
+--     Twain.send
+--         . Twain.json
+--         $ budgets
+
+handleBudgets :: Connection -> Twain.ResponderM ()
+handleBudgets =
+    BudgetQueries.getAll
+        >>> fmap (map BudgetJSON.fromBudgetDB)
+        >>> fmap Twain.json
+        >>> liftIO
+        >=> Twain.send
+
+-- handleBudgets :: Connection -> Twain.ResponderM ()
+-- handleBudgets conn = do
+--     Twain.send =<< liftIO (Twain.json . map BudgetJSON.fromBudgetDB <$> BudgetQueries.getAll conn)
+
+-- handleBudgets :: Connection -> Twain.ResponderM ()
+-- handleBudgets =
+--     (Twain.send <=< liftIO)
+--         . fmap (Twain.json . map BudgetJSON.fromBudgetDB)
+--         . BudgetQueries.getAll
+
 routes :: Connection -> [Twain.Middleware]
 routes conn =
     [ Twain.get "/" $ Twain.send $ Twain.text "hi (from pfm-haskell-twain)"
     , Twain.get "/accounts" $ handleAccounts conn
     , Twain.get "/accounts/:id/balance" $ handleAccountsBalance conn
     , Twain.get "/accounts/balances" $ handleAccountsBalances conn
+    , Twain.get "/budgets/" $ handleBudgets conn
     , Twain.get "/categories" $ handleCategories conn
     , Twain.get "/transactions/" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
