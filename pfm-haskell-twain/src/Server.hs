@@ -198,6 +198,7 @@ handleAccountsBalances conn = do
 --         . Twain.json
 --         $ budgets
 
+-- http :8080/budgets
 handleBudgets :: Connection -> Twain.ResponderM ()
 handleBudgets =
     BudgetQueries.getAll
@@ -206,14 +207,16 @@ handleBudgets =
         >>> liftIO
         >=> Twain.send
 
+-- http :8080/budgets/1
 handleBudget :: Connection -> Twain.ResponderM ()
 handleBudget conn = do
     budgetId' :: Int <- Twain.param "id"
-    budgetRow <- liftIO $ BudgetQueries.getOne budgetId' conn
-    let budgets = BudgetJSON.fromBudgetDB budgetRow
-    Twain.send
-        . Twain.json
-        $ budgets
+    budgetWithLines <-
+        fmap
+            BudgetJSON.fromBudgetWithLinesDB
+            (liftIO $ BudgetQueries.getOne budgetId' conn)
+    Twain.send $
+        Twain.json budgetWithLines
 
 routes :: Connection -> [Twain.Middleware]
 routes conn =
@@ -222,9 +225,9 @@ routes conn =
     , Twain.get "/accounts/:id/balance" $ handleAccountsBalance conn
     , Twain.get "/accounts/balances" $ handleAccountsBalances conn
     , Twain.get "/budgets/:id" $ handleBudget conn
-    , Twain.get "/budgets/" $ handleBudgets conn
+    , Twain.get "/budgets" $ handleBudgets conn
     , Twain.get "/categories" $ handleCategories conn
-    , Twain.get "/transactions/" $ handleGetTransactions conn
+    , Twain.get "/transactions" $ handleGetTransactions conn
     , Twain.post "/transactions" $ handlePostTransactions conn
     , Twain.patch "/transactions/apply-all-suggestions" $ handleApplyAllSuggestions conn
     , Twain.put "/transactions/:id" $ handlePutTransactions conn

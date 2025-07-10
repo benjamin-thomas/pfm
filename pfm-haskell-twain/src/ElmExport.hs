@@ -3,7 +3,11 @@
 
 module ElmExport (exportElm) where
 
-import DB.Budgets.JSON (BudgetJSON)
+import DB.Budgets.JSON
+    ( BudgetJSON
+    , BudgetLineJSON
+    , BudgetWithLinesJSON
+    )
 import DTO.AccountRead (AccountBalanceRead, AccountRead)
 import DTO.Category (Category)
 import DTO.Ledger (LedgerLine, SuggestedAccount, Suggestion)
@@ -27,4 +31,6 @@ type Types =
      , SuggestionWrite
      , SuggestedAccount
      , BudgetJSON
+     , BudgetLineJSON
+     , BudgetWithLinesJSON
      ]

@@ -47,55 +47,6 @@ DROP TABLE IF EXISTS categories;
 
 
 -- In SQLite, a column with type INTEGER PRIMARY KEY is an alias for the ROWID (it auto-increments)
-CREATE TABLE budgets
-    ( budget_id  INTEGER PRIMARY KEY
-    , starts_on INTEGER NOT NULL
-    , ends_on   INTEGER NOT NULL
-    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
-    , CHECK (starts_on >= 0 AND starts_on < ends_on)
-    )
-    ;
-
--- Create a unique index to help with the ON CONFLICT clause
-CREATE UNIQUE INDEX idx_budgets_no_overlap ON budgets(starts_on, ends_on);
-
--- Trigger to prevent overlapping budget periods
-CREATE TRIGGER prevent_budget_overlap
-BEFORE INSERT ON budgets
-FOR EACH ROW
-BEGIN
-    SELECT RAISE(ABORT, 'Budget period already defined or overlaps' )
-     WHERE EXISTS (
-         SELECT 1 FROM budgets
-          WHERE NEW.starts_on <= ends_on
-            AND NEW.ends_on   >= starts_on
-    );
-END;
-
--- Similar trigger for updates
-CREATE TRIGGER prevent_budget_overlap_update
-BEFORE UPDATE ON budgets
-FOR EACH ROW
-BEGIN
-    SELECT RAISE(ABORT, 'Budget period already defined or overlaps' )
-     WHERE EXISTS (
-         SELECT 1 FROM budgets
-          WHERE NEW.starts_on <= ends_on
-            AND NEW.ends_on   >= starts_on
-    );
-END;
-
-CREATE TRIGGER update_budgets_updated_at
-AFTER UPDATE ON budgets
-FOR EACH ROW
-BEGIN
-    UPDATE budgets
-       SET updated_at = strftime('%s', current_timestamp)
-     WHERE budget_id  = NEW.budget_id;
-END;
-
-
 CREATE TABLE categories
     ( category_id INTEGER PRIMARY KEY
     , name        TEXT    NOT NULL UNIQUE CHECK (TRIM(name) <> '')
@@ -182,5 +133,74 @@ BEGIN
        SET updated_at = strftime('%s', current_timestamp)
      WHERE transaction_id = NEW.transaction_id;
 END;
+
+CREATE TABLE budgets
+    ( budget_id  INTEGER PRIMARY KEY
+    , starts_on INTEGER NOT NULL
+    , ends_on   INTEGER NOT NULL
+    , created_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , CHECK (starts_on >= 0 AND starts_on < ends_on)
+    )
+    ;
+
+-- Create a unique index to help with the ON CONFLICT clause
+CREATE UNIQUE INDEX idx_budgets_no_overlap ON budgets(starts_on, ends_on);
+
+-- Trigger to prevent overlapping budget periods
+CREATE TRIGGER prevent_budget_overlap
+BEFORE INSERT ON budgets
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, 'Budget period already defined or overlaps' )
+     WHERE EXISTS (
+         SELECT 1 FROM budgets
+          WHERE NEW.starts_on <= ends_on
+            AND NEW.ends_on   >= starts_on
+    );
+END;
+
+-- Similar trigger for updates
+CREATE TRIGGER prevent_budget_overlap_update
+BEFORE UPDATE ON budgets
+FOR EACH ROW
+BEGIN
+    SELECT RAISE(ABORT, 'Budget period already defined or overlaps' )
+     WHERE EXISTS (
+         SELECT 1 FROM budgets
+          WHERE NEW.starts_on <= ends_on
+            AND NEW.ends_on   >= starts_on
+    );
+END;
+
+CREATE TRIGGER update_budgets_updated_at
+AFTER UPDATE ON budgets
+FOR EACH ROW
+BEGIN
+    UPDATE budgets
+       SET updated_at = strftime('%s', current_timestamp)
+     WHERE budget_id  = NEW.budget_id;
+END;
+
+CREATE TABLE budget_lines
+    ( budget_line_id INTEGER PRIMARY KEY
+    , budget_id      INTEGER NOT NULL REFERENCES budgets(budget_id)
+    , account_id     INTEGER NOT NULL REFERENCES accounts(account_id)
+    , cents          INTEGER NOT NULL
+    , created_at     INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    , updated_at     INTEGER NOT NULL DEFAULT (strftime('%s', current_timestamp))
+    )
+    ;
+
+CREATE TRIGGER update_budget_lines_updated_at
+AFTER UPDATE ON budget_lines
+FOR EACH ROW
+BEGIN
+    UPDATE budget_lines
+       SET updated_at = strftime('%s', current_timestamp)
+     WHERE budget_line_id = NEW.budget_line_id;
+END;
+
+
 
 COMMIT;

@@ -1,7 +1,7 @@
 module Page.Budget.Edit exposing (Model, Msg, init, update, view)
 
-import Generated.Decoder exposing (decodeBudgetJSON)
-import Generated.Types exposing (BudgetJSON)
+import Generated.Decoder exposing (decodeBudgetJSON, decodeBudgetWithLinesJSON)
+import Generated.Types exposing (BudgetJSON, BudgetWithLinesJSON)
 import Html as H exposing (Html)
 import Html.Attributes as HA
 import Html.Events as HE
@@ -18,7 +18,7 @@ type Status a
 
 
 type alias Model =
-    { budget : Status BudgetJSON
+    { budget : Status BudgetWithLinesJSON
     }
 
 
@@ -26,7 +26,7 @@ fetchBudget : { id : Int } -> Cmd Msg
 fetchBudget { id } =
     Http.get
         { url = "http://localhost:8080/budgets/" ++ String.fromInt id
-        , expect = Http.expectJson GotBudgetResponse decodeBudgetJSON
+        , expect = Http.expectJson GotBudgetResponse decodeBudgetWithLinesJSON
         }
 
 
@@ -39,7 +39,7 @@ init { id } =
 
 
 type Msg
-    = GotBudgetResponse (Result Http.Error BudgetJSON)
+    = GotBudgetResponse (Result Http.Error BudgetWithLinesJSON)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )

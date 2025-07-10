@@ -1,11 +1,15 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module DB.Budgets.Queries where
 
+import Data.Aeson
 import Data.FileEmbed (embedFile)
 import Data.Maybe (listToMaybe)
 import Data.Text (Text)
@@ -13,7 +17,7 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time.Calendar
 import Data.Time.Clock (UTCTime (UTCTime))
 import Data.Time.Clock.POSIX (utcTimeToPOSIXSeconds)
-import Database.SQLite.Simple (Connection, FromRow, Only (Only, fromOnly), Query (Query), ToRow, query, query_)
+import Database.SQLite.Simple
 import GHC.Generics
 
 data BudgetNewRow = MkBudgetNewRow
@@ -27,14 +31,12 @@ toUnix d =
     truncate . utcTimeToPOSIXSeconds $ UTCTime d 0
 
 {-
-cabal repl --repl-options "-interactive-print=Text.Pretty.Simple.pPrint" --build-depends pretty-simple pfm-haskell-twain-lib
 ghci> :m + DB.Budgets.Queries Data.Time.Calendar
 ghci> _newConn >>= flip getBudgetIdForDateTry (fromGregorian 2025 7 15)
  -}
 getBudgetIdForDateTry :: Connection -> Day -> IO (Maybe Int)
 getBudgetIdForDateTry conn day =
     fmap
-        -- (\rows -> fmap fromOnly (listToMaybe rows))
         (fmap fromOnly . listToMaybe)
         ( query
             conn
@@ -65,9 +67,6 @@ data BudgetDB = MkBudgetDB
     }
     deriving (Show, Generic, FromRow)
 
-x :: UTCTime -> Int
-x = truncate . utcTimeToPOSIXSeconds
-
 {-
 ghci> :m + DB.Budgets.Queries
 ghci> _newConn >>= getAll
@@ -78,11 +77,59 @@ getAll conn =
         conn
         (Query $ decodeUtf8 $(embedFile "src/DB/Budgets/getAll.sql"))
 
+data BudgetWithLinesDB = MkBudgetWithLinesDB
+    { budgetId :: Int
+    , startsOn :: UTCTime
+    , endsOn :: UTCTime
+    , createdAt :: UTCTime
+    , updatedAt :: UTCTime
+    , lines :: [BudgetLineDB]
+    }
+    deriving (Show, Generic)
+
+data BudgetLineDB = MkBudgetLineDB
+    { budgetLineId :: Int
+    , budgetId :: Int
+    , accountId :: Int
+    , cents :: Int
+    , createdAt :: UTCTime
+    , updatedAt :: UTCTime
+    }
+    deriving (Show, Generic)
+
+instance FromJSON BudgetLineDB where
+    parseJSON = withObject "BudgetLineDB" $ \v ->
+        MkBudgetLineDB
+            <$> v .: "budgetLineId"
+            <*> v .: "budgetId"
+            <*> v .: "accountId"
+            <*> v .: "cents"
+            <*> v .: "createdAtUtc"
+            <*> v .: "updatedAtUtc"
+
+instance FromRow BudgetWithLinesDB where
+    fromRow =
+        let
+            decodeLines :: Text -> [BudgetLineDB]
+            decodeLines linesJSON =
+                either
+                    (error . show)
+                    id
+                    (eitherDecodeStrictText linesJSON)
+         in
+            MkBudgetWithLinesDB
+                <$> field
+                <*> field
+                <*> field
+                <*> field
+                <*> field
+                <*> (decodeLines <$> field)
+
 {-
 ghci> :m + DB.Budgets.Queries
 ghci> _newConn >>= getOne 1
  -}
-getOne :: Int -> Connection -> IO BudgetDB
+getOne :: Int -> Connection -> IO BudgetWithLinesDB
 getOne budgetId' conn =
     fmap
         head
