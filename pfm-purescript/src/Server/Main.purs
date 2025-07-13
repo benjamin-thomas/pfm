@@ -1,4 +1,4 @@
-module Server.Main where
+module Server.Main (main, startServer) where
 
 import Prelude hiding ((/))
 
@@ -41,10 +41,10 @@ main = do
             Left err -> log $ "Failed to seed database: " <> show err
             Right _ -> do
               log "Database seeded successfully"
-              void $ startServer db
+              void $ startServer 8080 db
 
-startServer :: DBConnection -> ServerM
-startServer db = serve { port: 8080 } { route, router: corsMiddleware (makeRouter db) }
+startServer :: Int -> DBConnection -> ServerM
+startServer port db = serve { port } { route, router: corsMiddleware (makeRouter db) }
 
 corsMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
 corsMiddleware router' request = do

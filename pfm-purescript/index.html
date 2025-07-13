@@ -12,9 +12,11 @@
     <div id="app"></div>
     <script type="module">
         import { main } from './output/Client.Main/index.js';
-        const search = new URLSearchParams(window.location.search);
-        const counter = parseInt(search.get('counter')) || 123;
-        main({ counter })();
+        const colorTheme = localStorage.getItem('COLOR_THEME') || 'light';
+        if (colorTheme === 'dark') {
+            document.documentElement.classList.add('dark-theme');
+        }
+        main({ isDarkMode: colorTheme === 'dark' })();
     </script>
 </body>
 

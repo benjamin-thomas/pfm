@@ -5,4 +5,6 @@
 /.psc-ide-port
 /dist/
 /db.sqlite
+/db.test.sqlite
 /.spec-results
+/test-results

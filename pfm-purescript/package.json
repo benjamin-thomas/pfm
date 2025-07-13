@@ -9,11 +9,14 @@
     "preclient": "spago build",
     "client": "parcel --port=1234 index.html",
     "server:alt": "rg --files ./packages.dhall ./src/ | entr -rc spago run --main Server.Main",
+    "test:all": "npm run test && npm run test:e2e",
     "test": "spago test",
     "test:watch": "rg --files ./test/ ./src/ | entr -rc spago test",
+    "test:e2e": "playwright test",
     "clean": "rm -rf output .spago dist .parcel-cache"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.1",
     "parcel": "^2.15.4"
   },
   "dependencies": {
