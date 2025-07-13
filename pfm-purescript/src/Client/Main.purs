@@ -20,28 +20,28 @@ import Halogen.VDom.Driver (runUI)
 import Shared.Types (User(..))
 import Yoga.JSON as JSON
 
-type State = 
-  { count :: Int
+type State =
+  { counter :: Int
   , users :: Array User
   , loading :: Boolean
   , error :: Maybe String
   }
 
-data Action 
-  = Inc 
-  | Dec 
+data Action
+  = Inc
+  | Dec
   | LoadUsers
 
-component :: forall q i o m. MonadAff m => H.Component q i o m
+component :: forall q o m. MonadAff m => H.Component q Int o m
 component = H.mkComponent
-  { initialState: \_ -> 
-      { count: 0
+  { initialState: \counter ->
+      { counter
       , users: []
       , loading: false
       , error: Nothing
       }
   , render
-  , eval: H.mkEval $ H.defaultEval 
+  , eval: H.mkEval $ H.defaultEval
       { handleAction = handleAction
       , initialize = Just LoadUsers
       }
@@ -52,21 +52,21 @@ render state =
   HH.div
     [ HP.class_ (HH.ClassName "app") ]
     [ HH.h1_ [ HH.text "PFM - PureScript" ]
-    
+
     -- Counter section
     , HH.div
         [ HP.class_ (HH.ClassName "counter") ]
         [ HH.button
             [ HE.onClick \_ -> Dec
-            , HP.disabled (state.count <= 0)
+            , HP.disabled (state.counter <= 0)
             ]
             [ HH.text "-" ]
-        , HH.span_ [ HH.text $ " " <> show state.count <> " " ]
+        , HH.span_ [ HH.text $ " " <> show state.counter <> " " ]
         , HH.button
             [ HE.onClick \_ -> Inc ]
             [ HH.text "+" ]
         ]
-    
+
     -- Users section
     , HH.div_
         [ HH.h2_ [ HH.text "Users" ]
@@ -84,8 +84,8 @@ render state =
   where
   renderUser :: Int -> User -> H.ComponentHTML Action () m
   renderUser _ (User user) =
-    HH.div_ 
-      [ HH.text $ user.firstName <> " " <> user.lastName 
+    HH.div_
+      [ HH.text $ user.firstName <> " " <> user.lastName
       , case user.id of
           Just id -> HH.text $ " (ID: " <> show id <> ")"
           Nothing -> HH.text ""
@@ -93,8 +93,8 @@ render state =
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
-  Inc -> H.modify_ \s -> s { count = s.count + 1 }
-  Dec -> H.modify_ \s -> s { count = max 0 (s.count - 1) }
+  Inc -> H.modify_ \s -> s { counter = s.counter + 1 }
+  Dec -> H.modify_ \s -> s { counter = max 0 (s.counter - 1) }
   LoadUsers -> do
     H.modify_ \s -> s { loading = true, error = Nothing }
     result <- H.liftAff fetchUsers
@@ -112,9 +112,9 @@ fetchUsers = do
         Left err -> pure $ Left $ "JSON decode error: " <> show err
         Right users -> pure $ Right users
 
-main :: Effect Unit
-main = do
-  log "[CLIENT] Booting up..."
+main :: { counter :: Int } -> Effect Unit
+main args = do
+  log ("[CLIENT] Booting up with counter: " <> show args.counter)
   HA.runHalogenAff do
     body <- HA.awaitBody
-    runUI component unit body
+    runUI component args.counter body

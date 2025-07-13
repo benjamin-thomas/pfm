@@ -12,7 +12,9 @@
     <div id="app"></div>
     <script type="module">
         import { main } from './output/Client.Main/index.js';
-        main();
+        const search = new URLSearchParams(window.location.search);
+        const counter = parseInt(search.get('counter')) || 123;
+        main({ counter })();
     </script>
 </body>
 
