@@ -4,3 +4,5 @@
 /output/
 /.psc-ide-port
 /dist/
+/db.sqlite
+/.spec-results
