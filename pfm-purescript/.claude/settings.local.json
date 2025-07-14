@@ -4,7 +4,8 @@
       "Bash(npm run test:*)",
       "Bash(mkdir:*)",
       "Bash(spago build:*)",
-      "Bash(spago install:*)"
+      "Bash(spago install:*)",
+      "Bash(npm test)"
     ],
     "deny": []
   }

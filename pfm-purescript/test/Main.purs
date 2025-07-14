@@ -7,12 +7,13 @@ import Effect (Effect)
 import Effect.Aff (runAff_)
 import Effect.Console (log)
 import Effect.Exception (throw)
-import Server.Database (initDatabase, seedDatabase)
+import Server.Database (initDatabase, seedDatabase, createSchema)
 import Server.Main (startServer)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Test.OfxParser.Spec as OfxParserSpec
 import Test.Api.Spec as ApiSpec
+import Test.Database.Spec as DatabaseSpec
 
 foreign import removeFile :: String -> Effect Unit
 foreign import getRandomPort :: Effect Int
@@ -25,14 +26,19 @@ main = do
     case _ of
       Left err -> throw $ "Failed to initialize database: " <> show err
       Right db -> do
-        seedDatabase db # runAff_
+        -- Create full schema for integration tests
+        createSchema db # runAff_
           case _ of
-            Left err -> throw $ "Failed to seed database: " <> show err
-            Right _ -> do
-              port <- getRandomPort
-              void $ startServer port db
-              log $ "Running tests on port " <> show port <> "..."
-              runSpecAndExitProcess [ consoleReporter ] do
-                OfxParserSpec.spec
-                ApiSpec.spec port
+            Left err -> throw $ "Failed to create tables: " <> show err
+            Right _ -> seedDatabase db # runAff_
+              case _ of
+                Left err -> throw $ "Failed to seed database: " <> show err
+                Right _ -> do
+                  port <- getRandomPort
+                  void $ startServer port db
+                  log $ "Running tests on port " <> show port <> "..."
+                  runSpecAndExitProcess [ consoleReporter ] do
+                    OfxParserSpec.spec
+                    DatabaseSpec.spec db
+                    ApiSpec.spec port
 

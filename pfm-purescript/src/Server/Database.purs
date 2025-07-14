@@ -1,20 +1,21 @@
 module Server.Database
-  ( initDatabase
-  , getAllUsers
-  , insertUser
-  , deleteUser
-  , seedDatabase
-  , seedFromOfx
-  , Account(..)
-  , Category(..)
+  ( Account(..)
   , Budget(..)
+  , Category(..)
   , Transaction(..)
   , TransactionNewRow(..)
-  , createProperTables
-  , insertTransaction
+  , createSchema
   , deleteAllTransactions
+  , deleteUser
+  , getAllUsers
   , getBudgetIdForDate
+  , getUserById
+  , initDatabase
   , insertBudgetForDate
+  , insertTransaction
+  , insertUser
+  , seedDatabase
+  , seedFromOfx
   ) where
 
 import Prelude
@@ -121,8 +122,8 @@ createTables db = do
   liftEffect $ log "Tables created successfully"
 
 -- | Create proper database tables from SQL schema
-createProperTables :: SQLite3.DBConnection -> Aff Unit
-createProperTables db = do
+createSchema :: SQLite3.DBConnection -> Aff Unit
+createSchema db = do
   liftEffect $ log "Creating proper database schema..."
   -- For now, let's just create the essential tables needed for the wip function
   _ <- SQLite3.queryDB db "DROP TABLE IF EXISTS transactions" []
@@ -217,6 +218,16 @@ createProperTables db = do
     []
 
   liftEffect $ log "Database schema created successfully"
+
+getUserById :: Int -> SQLite3.DBConnection -> Aff (Maybe User)
+getUserById userId db = do
+  rows <- SQLite3.queryDB db "SELECT id, firstName, lastName FROM users WHERE id = ?" [ unsafeToForeign userId ]
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  case head rowArray of
+    Nothing -> pure Nothing
+    Just row -> do
+      let obj = unsafeFromForeign row :: { id :: Int, firstName :: String, lastName :: String }
+      pure $ Just $ User { id: Just obj.id, firstName: obj.firstName, lastName: obj.lastName }
 
 -- | Get all users from the database
 getAllUsers :: SQLite3.DBConnection -> Aff (Array User)
@@ -376,7 +387,7 @@ fromOfxTransaction accountNumber tx =
 seedFromOfx :: String -> SQLite3.DBConnection -> Aff Unit
 seedFromOfx ofxFilePath db = do
   liftEffect $ log "=== Resetting the database ==="
-  createProperTables db
+  createSchema db
 
   liftEffect $ log "=== Reading OFX file ==="
   ofxContent <- FS.readTextFile UTF8 ofxFilePath
