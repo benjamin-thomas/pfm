@@ -15,6 +15,7 @@
   , "foldable-traversable"
   , "foreign"
   , "halogen"
+  , "http-methods"
   , "httpurple"
   , "integers"
   , "lists"

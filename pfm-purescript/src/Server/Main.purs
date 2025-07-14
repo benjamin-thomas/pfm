@@ -8,9 +8,27 @@ import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (runAff_)
 import Effect.Console (log)
-import HTTPurple (class Generic, Method(..), Request, ResponseM, ServerM, RouteDuplex', header, int, methodNotAllowed, mkRoute, noArgs, ok, segment, serve, (/))
+import HTTPurple
+  ( class Generic
+  , Method(..)
+  , Request
+  , ResponseM
+  , RouteDuplex'
+  , ServerM
+  , header
+  , int
+  , methodNotAllowed
+  , mkRoute
+  , noArgs
+  , ok
+  , response
+  , segment
+  , serve
+  , (/)
+  )
+import HTTPurple.Response (Response)
 import SQLite3 (DBConnection)
-import Server.Database (initDatabase, getAllUsers, insertUser, deleteUser, seedDatabase)
+import Server.Database as DB
 import Shared.Types (User(..))
 import Yoga.JSON as JSON
 
@@ -18,6 +36,13 @@ data Route
   = Home
   | Users
   | UserById Int
+  | Categories
+  | CategoryById Int
+  | Accounts
+  | Budgets
+  | BudgetById Int
+  | Transactions
+  | TransactionById Int
 
 derive instance Generic Route _
 
@@ -26,17 +51,24 @@ route = mkRoute
   { "Home": noArgs
   , "Users": "users" / noArgs
   , "UserById": "users" / int segment
+  , "Categories": "categories" / noArgs
+  , "CategoryById": "categories" / int segment
+  , "Accounts": "accounts" / noArgs
+  , "Budgets": "budgets" / noArgs
+  , "BudgetById": "budgets" / int segment
+  , "Transactions": "transactions" / noArgs
+  , "TransactionById": "transactions" / int segment
   }
 
 main :: Effect Unit
 main = do
   log "[SERVER] Booting up..."
-  initDatabase "./db.sqlite" # runAff_
+  DB.initDatabase "./db.sqlite" # runAff_
     case _ of
       Left err -> log $ "Failed to initialize database: " <> show err
       Right db -> do
         log "Database initialized successfully"
-        seedDatabase db # runAff_
+        DB.seedDatabase db # runAff_
           case _ of
             Left err -> log $ "Failed to seed database: " <> show err
             Right _ -> do
@@ -44,12 +76,19 @@ main = do
               void $ startServer 8080 db
 
 startServer :: Int -> DBConnection -> ServerM
-startServer port db = serve { port } { route, router: corsMiddleware (makeRouter db) }
+startServer port db =
+  serve { port } { route, router }
+  where
+  router :: Request Route -> ResponseM
+  router =
+    corsMiddleware
+      $ jsonMiddleware
+      $ makeRouter db
 
 corsMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
-corsMiddleware router' request = do
-  response <- router' request
-  pure $ response
+corsMiddleware route' request = do
+  response <- route' request
+  pure $ (response :: Response)
     { headers = foldl (<>) response.headers
         [ header "Access-Control-Allow-Origin" "*"
         , header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS"
@@ -57,10 +96,15 @@ corsMiddleware router' request = do
         ]
     }
 
+jsonMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
+jsonMiddleware route' request = do
+  response <- route' request
+  pure $ response { headers = header "Content-Type" "application/json" <> response.headers }
+
 makeRouter :: DBConnection -> Request Route -> ResponseM
 makeRouter db { route: route', method } =
   case route' of
-    Home -> 
+    Home ->
       case method of
         Get -> ok "PFM PureScript Server is running!"
         _ -> methodNotAllowed
@@ -68,18 +112,81 @@ makeRouter db { route: route', method } =
     Users ->
       case method of
         Get -> do
-          users <- getAllUsers db
+          users <- DB.getAllUsers db
           ok $ JSON.writeJSON users
         Post -> do
           -- For now, just create a test user
-          newUser <- insertUser (User { id: Nothing, firstName: "New", lastName: "User" }) db
+          newUser <- DB.insertUser (User { id: Nothing, firstName: "New", lastName: "User" }) db
           ok $ JSON.writeJSON newUser
         _ -> methodNotAllowed
 
     UserById userId ->
       case method of
-        Get -> ok $ JSON.writeJSON $ User { id: Just userId, firstName: "User", lastName: show userId }
+        Get -> do
+          maybeUser <- DB.getUserById userId db
+          case maybeUser of
+            Just user -> ok $ JSON.writeJSON user
+            Nothing ->
+              response 404 $ JSON.writeJSON { error: "User not found" }
         Delete -> do
-          deleteUser userId db
+          DB.deleteUser userId db
           ok "User deleted"
+        _ -> methodNotAllowed
+
+    Categories ->
+      case method of
+        Get -> do
+          categories <- DB.getAllCategories db
+          ok $ JSON.writeJSON categories
+        _ -> methodNotAllowed
+
+    CategoryById categoryId ->
+      case method of
+        Get -> do
+          maybeCategory <- DB.getCategoryById categoryId db
+          case maybeCategory of
+            Just category -> ok $ JSON.writeJSON category
+            Nothing -> response 404 $ JSON.writeJSON { error: "Category not found" }
+        _ -> methodNotAllowed
+
+    Accounts ->
+      case method of
+        Get -> do
+          accounts <- DB.getAllAccounts db
+          ok $ JSON.writeJSON accounts
+        _ -> methodNotAllowed
+
+    Budgets ->
+      case method of
+        Get -> do
+          budgets <- DB.getAllBudgets db
+          ok $ JSON.writeJSON budgets
+        _ -> methodNotAllowed
+
+    BudgetById budgetId ->
+      case method of
+        Get -> do
+          maybeBudget <- DB.getBudgetById budgetId db
+          case maybeBudget of
+            Just budget -> ok $ JSON.writeJSON budget
+            Nothing -> response 404 $ JSON.writeJSON { error: "Budget not found" }
+        _ -> methodNotAllowed
+
+    Transactions ->
+      case method of
+        Get -> do
+          transactions <- DB.getAllTransactions db
+          ok $ JSON.writeJSON transactions
+        _ -> methodNotAllowed
+
+    TransactionById transactionId ->
+      case method of
+        Get -> do
+          maybeTransaction <- DB.getTransactionById transactionId db
+          case maybeTransaction of
+            Just transaction -> ok $ JSON.writeJSON transaction
+            Nothing -> response 404 $ JSON.writeJSON { error: "Transaction not found" }
+        Delete -> do
+          DB.deleteTransaction transactionId db
+          ok "Transaction deleted"
         _ -> methodNotAllowed

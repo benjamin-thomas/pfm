@@ -42,3 +42,6 @@ newConn = do
 -- Seed database from OFX file
 seed :: Effect Unit
 seed = run $ newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
+
+main :: Effect Unit
+main = seed

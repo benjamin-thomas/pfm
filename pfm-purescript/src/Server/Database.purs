@@ -30,6 +30,7 @@ module Server.Database
 import Prelude
 
 import Data.Array (head, reverse, length, uncons)
+import Data.Generic.Rep (class Generic)
 import Data.Date (Date)
 import Data.DateTime (DateTime(..), date, time)
 import Data.DateTime.Instant (fromDateTime, unInstant)
@@ -56,6 +57,7 @@ import Effect.Exception (throwException, error)
 import SQLite3 as SQLite3
 import Server.OfxParser (OfxBatch, StatementTransaction, TimeStamp(..), parseOfx)
 import Shared.Types (User(..))
+import Yoga.JSON (class ReadForeign, class WriteForeign)
 
 -- | Database type definitions
 newtype Category = Category
@@ -65,8 +67,11 @@ newtype Category = Category
   , updatedAt :: Int
   }
 
+derive instance Generic Category _
 derive newtype instance Show Category
 derive newtype instance Eq Category
+derive newtype instance WriteForeign Category
+derive newtype instance ReadForeign Category
 
 newtype Account = Account
   { accountId :: Int
@@ -76,8 +81,11 @@ newtype Account = Account
   , updatedAt :: Int
   }
 
+derive instance Generic Account _
 derive newtype instance Show Account
 derive newtype instance Eq Account
+derive newtype instance WriteForeign Account
+derive newtype instance ReadForeign Account
 
 newtype Budget = Budget
   { budgetId :: Int
@@ -87,8 +95,11 @@ newtype Budget = Budget
   , updatedAt :: Int
   }
 
+derive instance Generic Budget _
 derive newtype instance Show Budget
 derive newtype instance Eq Budget
+derive newtype instance WriteForeign Budget
+derive newtype instance ReadForeign Budget
 
 newtype Transaction = Transaction
   { transactionId :: Int
@@ -104,8 +115,11 @@ newtype Transaction = Transaction
   , updatedAt :: Int
   }
 
+derive instance Generic Transaction _
 derive newtype instance Show Transaction
 derive newtype instance Eq Transaction
+derive newtype instance WriteForeign Transaction
+derive newtype instance ReadForeign Transaction
 
 newtype TransactionNewRow = TransactionNewRow
   { budgetId :: Maybe Int
@@ -554,8 +568,8 @@ getBudgetById budgetId db = do
 -- | Get all transactions
 getAllTransactions :: SQLite3.DBConnection -> Aff (Array Transaction)
 getAllTransactions db = do
-  rows <- SQLite3.queryDB db 
-    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions ORDER BY date DESC" 
+  rows <- SQLite3.queryDB db
+    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions ORDER BY date DESC"
     []
   let rowArray = unsafeFromForeign rows :: Array Foreign
   pure $ map rowToTransaction rowArray
@@ -569,7 +583,7 @@ getAllTransactions db = do
         "" -> Nothing
         s -> Just s
     in
-      Transaction 
+      Transaction
         { transactionId: obj.transaction_id
         , budgetId: obj.budget_id
         , fromAccountId: obj.from_account_id
@@ -586,20 +600,20 @@ getAllTransactions db = do
 -- | Get transaction by ID
 getTransactionById :: Int -> SQLite3.DBConnection -> Aff (Maybe Transaction)
 getTransactionById transactionId db = do
-  rows <- SQLite3.queryDB db 
-    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions WHERE transaction_id = ?" 
+  rows <- SQLite3.queryDB db
+    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions WHERE transaction_id = ?"
     [ unsafeToForeign transactionId ]
   let rowArray = unsafeFromForeign rows :: Array Foreign
   case head rowArray of
     Nothing -> pure Nothing
     Just row -> do
-      let 
+      let
         obj = unsafeFromForeign row :: { transaction_id :: Int, budget_id :: Int, from_account_id :: Int, to_account_id :: Int, unique_fit_id :: Foreign, date :: Int, descr_orig :: String, descr :: String, cents :: Int, created_at :: Int, updated_at :: Int }
         -- Handle NULL unique_fit_id safely
         uniqueFitId = case unsafeFromForeign obj.unique_fit_id of
           "" -> Nothing
           s -> Just s
-      pure $ Just $ Transaction 
+      pure $ Just $ Transaction
         { transactionId: obj.transaction_id
         , budgetId: obj.budget_id
         , fromAccountId: obj.from_account_id
