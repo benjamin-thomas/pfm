@@ -8,3 +8,4 @@
 /db.test.sqlite
 /.spec-results
 /test-results
+/.tmp/

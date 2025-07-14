@@ -20,7 +20,29 @@
     "parcel": "^2.15.4"
   },
   "dependencies": {
+    "decimal.js": "^10.6.0",
     "sqlite3": "^5.1.7",
     "xhr2": "^0.2.1"
+  },
+  "dependencies:comments": {
+    "decimal.js": [
+      "Required by PureScript's 'decimals package, to convert Int values from ",
+      "the SQLite database."
+    ],
+    "sqlite3": [
+      "Required by PureScript's 'node-sqlite3' package."
+    ],
+    "xhr2": [
+      "Required by the PureScript 'affjax-node' package.",
+      "Used in some integration tests."
+    ]
+  },
+  "devDependencies:comments": {
+    "@playwright/test": [
+      "e2e testing"
+    ],
+    "parcel": [
+      "Dev server + app bundler"
+    ]
   }
 }

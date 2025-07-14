@@ -9,7 +9,6 @@ import Data.Array (length)
 import Data.Either (Either(..))
 import Effect (Effect)
 import Effect.Aff (runAff_)
-import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throw)
 import Server.Database (initDatabase, seedDatabase)
@@ -20,6 +19,7 @@ import Test.Spec.Assertions (shouldEqual)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 import Yoga.JSON as JSON
+import Test.OfxParser.Spec as OfxParserSpec
 
 foreign import removeFile :: String -> Effect Unit
 
@@ -38,7 +38,9 @@ main = do
               let port = 7777
               void $ startServer port db
               log "Running tests..."
-              runSpecAndExitProcess [consoleReporter] (apiTests port)
+              runSpecAndExitProcess [ consoleReporter ] do
+                OfxParserSpec.spec
+                apiTests port
 
 apiTests :: Int -> Spec Unit
 apiTests port = do

@@ -1,0 +1,16 @@
+{
+    "version": "0.2",
+    "ignorePaths": ["test/OfxParser/fixture.ofx"],
+    "dictionaryDefinitions": [],
+    "dictionaries": [],
+    "words": [],
+    "ignoreWords": [
+        "DTPOSTED",
+        "TRNAMT",
+        "FITID",
+        "STMTTRN",
+        "TRNTYPE",
+        "ACCTID"
+    ],
+    "import": []
+}
