@@ -1,3 +1,20 @@
 import Prelude
 import WIP
 import Server.Database as DB
+import Data.Array ((!!))
+
+--   Quick Reference: Haskell → PureScript
+--
+--   | Haskell  | PureScript |
+--   |----------|------------|
+--   | mapM_    | traverse_  |
+--   | forM_    | for_       |
+--   | print    | logShow    |
+--   | putStrLn | log        |
+--   | mapM     | traverse   |
+--   | forM     | for        |
+import Data.Traversable (traverse_)
+
+
+-- The Class.Console is more "general"
+import Effect.Class.Console (log, logShow)

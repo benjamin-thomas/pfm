@@ -10,8 +10,10 @@ import Data.Either (Either(..))
 import Data.String (contains, Pattern(..))
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..))
-import Server.Database as DB
-import Shared.Types (User(..))
+import Server.DB.Account (AccountDB(..))
+import Server.DB.Budget (BudgetDB(..))
+import Server.DB.Category (CategoryDB(..))
+import Shared.Types (Transaction, User(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.JSON as JSON
@@ -42,7 +44,7 @@ spec port = do
                 shouldEqual (length users) 2
                 -- Validate JSON structure
                 case users of
-                  [User user1, User user2] -> do
+                  [ User user1, User user2 ] -> do
                     user1.firstName `shouldEqual` "John"
                     user1.lastName `shouldEqual` "Doe"
                     user2.firstName `shouldEqual` "Jane"
@@ -75,15 +77,15 @@ spec port = do
               headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (categories :: Array DB.Category) -> do
+              Right (categories :: Array CategoryDB) -> do
                 length categories `shouldEqual` 4
                 -- Validate JSON structure of first category
                 case head categories of
-                  Just (DB.Category cat) -> do
+                  Just (CategoryDB cat) -> do
                     cat.categoryId `shouldSatisfy` (_ > 0)
                     cat.name `shouldSatisfy` (_ /= "")
-                    cat.createdAt `shouldSatisfy` (_ > 0)
-                    cat.updatedAt `shouldSatisfy` (_ > 0)
+                    cat.createdAtUnix `shouldSatisfy` (_ > 0)
+                    cat.updatedAtUnix `shouldSatisfy` (_ > 0)
                   Nothing -> shouldEqual "Expected at least one category" "No categories found"
 
       it "should get category by ID" do
@@ -94,8 +96,8 @@ spec port = do
             shouldEqual (StatusCode 200) response.status
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (category :: DB.Category) -> do
-                let (DB.Category catData) = category
+              Right (category :: CategoryDB) -> do
+                let (CategoryDB catData) = category
                 catData.categoryId `shouldEqual` 1
                 catData.name `shouldEqual` "Equity"
 
@@ -125,16 +127,16 @@ spec port = do
               headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (accounts :: Array DB.Account) -> do
+              Right (accounts :: Array AccountDB) -> do
                 length accounts `shouldSatisfy` (_ >= 13)
                 -- Validate JSON structure of first account
                 case head accounts of
-                  Just (DB.Account acc) -> do
+                  Just (AccountDB acc) -> do
                     acc.accountId `shouldSatisfy` (_ > 0)
                     acc.categoryId `shouldSatisfy` (_ > 0)
                     acc.name `shouldSatisfy` (_ /= "")
-                    acc.createdAt `shouldSatisfy` (_ > 0)
-                    acc.updatedAt `shouldSatisfy` (_ > 0)
+                    acc.createdAtUnix `shouldSatisfy` (_ > 0)
+                    acc.updatedAtUnix `shouldSatisfy` (_ > 0)
                   Nothing -> shouldEqual "Expected at least one account" "No accounts found"
 
     describe "Budgets Endpoints" do
@@ -146,7 +148,7 @@ spec port = do
             shouldEqual (StatusCode 200) response.status
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (budgets :: Array DB.Budget) ->
+              Right (budgets :: Array BudgetDB) ->
                 length budgets `shouldSatisfy` (_ >= 0)
 
       it "should get budget by ID when exists" do
@@ -157,9 +159,9 @@ spec port = do
           Right budgetsResponse -> do
             case JSON.readJSON budgetsResponse.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (budgets :: Array DB.Budget) -> do
+              Right (budgets :: Array BudgetDB) -> do
                 case head budgets of
-                  Just (DB.Budget budget) -> do
+                  Just (BudgetDB budget) -> do
                     result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets/" <> show budget.budgetId)
                     case result of
                       Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
@@ -167,8 +169,8 @@ spec port = do
                         shouldEqual (StatusCode 200) response.status
                         case JSON.readJSON response.body of
                           Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-                          Right (foundBudget :: DB.Budget) -> do
-                            let (DB.Budget foundData) = foundBudget
+                          Right (foundBudget :: BudgetDB) -> do
+                            let (BudgetDB foundData) = foundBudget
                             foundData.budgetId `shouldEqual` budget.budgetId
                   Nothing -> shouldEqual "Expected at least one budget" "No budgets found"
 
@@ -184,7 +186,7 @@ spec port = do
               headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (transactions :: Array DB.Transaction) ->
+              Right (transactions :: Array Transaction) ->
                 length transactions `shouldSatisfy` (_ >= 0)
 
       it "should return 404 for non-existent transaction" do
@@ -202,7 +204,7 @@ spec port = do
                 errorObj.error `shouldEqual` "Transaction not found"
 
       it "should return error when deleting non-existent transaction" do
-        deleteResult <- AX.request AX.defaultRequest 
+        deleteResult <- AX.request AX.defaultRequest
           { method = Left DELETE
           , url = "http://localhost:" <> show port <> "/transactions/999"
           , responseFormat = ResponseFormat.string

@@ -18,16 +18,17 @@ derive newtype instance Eq User
 derive newtype instance ReadForeign User
 derive newtype instance WriteForeign User
 
--- Transaction types based on the Elm model
 newtype Transaction = Transaction
-  { id :: Maybe Int
+  { id :: Int
+  , budgetId :: Int
   , fromAccountId :: Int
   , fromAccountName :: String
   , toAccountId :: Int
   , toAccountName :: String
-  , date :: String
+  , uniqueFitId :: Maybe String
+  , date :: String -- ISO string for JSON compatibility
   , description :: String
-  , amount :: Number -- Using Number for simplicity, can switch to Int for cents later
+  , amount :: Number -- Keep as Number for JSON compatibility
   }
 
 derive instance Generic Transaction _

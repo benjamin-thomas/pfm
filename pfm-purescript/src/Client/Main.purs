@@ -4,6 +4,7 @@ import Prelude
 
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
+import Data.Array (length)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
@@ -23,6 +24,7 @@ import Shared.Types
   )
 import Yoga.JSON as JSON
 
+
 type State =
   { users :: Array User
   , transactions :: Array Transaction
@@ -35,12 +37,13 @@ data Action
   = LoadUsers
   | LoadTransactions
   | ToggleDarkMode
+  | Initialize
 
 component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
   { initialState: \{ isDarkMode } ->
       { users: []
-      , transactions: mockTransactions -- Start with mock data
+      , transactions: [] -- Start with empty, will load real data
       , loading: false
       , error: Nothing
       , isDarkMode
@@ -48,6 +51,7 @@ component = H.mkComponent
   , render
   , eval: H.mkEval $ H.defaultEval
       { handleAction = handleAction
+      , initialize = Just Initialize
       }
   }
 
@@ -68,19 +72,38 @@ render state =
     -- Transactions section  
     , HH.div
         [ HP.class_ (HH.ClassName "section") ]
-        [ HH.h2
-            [ HP.class_ (HH.ClassName "section-title") ]
-            [ HH.text "Transactions" ]
-        , HH.div
-            [ HP.class_ (HH.ClassName "transaction-list") ]
-            [ HH.div
-                [ HP.class_ (HH.ClassName "transaction-list__header") ]
-                [ HH.h3_ [ HH.text "Recent Transactions" ]
+        [ HH.div
+            [ HP.class_ (HH.ClassName "section-header") ]
+            [ HH.h2
+                [ HP.class_ (HH.ClassName "section-title") ]
+                [ HH.text "Transactions" ]
+            , HH.button
+                [ HP.class_ (HH.ClassName "refresh-button")
+                , HE.onClick \_ -> LoadTransactions
+                , HP.disabled state.loading
                 ]
-            , HH.ul
-                [ HP.class_ (HH.ClassName "transaction-list__items") ]
-                (map renderTransaction state.transactions)
+                [ HH.text if state.loading then "Loading..." else "Refresh" ]
             ]
+        , case state.error of
+            Just err -> HH.div
+              [ HP.class_ (HH.ClassName "error-message") ]
+              [ HH.text $ "Error: " <> err ]
+            Nothing -> HH.text ""
+        , if state.loading then
+            HH.div
+              [ HP.class_ (HH.ClassName "loading-message") ]
+              [ HH.text "Loading transactions..." ]
+          else
+            HH.div
+              [ HP.class_ (HH.ClassName "transaction-list") ]
+              [ HH.div
+                  [ HP.class_ (HH.ClassName "transaction-list__header") ]
+                  [ HH.h3_ [ HH.text $ "Recent Transactions (" <> show (length state.transactions) <> ")" ]
+                  ]
+              , HH.ul
+                  [ HP.class_ (HH.ClassName "transaction-list__items") ]
+                  (map renderTransaction state.transactions)
+              ]
         ]
     ]
   where
@@ -109,16 +132,22 @@ render state =
               [ HP.class_ $ HH.ClassName $ "transaction-item__amount" <>
                   if tx.amount >= 0.0 then " transaction-item__amount--positive" else " transaction-item__amount--negative"
               ]
-              [ HH.text $ "$" <> show tx.amount ]
+              [ HH.text $ show tx.amount <> "€" ]
           ]
       ]
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
+  Initialize -> do
+    -- Load transactions on startup
+    handleAction LoadTransactions
   LoadUsers -> pure unit -- Keep as reference but do nothing
   LoadTransactions -> do
-    -- For now, just refresh with mock data
-    H.modify_ \s -> s { transactions = mockTransactions }
+    H.modify_ \s -> s { loading = true, error = Nothing }
+    result <- H.liftAff fetchTransactions
+    case result of
+      Left err -> H.modify_ \s -> s { loading = false, error = Just err }
+      Right transactions -> H.modify_ \s -> s { loading = false, transactions = transactions, error = Nothing }
   ToggleDarkMode -> do
     state <- H.get
     let newDarkMode = not state.isDarkMode
@@ -126,15 +155,17 @@ handleAction = case _ of
     -- Call JavaScript to toggle theme
     liftEffect $ toggleTheme unit
 
-fetchUsers :: Aff (Either String (Array User))
-fetchUsers = do
-  result <- AX.get ResponseFormat.string "http://localhost:8080/users"
+fetchTransactions :: Aff (Either String (Array Transaction))
+fetchTransactions = do
+  -- Fetch transactions from the API
+  result <- AX.get ResponseFormat.string "http://localhost:8080/transactions"
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
       case JSON.readJSON response.body of
         Left err -> pure $ Left $ "JSON decode error: " <> show err
-        Right users -> pure $ Right users
+        Right (transactions :: Array Transaction) -> 
+          pure $ Right transactions
 
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit
@@ -148,57 +179,3 @@ main initArgs = do
     body <- HA.awaitBody
     runUI component initArgs body
 
--- Mock transaction data
-mockTransactions :: Array Transaction
-mockTransactions =
-  [ Transaction
-      { id: Just 1
-      , fromAccountId: 1
-      , fromAccountName: "Checking"
-      , toAccountId: 2
-      , toAccountName: "Groceries"
-      , date: "2024-01-15"
-      , description: "Whole Foods Market"
-      , amount: -125.50
-      }
-  , Transaction
-      { id: Just 2
-      , fromAccountId: 3
-      , fromAccountName: "Salary"
-      , toAccountId: 1
-      , toAccountName: "Checking"
-      , date: "2024-01-14"
-      , description: "Monthly Salary"
-      , amount: 3500.00
-      }
-  , Transaction
-      { id: Just 3
-      , fromAccountId: 1
-      , fromAccountName: "Checking"
-      , toAccountId: 4
-      , toAccountName: "Utilities"
-      , date: "2024-01-12"
-      , description: "Electric Bill - January"
-      , amount: -89.00
-      }
-  , Transaction
-      { id: Just 4
-      , fromAccountId: 1
-      , fromAccountName: "Checking"
-      , toAccountId: 5
-      , toAccountName: "Entertainment"
-      , date: "2024-01-10"
-      , description: "Netflix Subscription"
-      , amount: -15.99
-      }
-  , Transaction
-      { id: Just 5
-      , fromAccountId: 1
-      , fromAccountName: "Checking"
-      , toAccountId: 6
-      , toAccountName: "Transportation"
-      , date: "2024-01-08"
-      , description: "Gas Station - Shell"
-      , amount: -45.00
-      }
-  ]

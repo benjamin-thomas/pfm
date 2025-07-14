@@ -29,6 +29,10 @@ import HTTPurple
 import HTTPurple.Response (Response)
 import SQLite3 (DBConnection)
 import Server.Database as DB
+import Server.DB.Account as Account
+import Server.DB.Budget as Budget
+import Server.DB.Category as Category
+import Server.DB.Transaction as Transaction
 import Shared.Types (User(..))
 import Yoga.JSON as JSON
 
@@ -136,14 +140,14 @@ makeRouter db { route: route', method } =
     Categories ->
       case method of
         Get -> do
-          categories <- DB.getAllCategories db
+          categories <- Category.getAllCategories db
           ok $ JSON.writeJSON categories
         _ -> methodNotAllowed
 
     CategoryById categoryId ->
       case method of
         Get -> do
-          maybeCategory <- DB.getCategoryById categoryId db
+          maybeCategory <- Category.getCategoryById categoryId db
           case maybeCategory of
             Just category -> ok $ JSON.writeJSON category
             Nothing -> response 404 $ JSON.writeJSON { error: "Category not found" }
@@ -152,21 +156,21 @@ makeRouter db { route: route', method } =
     Accounts ->
       case method of
         Get -> do
-          accounts <- DB.getAllAccounts db
+          accounts <- Account.getAllAccounts db
           ok $ JSON.writeJSON accounts
         _ -> methodNotAllowed
 
     Budgets ->
       case method of
         Get -> do
-          budgets <- DB.getAllBudgets db
+          budgets <- Budget.getAllBudgets db
           ok $ JSON.writeJSON budgets
         _ -> methodNotAllowed
 
     BudgetById budgetId ->
       case method of
         Get -> do
-          maybeBudget <- DB.getBudgetById budgetId db
+          maybeBudget <- Budget.getBudgetById budgetId db
           case maybeBudget of
             Just budget -> ok $ JSON.writeJSON budget
             Nothing -> response 404 $ JSON.writeJSON { error: "Budget not found" }
@@ -187,6 +191,6 @@ makeRouter db { route: route', method } =
             Just transaction -> ok $ JSON.writeJSON transaction
             Nothing -> response 404 $ JSON.writeJSON { error: "Transaction not found" }
         Delete -> do
-          DB.deleteTransaction transactionId db
+          Transaction.deleteTransaction transactionId db
           ok "Transaction deleted"
         _ -> methodNotAllowed
