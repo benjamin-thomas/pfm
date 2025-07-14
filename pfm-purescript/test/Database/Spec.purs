@@ -18,7 +18,7 @@ import Server.DB.Category (CategoryDB(..))
 import Server.DB.Transaction as Transaction
 import Server.DB.Transaction (TransactionNewRow(..))
 import Server.Database as DB
-import Shared.Types (Transaction(..), User(..))
+import Shared.Types (LedgerViewRow(..), Transaction(..), User(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 
@@ -212,4 +212,67 @@ spec db = do
             transactions2 <- DB.getAllTransactions db
             length transactions2 `shouldEqual` (initialCount - 1)
           Nothing -> liftEffect $ throw "No transactions found"
+
+    describe "Ledger View Operations" do
+      it "should get ledger view for checking account" do
+        -- First ensure we have a budget and some transactions
+        budgetId <- Budget.insertBudgetForDate 1719792000 db
+        
+        let
+          testTxn1 = TransactionNewRow
+            { budgetId: Just budgetId
+            , fromAccountId: 2 -- Checking account (money going out)
+            , toAccountId: 6 -- Unknown expense
+            , uniqueFitId: Just "LEDGER-TEST1"
+            , dateUnix: 1719792000
+            , descrOrig: "Grocery Store"
+            , descr: "Grocery Store"
+            , cents: 5000 -- $50.00
+            }
+            
+          testTxn2 = TransactionNewRow
+            { budgetId: Just budgetId
+            , fromAccountId: 4 -- Unknown income
+            , toAccountId: 2 -- Checking account (money coming in)
+            , uniqueFitId: Just "LEDGER-TEST2"
+            , dateUnix: 1719792100
+            , descrOrig: "Salary"
+            , descr: "Salary"
+            , cents: 200000 -- $2000.00
+            }
+
+        -- Insert test transactions
+        Transaction.insertTransaction testTxn1 db
+        Transaction.insertTransaction testTxn2 db
+
+        -- Get ledger view for checking account (ID = 2)
+        ledgerRows <- DB.getLedgerViewRows 2 db
+        length ledgerRows `shouldSatisfy` (_ >= 2)
+
+        -- Check that ledger rows have proper flow calculations
+        case ledgerRows of
+          [LedgerViewRow row1, LedgerViewRow row2] -> do
+            -- First transaction: money going out from checking account (negative flow)
+            row1.flowAmount `shouldSatisfy` (_ < 0.0)
+            row1.runningBalance `shouldSatisfy` (_ < 0.0)
+            
+            -- Second transaction: money coming into checking account (positive flow)
+            row2.flowAmount `shouldSatisfy` (_ > 0.0)
+            row2.runningBalance `shouldSatisfy` (_ > row1.runningBalance)
+          _ -> liftEffect $ throw "Expected exactly 2 ledger rows"
+
+      it "should calculate running balance correctly" do
+        -- Get ledger view again to test running balance calculation
+        ledgerRows <- DB.getLedgerViewRows 2 db
+        
+        case ledgerRows of
+          [LedgerViewRow row1, LedgerViewRow row2] -> do
+            -- First row: -$50.00, running balance should be -$50.00
+            row1.flowAmount `shouldEqual` (-50.0)
+            row1.runningBalance `shouldEqual` (-50.0)
+            
+            -- Second row: +$2000.00, running balance should be $1950.00
+            row2.flowAmount `shouldEqual` 2000.0
+            row2.runningBalance `shouldEqual` 1950.0
+          _ -> liftEffect $ throw "Expected exactly 2 ledger rows for balance test"
 

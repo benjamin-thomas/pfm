@@ -43,6 +43,7 @@ data Route
   | Categories
   | CategoryById Int
   | Accounts
+  | AccountLedger Int
   | Budgets
   | BudgetById Int
   | Transactions
@@ -58,6 +59,7 @@ route = mkRoute
   , "Categories": "categories" / noArgs
   , "CategoryById": "categories" / int segment
   , "Accounts": "accounts" / noArgs
+  , "AccountLedger": "accounts" / int segment / "ledger"
   , "Budgets": "budgets" / noArgs
   , "BudgetById": "budgets" / int segment
   , "Transactions": "transactions" / noArgs
@@ -158,6 +160,13 @@ makeRouter db { route: route', method } =
         Get -> do
           accounts <- Account.getAllAccounts db
           ok $ JSON.writeJSON accounts
+        _ -> methodNotAllowed
+
+    AccountLedger accountId ->
+      case method of
+        Get -> do
+          ledgerRows <- DB.getLedgerViewRows accountId db
+          ok $ JSON.writeJSON ledgerRows
         _ -> methodNotAllowed
 
     Budgets ->

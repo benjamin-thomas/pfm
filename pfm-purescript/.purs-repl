@@ -2,6 +2,7 @@ import Prelude
 import WIP
 import Server.Database as DB
 import Data.Array ((!!))
+import Data.Array as Array
 
 --   Quick Reference: Haskell → PureScript
 --

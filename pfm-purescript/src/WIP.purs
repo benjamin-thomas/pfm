@@ -3,15 +3,17 @@ module WIP where
 import Prelude
 
 import Data.Array ((!!))
+import Data.Array as Array
 import Data.Either (either)
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, runAff_)
 import Effect.Class.Console (log, logShow)
 import SQLite3 as SQLite3
+import Server.DB.LedgerView as LedgerView
+import Server.DB.Transaction (TransactionDB(..))
 import Server.Database (seedFromOfx)
 import Server.Database as DB
-import Server.DB.Transaction (TransactionDB(..))
 import Shared.Types (Transaction(..))
 
 {-
@@ -31,6 +33,7 @@ repl> newConn >>= DB.getAllUsers # run
 -- run $ newConn >>= DB.getAllTransactions <#> (_ !! 5) >>= traverse_ logShow
 -- run $ newConn >>= DB.getAllTransactions <#> Array.take 3 >>= traverse_ logShow
 -- run $ newConn >>= DB.getAllTransactions <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow
+-- run $ newConn >>= DB.getLedgerViewRows <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow
 
  -}
 run :: forall a. Show a => Aff a -> Effect Unit
@@ -55,3 +58,5 @@ seed = run $ newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
 showTransactions :: Effect Unit
 showTransactions =
   run $ newConn >>= DB.getAllTransactions >>= traverse_ logShow
+
+wip = newConn >>= LedgerView.getLedgerViewRows 4 <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow

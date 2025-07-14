@@ -19,7 +19,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Shared.Types
-  ( Transaction(Transaction)
+  ( LedgerViewRow(LedgerViewRow)
   , User
   )
 import Yoga.JSON as JSON
@@ -27,7 +27,7 @@ import Yoga.JSON as JSON
 
 type State =
   { users :: Array User
-  , transactions :: Array Transaction
+  , ledgerRows :: Array LedgerViewRow
   , loading :: Boolean
   , error :: Maybe String
   , isDarkMode :: Boolean
@@ -35,7 +35,7 @@ type State =
 
 data Action
   = LoadUsers
-  | LoadTransactions
+  | LoadLedgerView
   | ToggleDarkMode
   | Initialize
 
@@ -43,7 +43,7 @@ component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
   { initialState: \{ isDarkMode } ->
       { users: []
-      , transactions: [] -- Start with empty, will load real data
+      , ledgerRows: []
       , loading: false
       , error: Nothing
       , isDarkMode
@@ -69,7 +69,7 @@ render state =
         ]
         [ HH.text (if state.isDarkMode then "☀️" else "🌙") ]
 
-    -- Transactions section  
+    -- Ledger section  
     , HH.div
         [ HP.class_ (HH.ClassName "section") ]
         [ HH.div
@@ -79,7 +79,7 @@ render state =
                 [ HH.text "Transactions" ]
             , HH.button
                 [ HP.class_ (HH.ClassName "refresh-button")
-                , HE.onClick \_ -> LoadTransactions
+                , HE.onClick \_ -> LoadLedgerView
                 , HP.disabled state.loading
                 ]
                 [ HH.text if state.loading then "Loading..." else "Refresh" ]
@@ -92,62 +92,72 @@ render state =
         , if state.loading then
             HH.div
               [ HP.class_ (HH.ClassName "loading-message") ]
-              [ HH.text "Loading transactions..." ]
+              [ HH.text "Loading ledger..." ]
           else
-            HH.div
-              [ HP.class_ (HH.ClassName "transaction-list") ]
-              [ HH.div
-                  [ HP.class_ (HH.ClassName "transaction-list__header") ]
-                  [ HH.h3_ [ HH.text $ "Recent Transactions (" <> show (length state.transactions) <> ")" ]
-                  ]
-              , HH.ul
-                  [ HP.class_ (HH.ClassName "transaction-list__items") ]
-                  (map renderTransaction state.transactions)
-              ]
+            renderLedgerView state
         ]
     ]
   where
-  renderTransaction :: Transaction -> H.ComponentHTML Action () m
-  renderTransaction (Transaction tx) =
-    HH.li
-      [ HP.class_ (HH.ClassName "transaction-item") ]
-      [ HH.div
-          [ HP.class_ (HH.ClassName "transaction-item__row") ]
-          [ HH.div
-              [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
-              [ HH.div
-                  [ HP.class_ (HH.ClassName "transaction-item__details") ]
-                  [ HH.div
-                      [ HP.class_ (HH.ClassName "transaction-item__description") ]
-                      [ HH.text tx.description ]
-                  , HH.div
-                      [ HP.class_ (HH.ClassName "transaction-item__accounts") ]
-                      [ HH.text $ tx.fromAccountName <> " → " <> tx.toAccountName ]
+
+  renderLedgerView :: State -> H.ComponentHTML Action () m
+  renderLedgerView state =
+    HH.div [ HP.class_ (HH.ClassName "transaction-list") ]
+      [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header") ]
+          [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header-title") ]
+              [ HH.h3_ [ HH.text "Transactions" ]
+              , HH.span [ HP.class_ (HH.ClassName "transaction-count") ] 
+                  [ HH.text $ show (length state.ledgerRows) <> " transactions" ]
+              ]
+          ]
+      , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
+          (map renderLedgerRow state.ledgerRows)
+      ]
+
+  renderLedgerRow :: LedgerViewRow -> H.ComponentHTML Action () m
+  renderLedgerRow (LedgerViewRow row) =
+    let
+      isPositive = row.flowAmount > 0.0
+      amountClass = if isPositive then
+                      "transaction-item__amount transaction-item__amount--positive"
+                    else  
+                      "transaction-item__amount transaction-item__amount--negative"
+      amountSign = if isPositive then "+" else ""
+    in
+    HH.li [ HP.class_ (HH.ClassName "transaction-item") ]
+      [ HH.div [ HP.class_ (HH.ClassName "transaction-item__row") ]
+          [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
+              [ HH.div [ HP.class_ (HH.ClassName "transaction-item__details") ]
+                  [ HH.div [ HP.class_ (HH.ClassName "transaction-item__description") ]
+                      [ HH.text row.description ]
+                  , HH.div [ HP.class_ (HH.ClassName "transaction-item__accounts") ]
+                      [ HH.text $ row.fromAccountName <> " → " <> row.toAccountName ]
                   ]
-              , HH.div
-                  [ HP.class_ (HH.ClassName "transaction-item__date") ]
-                  [ HH.text tx.date ]
+              , HH.div [ HP.class_ (HH.ClassName "transaction-item__date") ]
+                  [ HH.text row.date ]
+              , HH.div [ HP.class_ (HH.ClassName amountClass) ]
+                  [ HH.text $ amountSign <> show row.flowAmount <> " €" ]
               ]
-          , HH.div
-              [ HP.class_ $ HH.ClassName $ "transaction-item__amount" <>
-                  if tx.amount >= 0.0 then " transaction-item__amount--positive" else " transaction-item__amount--negative"
+          , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
+              [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
+                  [ HH.span [ HP.class_ (HH.ClassName "balance-after") ] 
+                      [ HH.text $ show row.runningBalance <> " €" ]
+                  ]
               ]
-              [ HH.text $ show tx.amount <> "€" ]
           ]
       ]
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
   Initialize -> do
-    -- Load transactions on startup
-    handleAction LoadTransactions
+    -- Load ledger view on startup
+    handleAction LoadLedgerView
   LoadUsers -> pure unit -- Keep as reference but do nothing
-  LoadTransactions -> do
+  LoadLedgerView -> do
     H.modify_ \s -> s { loading = true, error = Nothing }
-    result <- H.liftAff fetchTransactions
+    result <- H.liftAff fetchLedgerView
     case result of
       Left err -> H.modify_ \s -> s { loading = false, error = Just err }
-      Right transactions -> H.modify_ \s -> s { loading = false, transactions = transactions, error = Nothing }
+      Right ledgerRows -> H.modify_ \s -> s { loading = false, ledgerRows = ledgerRows, error = Nothing }
   ToggleDarkMode -> do
     state <- H.get
     let newDarkMode = not state.isDarkMode
@@ -155,17 +165,17 @@ handleAction = case _ of
     -- Call JavaScript to toggle theme
     liftEffect $ toggleTheme unit
 
-fetchTransactions :: Aff (Either String (Array Transaction))
-fetchTransactions = do
-  -- Fetch transactions from the API
-  result <- AX.get ResponseFormat.string "http://localhost:8080/transactions"
+fetchLedgerView :: Aff (Either String (Array LedgerViewRow))
+fetchLedgerView = do
+  -- Fetch ledger view for checking account (ID = 2) from the API
+  result <- AX.get ResponseFormat.string "http://localhost:8080/accounts/2/ledger"
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
       case JSON.readJSON response.body of
         Left err -> pure $ Left $ "JSON decode error: " <> show err
-        Right (transactions :: Array Transaction) -> 
-          pure $ Right transactions
+        Right (ledgerRows :: Array LedgerViewRow) -> 
+          pure $ Right ledgerRows
 
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit

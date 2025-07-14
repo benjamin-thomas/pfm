@@ -1,13 +1,15 @@
 module Server.Conversion
   ( dbTransactionToTransaction
+  , dbLedgerViewRowToLedgerViewRow
   ) where
 
 import Prelude
 
 import Data.Int (toNumber)
 import Server.DateFormat (formatUnixTimestamp)
+import Server.DB.LedgerView (LedgerViewRowDB(..))
 import Server.DB.Transaction (TransactionDB(..))
-import Shared.Types (Transaction(..))
+import Shared.Types (LedgerViewRow(..), Transaction(..))
 
 -- | Convert database transaction to DTO
 dbTransactionToTransaction :: TransactionDB -> Transaction
@@ -46,3 +48,22 @@ dbTransactionToTransaction (TransactionDB dbTx) =
     12 -> "Clothing"
     13 -> "Leisure"
     _ -> "Unknown Account"
+
+-- | Convert database ledger view row to DTO
+dbLedgerViewRowToLedgerViewRow :: LedgerViewRowDB -> LedgerViewRow
+dbLedgerViewRowToLedgerViewRow (LedgerViewRowDB dbRow) =
+  LedgerViewRow
+    { transactionId: dbRow.transactionId
+    , budgetId: dbRow.budgetId
+    , fromAccountId: dbRow.fromAccountId
+    , fromAccountName: dbRow.fromAccountName
+    , toAccountId: dbRow.toAccountId
+    , toAccountName: dbRow.toAccountName
+    , date: dbRow.date -- Already formatted by SQLite
+    , description: dbRow.descr
+    , flowAmount: centsToNumber dbRow.flowCents
+    , runningBalance: centsToNumber dbRow.runningBalanceCents
+    }
+  where
+  centsToNumber :: Int -> Number
+  centsToNumber cents = (toNumber cents) / 100.0

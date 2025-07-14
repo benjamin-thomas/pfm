@@ -36,3 +36,22 @@ derive newtype instance Show Transaction
 derive newtype instance Eq Transaction
 derive newtype instance ReadForeign Transaction
 derive newtype instance WriteForeign Transaction
+
+newtype LedgerViewRow = LedgerViewRow
+  { transactionId :: Int
+  , budgetId :: Int
+  , fromAccountId :: Int
+  , fromAccountName :: String
+  , toAccountId :: Int
+  , toAccountName :: String
+  , date :: String -- ISO date string
+  , description :: String
+  , flowAmount :: Number -- Positive for inflow, negative for outflow
+  , runningBalance :: Number -- Running balance
+  }
+
+derive instance Generic LedgerViewRow _
+derive newtype instance Show LedgerViewRow
+derive newtype instance Eq LedgerViewRow
+derive newtype instance ReadForeign LedgerViewRow
+derive newtype instance WriteForeign LedgerViewRow

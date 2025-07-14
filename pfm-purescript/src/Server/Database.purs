@@ -3,6 +3,7 @@ module Server.Database
   , deleteUser
   , getAllTransactions
   , getAllUsers
+  , getLedgerViewRows
   , getTransactionById
   , getUserById
   , initDatabase
@@ -33,11 +34,12 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import Partial.Unsafe (unsafePartial)
 import SQLite3 as SQLite3
-import Server.Conversion (dbTransactionToTransaction)
+import Server.Conversion (dbLedgerViewRowToLedgerViewRow, dbTransactionToTransaction)
 import Server.DB.Budget as Budget
+import Server.DB.LedgerView as LedgerView
 import Server.DB.Transaction as Transaction
 import Server.OfxParser (StatementTransaction, TimeStamp(..), parseOfx)
-import Shared.Types (Transaction, User(..))
+import Shared.Types (LedgerViewRow, Transaction, User(..))
 
 -- | Initialize the database and create tables
 initDatabase :: String -> Aff SQLite3.DBConnection
@@ -336,4 +338,10 @@ getTransactionById :: Int -> SQLite3.DBConnection -> Aff (Maybe Transaction)
 getTransactionById transactionId db = do
   maybeDbTransaction <- Transaction.getTransactionByIdDB transactionId db
   pure $ map dbTransactionToTransaction maybeDbTransaction
+
+-- | Get ledger view rows for a specific account (with DTO conversion)
+getLedgerViewRows :: Int -> SQLite3.DBConnection -> Aff (Array LedgerViewRow)
+getLedgerViewRows accountId db = do
+  dbRows <- LedgerView.getLedgerViewRows accountId db
+  pure $ map dbLedgerViewRowToLedgerViewRow dbRows
 

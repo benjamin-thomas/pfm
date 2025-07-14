@@ -13,7 +13,7 @@ import Data.Maybe (Maybe(..))
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
-import Shared.Types (Transaction, User(..))
+import Shared.Types (LedgerViewRow, Transaction, User(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.JSON as JSON
@@ -138,6 +138,20 @@ spec port = do
                     acc.createdAtUnix `shouldSatisfy` (_ > 0)
                     acc.updatedAtUnix `shouldSatisfy` (_ > 0)
                   Nothing -> shouldEqual "Expected at least one account" "No accounts found"
+
+      it "should get ledger view for checking account" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) ->
+                length ledgerRows `shouldSatisfy` (_ >= 0) -- May be empty initially
 
     describe "Budgets Endpoints" do
       it "should get all budgets" do
