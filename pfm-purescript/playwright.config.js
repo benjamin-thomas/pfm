@@ -1,5 +1,5 @@
 export default {
-  testDir: './tests/e2e',
+  testDir: './test/e2e',
   timeout: 30000,
   retries: 2,
   use: {
