@@ -15,6 +15,7 @@ import Test.OfxParser.Spec as OfxParserSpec
 import Test.Api.Spec as ApiSpec
 
 foreign import removeFile :: String -> Effect Unit
+foreign import getRandomPort :: Effect Int
 
 main :: Effect Unit
 main = do
@@ -28,9 +29,9 @@ main = do
           case _ of
             Left err -> throw $ "Failed to seed database: " <> show err
             Right _ -> do
-              let port = 7777
+              port <- getRandomPort
               void $ startServer port db
-              log "Running tests..."
+              log $ "Running tests on port " <> show port <> "..."
               runSpecAndExitProcess [ consoleReporter ] do
                 OfxParserSpec.spec
                 ApiSpec.spec port
