@@ -14,6 +14,11 @@ The goal is to replace my Elm+Haskell app (a work in progress), with a fullstack
 
 This should provide less friction when crossing the frontend/backend worlds.
 
+The original app is here:
+
+- ~/code/github.com/benjamin-thomas/pfm/pfm-haskell-twain/
+- ~/code/github.com/benjamin-thomas/pfm/pfm-elm/
+
 
 ## JS code style
 
