@@ -6,9 +6,17 @@ module Server.Database
   , TransactionNewRow(..)
   , createSchema
   , deleteAllTransactions
+  , deleteTransaction
   , deleteUser
+  , getAllAccounts
+  , getAllBudgets
+  , getAllCategories
+  , getAllTransactions
   , getAllUsers
+  , getBudgetById
   , getBudgetIdForDate
+  , getCategoryById
+  , getTransactionById
   , getUserById
   , initDatabase
   , insertBudgetForDate
@@ -16,6 +24,7 @@ module Server.Database
   , insertUser
   , seedDatabase
   , seedFromOfx
+  , updateTransaction
   ) where
 
 import Prelude
@@ -56,6 +65,9 @@ newtype Category = Category
   , updatedAt :: Int
   }
 
+derive newtype instance Show Category
+derive newtype instance Eq Category
+
 newtype Account = Account
   { accountId :: Int
   , categoryId :: Int
@@ -64,6 +76,9 @@ newtype Account = Account
   , updatedAt :: Int
   }
 
+derive newtype instance Show Account
+derive newtype instance Eq Account
+
 newtype Budget = Budget
   { budgetId :: Int
   , startsOn :: Int
@@ -71,6 +86,9 @@ newtype Budget = Budget
   , createdAt :: Int
   , updatedAt :: Int
   }
+
+derive newtype instance Show Budget
+derive newtype instance Eq Budget
 
 newtype Transaction = Transaction
   { transactionId :: Int
@@ -85,6 +103,9 @@ newtype Transaction = Transaction
   , createdAt :: Int
   , updatedAt :: Int
   }
+
+derive newtype instance Show Transaction
+derive newtype instance Eq Transaction
 
 newtype TransactionNewRow = TransactionNewRow
   { budgetId :: Maybe Int
@@ -449,3 +470,170 @@ seedDatabase db = do
     _ <- insertUser (User { id: Nothing, firstName: "John", lastName: "Doe" }) db
     _ <- insertUser (User { id: Nothing, firstName: "Jane", lastName: "Smith" }) db
     liftEffect $ log "Database seeded successfully"
+
+-- =============================================================================
+-- CATEGORIES CRUD
+-- =============================================================================
+
+-- | Get all categories
+getAllCategories :: SQLite3.DBConnection -> Aff (Array Category)
+getAllCategories db = do
+  rows <- SQLite3.queryDB db "SELECT category_id, name, created_at, updated_at FROM categories ORDER BY category_id" []
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  pure $ map rowToCategory rowArray
+  where
+  rowToCategory :: Foreign -> Category
+  rowToCategory row =
+    let
+      obj = unsafeFromForeign row :: { category_id :: Int, name :: String, created_at :: Int, updated_at :: Int }
+    in
+      Category { categoryId: obj.category_id, name: obj.name, createdAt: obj.created_at, updatedAt: obj.updated_at }
+
+-- | Get category by ID
+getCategoryById :: Int -> SQLite3.DBConnection -> Aff (Maybe Category)
+getCategoryById categoryId db = do
+  rows <- SQLite3.queryDB db "SELECT category_id, name, created_at, updated_at FROM categories WHERE category_id = ?" [ unsafeToForeign categoryId ]
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  case head rowArray of
+    Nothing -> pure Nothing
+    Just row -> do
+      let obj = unsafeFromForeign row :: { category_id :: Int, name :: String, created_at :: Int, updated_at :: Int }
+      pure $ Just $ Category { categoryId: obj.category_id, name: obj.name, createdAt: obj.created_at, updatedAt: obj.updated_at }
+
+-- =============================================================================
+-- ACCOUNTS CRUD  
+-- =============================================================================
+
+-- | Get all accounts
+getAllAccounts :: SQLite3.DBConnection -> Aff (Array Account)
+getAllAccounts db = do
+  rows <- SQLite3.queryDB db "SELECT account_id, category_id, name, created_at, updated_at FROM accounts ORDER BY category_id, name" []
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  pure $ map rowToAccount rowArray
+  where
+  rowToAccount :: Foreign -> Account
+  rowToAccount row =
+    let
+      obj = unsafeFromForeign row :: { account_id :: Int, category_id :: Int, name :: String, created_at :: Int, updated_at :: Int }
+    in
+      Account { accountId: obj.account_id, categoryId: obj.category_id, name: obj.name, createdAt: obj.created_at, updatedAt: obj.updated_at }
+
+-- =============================================================================
+-- BUDGETS CRUD
+-- =============================================================================
+
+-- | Get all budgets
+getAllBudgets :: SQLite3.DBConnection -> Aff (Array Budget)
+getAllBudgets db = do
+  rows <- SQLite3.queryDB db "SELECT budget_id, starts_on, ends_on, created_at, updated_at FROM budgets ORDER BY starts_on DESC" []
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  pure $ map rowToBudget rowArray
+  where
+  rowToBudget :: Foreign -> Budget
+  rowToBudget row =
+    let
+      obj = unsafeFromForeign row :: { budget_id :: Int, starts_on :: Int, ends_on :: Int, created_at :: Int, updated_at :: Int }
+    in
+      Budget { budgetId: obj.budget_id, startsOn: obj.starts_on, endsOn: obj.ends_on, createdAt: obj.created_at, updatedAt: obj.updated_at }
+
+-- | Get budget by ID
+getBudgetById :: Int -> SQLite3.DBConnection -> Aff (Maybe Budget)
+getBudgetById budgetId db = do
+  rows <- SQLite3.queryDB db "SELECT budget_id, starts_on, ends_on, created_at, updated_at FROM budgets WHERE budget_id = ?" [ unsafeToForeign budgetId ]
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  case head rowArray of
+    Nothing -> pure Nothing
+    Just row -> do
+      let obj = unsafeFromForeign row :: { budget_id :: Int, starts_on :: Int, ends_on :: Int, created_at :: Int, updated_at :: Int }
+      pure $ Just $ Budget { budgetId: obj.budget_id, startsOn: obj.starts_on, endsOn: obj.ends_on, createdAt: obj.created_at, updatedAt: obj.updated_at }
+
+-- =============================================================================
+-- TRANSACTIONS CRUD
+-- =============================================================================
+
+-- | Get all transactions
+getAllTransactions :: SQLite3.DBConnection -> Aff (Array Transaction)
+getAllTransactions db = do
+  rows <- SQLite3.queryDB db 
+    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions ORDER BY date DESC" 
+    []
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  pure $ map rowToTransaction rowArray
+  where
+  rowToTransaction :: Foreign -> Transaction
+  rowToTransaction row =
+    let
+      obj = unsafeFromForeign row :: { transaction_id :: Int, budget_id :: Int, from_account_id :: Int, to_account_id :: Int, unique_fit_id :: Foreign, date :: Int, descr_orig :: String, descr :: String, cents :: Int, created_at :: Int, updated_at :: Int }
+      -- Handle NULL unique_fit_id safely
+      uniqueFitId = case unsafeFromForeign obj.unique_fit_id of
+        "" -> Nothing
+        s -> Just s
+    in
+      Transaction 
+        { transactionId: obj.transaction_id
+        , budgetId: obj.budget_id
+        , fromAccountId: obj.from_account_id
+        , toAccountId: obj.to_account_id
+        , uniqueFitId: uniqueFitId
+        , date: obj.date
+        , descrOrig: obj.descr_orig
+        , descr: obj.descr
+        , cents: obj.cents
+        , createdAt: obj.created_at
+        , updatedAt: obj.updated_at
+        }
+
+-- | Get transaction by ID
+getTransactionById :: Int -> SQLite3.DBConnection -> Aff (Maybe Transaction)
+getTransactionById transactionId db = do
+  rows <- SQLite3.queryDB db 
+    "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions WHERE transaction_id = ?" 
+    [ unsafeToForeign transactionId ]
+  let rowArray = unsafeFromForeign rows :: Array Foreign
+  case head rowArray of
+    Nothing -> pure Nothing
+    Just row -> do
+      let 
+        obj = unsafeFromForeign row :: { transaction_id :: Int, budget_id :: Int, from_account_id :: Int, to_account_id :: Int, unique_fit_id :: Foreign, date :: Int, descr_orig :: String, descr :: String, cents :: Int, created_at :: Int, updated_at :: Int }
+        -- Handle NULL unique_fit_id safely
+        uniqueFitId = case unsafeFromForeign obj.unique_fit_id of
+          "" -> Nothing
+          s -> Just s
+      pure $ Just $ Transaction 
+        { transactionId: obj.transaction_id
+        , budgetId: obj.budget_id
+        , fromAccountId: obj.from_account_id
+        , toAccountId: obj.to_account_id
+        , uniqueFitId: uniqueFitId
+        , date: obj.date
+        , descrOrig: obj.descr_orig
+        , descr: obj.descr
+        , cents: obj.cents
+        , createdAt: obj.created_at
+        , updatedAt: obj.updated_at
+        }
+
+-- | Update a transaction
+updateTransaction :: Int -> TransactionNewRow -> SQLite3.DBConnection -> Aff Unit
+updateTransaction transactionId (TransactionNewRow txn) db = do
+  liftEffect $ log $ "Updating transaction: " <> show transactionId
+  _ <- SQLite3.queryDB db
+    """
+    UPDATE transactions 
+    SET from_account_id = ?, to_account_id = ?, date = ?, descr = ?, cents = ?, updated_at = strftime('%s', 'now')
+    WHERE transaction_id = ?
+    """
+    [ unsafeToForeign txn.fromAccountId
+    , unsafeToForeign txn.toAccountId
+    , unsafeToForeign txn.date
+    , unsafeToForeign txn.descr
+    , unsafeToForeign txn.cents
+    , unsafeToForeign transactionId
+    ]
+  pure unit
+
+-- | Delete a transaction
+deleteTransaction :: Int -> SQLite3.DBConnection -> Aff Unit
+deleteTransaction transactionId db = do
+  _ <- SQLite3.queryDB db "DELETE FROM transactions WHERE transaction_id = ?" [ unsafeToForeign transactionId ]
+  pure unit

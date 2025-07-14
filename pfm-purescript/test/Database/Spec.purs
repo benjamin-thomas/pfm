@@ -76,13 +76,58 @@ spec db = do
         maybeBudgetId <- DB.getBudgetIdForDate 2000000000 db
         maybeBudgetId `shouldEqual` Nothing
 
-    describe "Transaction Operations (FIXME: theses tests are suboptimal for now)" do
-      it "should insert a transaction" do
+    describe "Category Operations" do
+      it "should get all categories" do
+        categories <- DB.getAllCategories db
+        length categories `shouldEqual` 4
+
+        -- Check first category (Equity)
+        case categories !! 0 of
+          Just (DB.Category cat) -> do
+            cat.categoryId `shouldEqual` 1
+            cat.name `shouldEqual` "Equity"
+          Nothing -> liftEffect $ throw "First category not found"
+
+      it "should get category by ID" do
+        maybeCategory <- DB.getCategoryById 2 db
+        case maybeCategory of
+          Just (DB.Category cat) -> do
+            cat.categoryId `shouldEqual` 2
+            cat.name `shouldEqual` "Assets"
+          Nothing -> liftEffect $ throw "Category 2 not found"
+
+    describe "Account Operations" do
+      it "should get all accounts" do
+        accounts <- DB.getAllAccounts db
+        length accounts `shouldSatisfy` (_ >= 13) -- We have at least 13 seeded accounts
+
+        -- Check for checking account
+        let checkingAccounts = filter (\(DB.Account acc) -> acc.name == "Checking account") accounts
+        length checkingAccounts `shouldEqual` 1
+
+    describe "Budget Operations" do
+      it "should get all budgets after seeding" do
+        -- Just insert a test budget instead of seeding entire OFX
+        _ <- DB.insertBudgetForDate 1719792000 db
+
+        budgets <- DB.getAllBudgets db
+        length budgets `shouldSatisfy` (_ >= 1) -- Should have at least one budget after seeding
+
+      it "should get budget by ID" do
+        budgets <- DB.getAllBudgets db
+        case budgets !! 0 of
+          Just (DB.Budget budget) -> do
+            maybeBudget <- DB.getBudgetById budget.budgetId db
+            maybeBudget `shouldEqual` Just (DB.Budget budget)
+          Nothing -> liftEffect $ throw "No budgets found"
+
+    describe "Transaction Operations" do
+      it "should insert and get transactions" do
         -- First ensure we have a budget
         budgetId <- DB.insertBudgetForDate 1719792000 db
 
         let
-          txn = DB.TransactionNewRow
+          testTxn = DB.TransactionNewRow
             { budgetId: Just budgetId
             , fromAccountId: 2 -- Checking account
             , toAccountId: 6 -- Unknown expense
@@ -93,33 +138,70 @@ spec db = do
             , cents: 1500
             }
 
-        -- Should not throw
-        DB.insertTransaction txn db
+        -- Insert test transaction
+        DB.insertTransaction testTxn db
 
-        -- Verify transaction was inserted (we'd need a getTransactions function for this)
-        -- For now, just ensure no error was thrown
-        pure unit
+        transactions <- DB.getAllTransactions db
+        length transactions `shouldSatisfy` (_ >= 1) -- Should have at least our test transaction
 
-      it "should delete all transactions" do
-        -- First insert a transaction
-        budgetId <- DB.insertBudgetForDate 1719792001 db
-        let
-          txn = DB.TransactionNewRow
-            { budgetId: Just budgetId
-            , fromAccountId: 2
-            , toAccountId: 6
-            , uniqueFitId: Just "TEST456"
-            , date: 1719792001
-            , descrOrig: "Another Test"
-            , descr: "Another Test"
-            , cents: 2000
-            }
-        DB.insertTransaction txn db
+        -- Check that we have proper transaction structure
+        case transactions !! 0 of
+          Just (DB.Transaction txn) -> do
+            txn.transactionId `shouldSatisfy` (_ > 0)
+            txn.cents `shouldSatisfy` (_ > 0)
+          Nothing -> liftEffect $ throw "No transactions found"
 
-        -- Now delete all
-        DB.deleteAllTransactions db
+      it "should get transaction by ID" do
+        transactions <- DB.getAllTransactions db
+        case transactions !! 0 of
+          Just (DB.Transaction txn) -> do
+            maybeTransaction <- DB.getTransactionById txn.transactionId db
+            maybeTransaction `shouldEqual` Just (DB.Transaction txn)
+          Nothing -> liftEffect $ throw "No transactions found"
 
-        -- We'd need a way to verify this worked
-        -- For now, just ensure no error was thrown
-        pure unit
+      it "should update a transaction" do
+        transactions <- DB.getAllTransactions db
+        case transactions !! 0 of
+          Just (DB.Transaction txn) -> do
+            let
+              newTxnData = DB.TransactionNewRow
+                { budgetId: Just txn.budgetId
+                , fromAccountId: txn.fromAccountId
+                , toAccountId: txn.toAccountId
+                , uniqueFitId: txn.uniqueFitId
+                , date: txn.date
+                , descrOrig: txn.descrOrig
+                , descr: "Updated Description" -- Changed this
+                , cents: 9999 -- Changed this
+                }
+
+            -- Update the transaction
+            DB.updateTransaction txn.transactionId newTxnData db
+
+            -- Verify it was updated
+            maybeUpdated <- DB.getTransactionById txn.transactionId db
+            case maybeUpdated of
+              Just (DB.Transaction updated) -> do
+                updated.descr `shouldEqual` "Updated Description"
+                updated.cents `shouldEqual` 9999
+              Nothing -> liftEffect $ throw "Updated transaction not found"
+          Nothing -> liftEffect $ throw "No transactions found"
+
+      it "should delete a transaction" do
+        transactions1 <- DB.getAllTransactions db
+        let initialCount = length transactions1
+
+        case transactions1 !! 0 of
+          Just (DB.Transaction txn) -> do
+            -- Delete the transaction
+            DB.deleteTransaction txn.transactionId db
+
+            -- Verify it was deleted
+            maybeDeleted <- DB.getTransactionById txn.transactionId db
+            maybeDeleted `shouldEqual` Nothing
+
+            -- Verify count decreased
+            transactions2 <- DB.getAllTransactions db
+            length transactions2 `shouldEqual` (initialCount - 1)
+          Nothing -> liftEffect $ throw "No transactions found"
 
