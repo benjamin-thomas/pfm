@@ -19,6 +19,7 @@
   , "integers"
   , "lists"
   , "maybe"
+  , "newtype"
   , "node-buffer"
   , "node-fs"
   , "node-sqlite3"

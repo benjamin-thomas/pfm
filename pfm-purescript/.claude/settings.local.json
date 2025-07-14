@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npm run test:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(spago build:*)",
+      "Bash(spago install:*)"
     ],
     "deny": []
   }

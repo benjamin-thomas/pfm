@@ -27,7 +27,7 @@ newtype Transaction = Transaction
   , toAccountName :: String
   , date :: String
   , description :: String
-  , amount :: Number  -- Using Number for simplicity, can switch to Int for cents later
+  , amount :: Number -- Using Number for simplicity, can switch to Int for cents later
   }
 
 derive instance Generic Transaction _

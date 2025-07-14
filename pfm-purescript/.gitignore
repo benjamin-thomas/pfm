@@ -9,3 +9,4 @@
 /.spec-results
 /test-results
 /.tmp/
+/.psci_modules/
