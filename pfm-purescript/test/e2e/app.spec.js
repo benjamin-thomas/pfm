@@ -52,4 +52,131 @@ test.describe('PFM PureScript App', () => {
     expect(positiveCount + negativeCount).toBeGreaterThanOrEqual(0);
   });
 
+  test('should open and close create transaction dialog', async ({ page }) => {
+    await page.goto('http://localhost:1234');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Check that dialog is not visible initially
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).not.toBeVisible();
+
+    // Click the "Create Transaction" button
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await expect(createButton).toBeVisible();
+    await expect(createButton).toContainText('Create Transaction');
+    await createButton.click();
+
+    // Wait for dialog to be visible
+    await expect(dialog).toBeVisible();
+
+    // Check that dialog title is correct
+    await expect(page.locator('.dialog-title')).toContainText('Create Transaction');
+
+    // Check that form fields are present
+    await expect(page.locator('input[id="description"]')).toBeVisible();
+    await expect(page.locator('input[id="from-account"]')).toBeVisible();
+    await expect(page.locator('input[id="to-account"]')).toBeVisible();
+    await expect(page.locator('input[id="amount"]')).toBeVisible();
+    await expect(page.locator('input[id="date"]')).toBeVisible();
+
+    // Check that action buttons are present
+    await expect(page.locator('.dialog-actions .button').first()).toContainText('Cancel');
+    await expect(page.locator('.dialog-actions .button--primary')).toContainText('Save');
+
+    // Close dialog by clicking Cancel
+    await page.locator('.dialog-actions .button').first().click();
+
+    // Check that dialog is closed
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('should open and close edit transaction dialog', async ({ page }) => {
+    await page.goto('http://localhost:1234');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Check that dialog is not visible initially
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).not.toBeVisible();
+
+    // Wait for at least one transaction to be present
+    await page.waitForSelector('.transaction-item');
+
+    // Click on the first transaction item
+    const firstTransaction = page.locator('.transaction-item').first();
+    await expect(firstTransaction).toBeVisible();
+    await firstTransaction.click();
+
+    // Wait for dialog to be visible
+    await expect(dialog).toBeVisible();
+
+    // Check that dialog title is correct
+    await expect(page.locator('.dialog-title')).toContainText('Edit Transaction');
+
+    // Check that form fields are present and pre-populated
+    await expect(page.locator('input[id="description"]')).toBeVisible();
+    await expect(page.locator('input[id="from-account"]')).toBeVisible();
+    await expect(page.locator('input[id="to-account"]')).toBeVisible();
+    await expect(page.locator('input[id="amount"]')).toBeVisible();
+    await expect(page.locator('input[id="date"]')).toBeVisible();
+
+    // Check that description field has some value (pre-populated)
+    const descriptionField = page.locator('input[id="description"]');
+    const descriptionValue = await descriptionField.inputValue();
+    expect(descriptionValue).not.toBe('');
+
+    // Check that action buttons are present
+    await expect(page.locator('.dialog-actions .button').first()).toContainText('Cancel');
+    await expect(page.locator('.dialog-actions .button--primary')).toContainText('Save');
+
+    // Close dialog by clicking Cancel
+    await page.locator('.dialog-actions .button').first().click();
+
+    // Check that dialog is closed
+    await expect(dialog).not.toBeVisible();
+  });
+
+  test('should allow form field interaction in dialogs', async ({ page }) => {
+    await page.goto('http://localhost:1234');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Open create dialog
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    // Wait for dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Test form field interaction
+    const descriptionField = page.locator('input[id="description"]');
+    const testDescription = 'Test Transaction Description';
+    
+    await descriptionField.fill(testDescription);
+    await expect(descriptionField).toHaveValue(testDescription);
+
+    // Test amount field
+    const amountField = page.locator('input[id="amount"]');
+    const testAmount = '123.45';
+    
+    await amountField.fill(testAmount);
+    await expect(amountField).toHaveValue(testAmount);
+
+    // Test account fields
+    const fromAccountField = page.locator('input[id="from-account"]');
+    const testFromAccount = 'Checking Account';
+    
+    await fromAccountField.fill(testFromAccount);
+    await expect(fromAccountField).toHaveValue(testFromAccount);
+
+    // Close dialog
+    await page.locator('.dialog-actions .button').first().click();
+    await expect(dialog).not.toBeVisible();
+  });
+
 });
