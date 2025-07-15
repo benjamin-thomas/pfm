@@ -4,7 +4,7 @@ import Prelude
 
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
-import Data.Array (length)
+import Data.Array (length, uncons)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
@@ -20,10 +20,46 @@ import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Shared.Types
   ( LedgerViewRow(LedgerViewRow)
+  , Transaction(..)
   , User
   )
 import Yoga.JSON as JSON
 
+-- Dialog state types
+type CreateDialogState = 
+  { description :: String
+  , fromAccount :: String
+  , toAccount :: String
+  , amount :: String
+  , date :: String
+  }
+
+type EditDialogState = 
+  { transactionId :: Int
+  , description :: String
+  , fromAccount :: String
+  , toAccount :: String
+  , amount :: String
+  , date :: String
+  }
+
+data Dialog
+  = CreateDialog CreateDialogState
+  | EditDialog EditDialogState
+
+data CreateDialogAction
+  = CreateDescrChanged String
+  | CreateFromChanged String
+  | CreateToChanged String
+  | CreateAmountChanged String
+  | CreateDateChanged String
+
+data EditDialogAction
+  = EditDescrChanged String
+  | EditFromChanged String
+  | EditToChanged String
+  | EditAmountChanged String
+  | EditDateChanged String
 
 type State =
   { users :: Array User
@@ -31,6 +67,7 @@ type State =
   , loading :: Boolean
   , error :: Maybe String
   , isDarkMode :: Boolean
+  , dialog :: Maybe Dialog
   }
 
 data Action
@@ -38,6 +75,12 @@ data Action
   | LoadLedgerView
   | ToggleDarkMode
   | Initialize
+  | OpenCreateDialog
+  | OpenEditDialog Int
+  | CloseDialog
+  | SaveDialog
+  | CreateDialogChanged CreateDialogAction
+  | EditDialogChanged EditDialogAction
 
 component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
@@ -47,6 +90,7 @@ component = H.mkComponent
       , loading: false
       , error: Nothing
       , isDarkMode
+      , dialog: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -96,6 +140,11 @@ render state =
           else
             renderLedgerView state
         ]
+
+    -- Dialog rendering
+    , case state.dialog of
+        Just dialog -> renderDialog dialog
+        Nothing -> HH.text ""
     ]
   where
 
@@ -107,6 +156,13 @@ render state =
               [ HH.h3_ [ HH.text "Transactions" ]
               , HH.span [ HP.class_ (HH.ClassName "transaction-count") ] 
                   [ HH.text $ show (length state.ledgerRows) <> " transactions" ]
+              ]
+          , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
+              [ HH.button
+                  [ HP.class_ (HH.ClassName "button button--primary")
+                  , HE.onClick \_ -> OpenCreateDialog
+                  ]
+                  [ HH.text "Create Transaction" ]
               ]
           ]
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
@@ -123,7 +179,10 @@ render state =
                       "transaction-item__amount transaction-item__amount--negative"
       amountSign = if isPositive then "+" else ""
     in
-    HH.li [ HP.class_ (HH.ClassName "transaction-item") ]
+    HH.li 
+      [ HP.class_ (HH.ClassName "transaction-item")
+      , HE.onClick \_ -> OpenEditDialog row.transactionId
+      ]
       [ HH.div [ HP.class_ (HH.ClassName "transaction-item__row") ]
           [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
               [ HH.div [ HP.class_ (HH.ClassName "transaction-item__details") ]
@@ -146,6 +205,114 @@ render state =
           ]
       ]
 
+  renderDialog :: Dialog -> H.ComponentHTML Action () m
+  renderDialog dialog =
+    HH.dialog
+      [ HP.class_ (HH.ClassName "transaction")
+      , HP.id "transaction-dialog"
+      ]
+      [ HH.div
+          [ HP.class_ (HH.ClassName "dialog-content") ]
+          [ HH.div
+              [ HP.class_ (HH.ClassName "dialog-header") ]
+              [ HH.h2
+                  [ HP.class_ (HH.ClassName "dialog-title") ]
+                  [ HH.text $ case dialog of
+                      CreateDialog _ -> "Create Transaction"
+                      EditDialog _ -> "Edit Transaction"
+                  ]
+              ]
+          , renderDialogForm dialog
+          , HH.div
+              [ HP.class_ (HH.ClassName "dialog-actions") ]
+              [ HH.button
+                  [ HP.class_ (HH.ClassName "button")
+                  , HE.onClick \_ -> CloseDialog
+                  ]
+                  [ HH.text "Cancel" ]
+              , HH.button
+                  [ HP.class_ (HH.ClassName "button button--primary")
+                  , HE.onClick \_ -> SaveDialog
+                  ]
+                  [ HH.text "Save" ]
+              ]
+          ]
+      ]
+
+  renderDialogForm :: Dialog -> H.ComponentHTML Action () m
+  renderDialogForm dialog =
+    case dialog of
+      CreateDialog createState -> renderCreateForm createState
+      EditDialog editState -> renderEditForm editState
+
+  renderCreateForm :: CreateDialogState -> H.ComponentHTML Action () m
+  renderCreateForm createState =
+    HH.form
+      [ HP.class_ (HH.ClassName "dialog-form") ]
+      [ makeTextField "Description" "description" createState.description 
+          (CreateDialogChanged <<< CreateDescrChanged)
+      , makeTextField "From Account" "from-account" createState.fromAccount 
+          (CreateDialogChanged <<< CreateFromChanged)
+      , makeTextField "To Account" "to-account" createState.toAccount 
+          (CreateDialogChanged <<< CreateToChanged)
+      , makeTextField "Amount" "amount" createState.amount 
+          (CreateDialogChanged <<< CreateAmountChanged)
+      , makeDateField "Date" "date" createState.date 
+          (CreateDialogChanged <<< CreateDateChanged)
+      ]
+
+  renderEditForm :: EditDialogState -> H.ComponentHTML Action () m
+  renderEditForm editState =
+    HH.form
+      [ HP.class_ (HH.ClassName "dialog-form") ]
+      [ makeTextField "Description" "description" editState.description 
+          (EditDialogChanged <<< EditDescrChanged)
+      , makeTextField "From Account" "from-account" editState.fromAccount 
+          (EditDialogChanged <<< EditFromChanged)
+      , makeTextField "To Account" "to-account" editState.toAccount 
+          (EditDialogChanged <<< EditToChanged)
+      , makeTextField "Amount" "amount" editState.amount 
+          (EditDialogChanged <<< EditAmountChanged)
+      , makeDateField "Date" "date" editState.date 
+          (EditDialogChanged <<< EditDateChanged)
+      ]
+
+  makeTextField :: String -> String -> String -> (String -> Action) -> H.ComponentHTML Action () m
+  makeTextField label fieldId value onChange =
+    HH.div
+      [ HP.class_ (HH.ClassName "field") ]
+      [ HH.label
+          [ HP.class_ (HH.ClassName "field__label")
+          , HP.for fieldId
+          ]
+          [ HH.text label ]
+      , HH.input
+          [ HP.class_ (HH.ClassName "field__input")
+          , HP.id fieldId
+          , HP.type_ HP.InputText
+          , HP.value value
+          , HE.onValueInput onChange
+          ]
+      ]
+
+  makeDateField :: String -> String -> String -> (String -> Action) -> H.ComponentHTML Action () m
+  makeDateField label fieldId value onChange =
+    HH.div
+      [ HP.class_ (HH.ClassName "field") ]
+      [ HH.label
+          [ HP.class_ (HH.ClassName "field__label")
+          , HP.for fieldId
+          ]
+          [ HH.text label ]
+      , HH.input
+          [ HP.class_ (HH.ClassName "field__input")
+          , HP.id fieldId
+          , HP.type_ HP.InputDatetimeLocal
+          , HP.value value
+          , HE.onValueInput onChange
+          ]
+      ]
+
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
   Initialize -> do
@@ -164,6 +331,100 @@ handleAction = case _ of
     H.modify_ \s -> s { isDarkMode = newDarkMode }
     -- Call JavaScript to toggle theme
     liftEffect $ toggleTheme unit
+  
+  OpenCreateDialog -> do
+    let initialState = 
+          { description: ""
+          , fromAccount: ""
+          , toAccount: ""
+          , amount: ""
+          , date: ""
+          }
+    H.modify_ \s -> s { dialog = Just (CreateDialog initialState) }
+    liftEffect $ dialogShow "transaction-dialog"
+  
+  OpenEditDialog transactionId -> do
+    -- Find the transaction to edit from ledger rows
+    state <- H.get
+    case findTransaction transactionId state.ledgerRows of
+      Just (LedgerViewRow row) -> do
+        let editState = 
+              { transactionId: row.transactionId
+              , description: row.description
+              , fromAccount: row.fromAccountName
+              , toAccount: row.toAccountName
+              , amount: show row.flowAmount
+              , date: row.date
+              }
+        H.modify_ \s -> s { dialog = Just (EditDialog editState) }
+        liftEffect $ dialogShow "transaction-dialog"
+      Nothing -> pure unit
+  
+  CloseDialog -> do
+    H.modify_ \s -> s { dialog = Nothing }
+    liftEffect $ dialogClose "transaction-dialog"
+  
+  SaveDialog -> do
+    state <- H.get
+    case state.dialog of
+      Just (CreateDialog createState) -> do
+        -- TODO: Implement create transaction API call
+        liftEffect $ dialogClose "transaction-dialog"
+        H.modify_ \s -> s { dialog = Nothing }
+        -- Refresh the ledger view
+        handleAction LoadLedgerView
+      Just (EditDialog editState) -> do
+        -- TODO: Implement edit transaction API call
+        liftEffect $ dialogClose "transaction-dialog"
+        H.modify_ \s -> s { dialog = Nothing }
+        -- Refresh the ledger view
+        handleAction LoadLedgerView
+      Nothing -> pure unit
+  
+  CreateDialogChanged createAction -> do
+    state <- H.get
+    case state.dialog of
+      Just (CreateDialog createState) -> do
+        let newState = updateCreateState createAction createState
+        H.modify_ \s -> s { dialog = Just (CreateDialog newState) }
+      _ -> pure unit
+  
+  EditDialogChanged editAction -> do
+    state <- H.get
+    case state.dialog of
+      Just (EditDialog editState) -> do
+        let newState = updateEditState editAction editState
+        H.modify_ \s -> s { dialog = Just (EditDialog newState) }
+      _ -> pure unit
+
+findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
+findTransaction transactionId rows =
+  case uncons rows of
+    Nothing -> Nothing
+    Just { head: row, tail: rest } ->
+      case row of
+        LedgerViewRow r ->
+          if r.transactionId == transactionId
+            then Just row
+            else findTransaction transactionId rest
+
+updateCreateState :: CreateDialogAction -> CreateDialogState -> CreateDialogState
+updateCreateState action state =
+  case action of
+    CreateDescrChanged desc -> state { description = desc }
+    CreateFromChanged from -> state { fromAccount = from }
+    CreateToChanged to -> state { toAccount = to }
+    CreateAmountChanged amount -> state { amount = amount }
+    CreateDateChanged date -> state { date = date }
+
+updateEditState :: EditDialogAction -> EditDialogState -> EditDialogState
+updateEditState action state =
+  case action of
+    EditDescrChanged desc -> state { description = desc }
+    EditFromChanged from -> state { fromAccount = from }
+    EditToChanged to -> state { toAccount = to }
+    EditAmountChanged amount -> state { amount = amount }
+    EditDateChanged date -> state { date = date }
 
 fetchLedgerView :: Aff (Either String (Array LedgerViewRow))
 fetchLedgerView = do
@@ -179,6 +440,10 @@ fetchLedgerView = do
 
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit
+
+-- Foreign imports for dialog control
+foreign import dialogShow :: String -> Effect Unit
+foreign import dialogClose :: String -> Effect Unit
 
 type InitArgs = { isDarkMode :: Boolean }
 
