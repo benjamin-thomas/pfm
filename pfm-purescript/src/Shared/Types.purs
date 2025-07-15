@@ -18,6 +18,20 @@ derive newtype instance Eq User
 derive newtype instance ReadForeign User
 derive newtype instance WriteForeign User
 
+newtype Account = Account
+  { accountId :: Int
+  , categoryId :: Int
+  , name :: String
+  , createdAtUnix :: Int
+  , updatedAtUnix :: Int
+  }
+
+derive instance Generic Account _
+derive newtype instance Show Account
+derive newtype instance Eq Account
+derive newtype instance ReadForeign Account
+derive newtype instance WriteForeign Account
+
 newtype Transaction = Transaction
   { id :: Int
   , budgetId :: Int

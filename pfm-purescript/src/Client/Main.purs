@@ -19,7 +19,8 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Shared.Types
-  ( LedgerViewRow(LedgerViewRow)
+  ( Account(..)
+  , LedgerViewRow(LedgerViewRow)
   , Transaction(..)
   , User
   )
@@ -28,8 +29,8 @@ import Yoga.JSON as JSON
 -- Dialog state types
 type CreateDialogState = 
   { description :: String
-  , fromAccount :: String
-  , toAccount :: String
+  , fromAccountId :: String
+  , toAccountId :: String
   , amount :: String
   , date :: String
   }
@@ -37,8 +38,8 @@ type CreateDialogState =
 type EditDialogState = 
   { transactionId :: Int
   , description :: String
-  , fromAccount :: String
-  , toAccount :: String
+  , fromAccountId :: String
+  , toAccountId :: String
   , amount :: String
   , date :: String
   }
@@ -49,21 +50,22 @@ data Dialog
 
 data CreateDialogAction
   = CreateDescrChanged String
-  | CreateFromChanged String
-  | CreateToChanged String
+  | CreateFromAccountChanged String
+  | CreateToAccountChanged String
   | CreateAmountChanged String
   | CreateDateChanged String
 
 data EditDialogAction
   = EditDescrChanged String
-  | EditFromChanged String
-  | EditToChanged String
+  | EditFromAccountChanged String
+  | EditToAccountChanged String
   | EditAmountChanged String
   | EditDateChanged String
 
 type State =
   { users :: Array User
   , ledgerRows :: Array LedgerViewRow
+  , accounts :: Array Account
   , loading :: Boolean
   , error :: Maybe String
   , isDarkMode :: Boolean
@@ -73,6 +75,7 @@ type State =
 data Action
   = LoadUsers
   | LoadLedgerView
+  | LoadAccounts
   | ToggleDarkMode
   | Initialize
   | OpenCreateDialog
@@ -87,6 +90,7 @@ component = H.mkComponent
   { initialState: \{ isDarkMode } ->
       { users: []
       , ledgerRows: []
+      , accounts: []
       , loading: false
       , error: Nothing
       , isDarkMode
@@ -251,10 +255,10 @@ render state =
       [ HP.class_ (HH.ClassName "dialog-form") ]
       [ makeTextField "Description" "description" createState.description 
           (CreateDialogChanged <<< CreateDescrChanged)
-      , makeTextField "From Account" "from-account" createState.fromAccount 
-          (CreateDialogChanged <<< CreateFromChanged)
-      , makeTextField "To Account" "to-account" createState.toAccount 
-          (CreateDialogChanged <<< CreateToChanged)
+      , makeAccountSelect "From Account" "from-account" createState.fromAccountId 
+          (CreateDialogChanged <<< CreateFromAccountChanged) state.accounts
+      , makeAccountSelect "To Account" "to-account" createState.toAccountId 
+          (CreateDialogChanged <<< CreateToAccountChanged) state.accounts
       , makeTextField "Amount" "amount" createState.amount 
           (CreateDialogChanged <<< CreateAmountChanged)
       , makeDateField "Date" "date" createState.date 
@@ -267,10 +271,10 @@ render state =
       [ HP.class_ (HH.ClassName "dialog-form") ]
       [ makeTextField "Description" "description" editState.description 
           (EditDialogChanged <<< EditDescrChanged)
-      , makeTextField "From Account" "from-account" editState.fromAccount 
-          (EditDialogChanged <<< EditFromChanged)
-      , makeTextField "To Account" "to-account" editState.toAccount 
-          (EditDialogChanged <<< EditToChanged)
+      , makeAccountSelect "From Account" "from-account" editState.fromAccountId 
+          (EditDialogChanged <<< EditFromAccountChanged) state.accounts
+      , makeAccountSelect "To Account" "to-account" editState.toAccountId 
+          (EditDialogChanged <<< EditToAccountChanged) state.accounts
       , makeTextField "Amount" "amount" editState.amount 
           (EditDialogChanged <<< EditAmountChanged)
       , makeDateField "Date" "date" editState.date 
@@ -313,11 +317,41 @@ render state =
           ]
       ]
 
+  makeAccountSelect :: String -> String -> String -> (String -> Action) -> Array Account -> H.ComponentHTML Action () m
+  makeAccountSelect label fieldId value onChange accounts =
+    HH.div
+      [ HP.class_ (HH.ClassName "field") ]
+      [ HH.label
+          [ HP.class_ (HH.ClassName "field__label")
+          , HP.for fieldId
+          ]
+          [ HH.text label ]
+      , HH.select
+          [ HP.class_ (HH.ClassName "field__select")
+          , HP.id fieldId
+          , HP.value value
+          , HE.onValueInput onChange
+          ]
+          ([ HH.option
+               [ HP.value ""
+               , HP.disabled true
+               ]
+               [ HH.text "Select an account..." ]
+           ] <> map renderAccountOption accounts)
+      ]
+
+  renderAccountOption :: Account -> H.ComponentHTML Action () m
+  renderAccountOption (Account account) =
+    HH.option
+      [ HP.value (show account.accountId) ]
+      [ HH.text account.name ]
+
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
   Initialize -> do
-    -- Load ledger view on startup
+    -- Load ledger view and accounts on startup
     handleAction LoadLedgerView
+    handleAction LoadAccounts
   LoadUsers -> pure unit -- Keep as reference but do nothing
   LoadLedgerView -> do
     H.modify_ \s -> s { loading = true, error = Nothing }
@@ -325,6 +359,11 @@ handleAction = case _ of
     case result of
       Left err -> H.modify_ \s -> s { loading = false, error = Just err }
       Right ledgerRows -> H.modify_ \s -> s { loading = false, ledgerRows = ledgerRows, error = Nothing }
+  LoadAccounts -> do
+    result <- H.liftAff fetchAccounts
+    case result of
+      Left err -> H.modify_ \s -> s { error = Just err }
+      Right accounts -> H.modify_ \s -> s { accounts = accounts, error = Nothing }
   ToggleDarkMode -> do
     state <- H.get
     let newDarkMode = not state.isDarkMode
@@ -335,8 +374,8 @@ handleAction = case _ of
   OpenCreateDialog -> do
     let initialState = 
           { description: ""
-          , fromAccount: ""
-          , toAccount: ""
+          , fromAccountId: ""
+          , toAccountId: ""
           , amount: ""
           , date: ""
           }
@@ -351,8 +390,8 @@ handleAction = case _ of
         let editState = 
               { transactionId: row.transactionId
               , description: row.description
-              , fromAccount: row.fromAccountName
-              , toAccount: row.toAccountName
+              , fromAccountId: show row.fromAccountId
+              , toAccountId: show row.toAccountId
               , amount: show row.flowAmount
               , date: row.date
               }
@@ -412,8 +451,8 @@ updateCreateState :: CreateDialogAction -> CreateDialogState -> CreateDialogStat
 updateCreateState action state =
   case action of
     CreateDescrChanged desc -> state { description = desc }
-    CreateFromChanged from -> state { fromAccount = from }
-    CreateToChanged to -> state { toAccount = to }
+    CreateFromAccountChanged from -> state { fromAccountId = from }
+    CreateToAccountChanged to -> state { toAccountId = to }
     CreateAmountChanged amount -> state { amount = amount }
     CreateDateChanged date -> state { date = date }
 
@@ -421,8 +460,8 @@ updateEditState :: EditDialogAction -> EditDialogState -> EditDialogState
 updateEditState action state =
   case action of
     EditDescrChanged desc -> state { description = desc }
-    EditFromChanged from -> state { fromAccount = from }
-    EditToChanged to -> state { toAccount = to }
+    EditFromAccountChanged from -> state { fromAccountId = from }
+    EditToAccountChanged to -> state { toAccountId = to }
     EditAmountChanged amount -> state { amount = amount }
     EditDateChanged date -> state { date = date }
 
@@ -437,6 +476,18 @@ fetchLedgerView = do
         Left err -> pure $ Left $ "JSON decode error: " <> show err
         Right (ledgerRows :: Array LedgerViewRow) -> 
           pure $ Right ledgerRows
+
+fetchAccounts :: Aff (Either String (Array Account))
+fetchAccounts = do
+  -- Fetch accounts from the API
+  result <- AX.get ResponseFormat.string "http://localhost:8080/accounts"
+  case result of
+    Left err -> pure $ Left $ "Network error: " <> AX.printError err
+    Right response ->
+      case JSON.readJSON response.body of
+        Left err -> pure $ Left $ "JSON decode error: " <> show err
+        Right (accounts :: Array Account) -> 
+          pure $ Right accounts
 
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit

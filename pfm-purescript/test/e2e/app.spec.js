@@ -76,8 +76,8 @@ test.describe('PFM PureScript App', () => {
 
     // Check that form fields are present
     await expect(page.locator('input[id="description"]')).toBeVisible();
-    await expect(page.locator('input[id="from-account"]')).toBeVisible();
-    await expect(page.locator('input[id="to-account"]')).toBeVisible();
+    await expect(page.locator('select[id="from-account"]')).toBeVisible();
+    await expect(page.locator('select[id="to-account"]')).toBeVisible();
     await expect(page.locator('input[id="amount"]')).toBeVisible();
     await expect(page.locator('input[id="date"]')).toBeVisible();
 
@@ -118,8 +118,8 @@ test.describe('PFM PureScript App', () => {
 
     // Check that form fields are present and pre-populated
     await expect(page.locator('input[id="description"]')).toBeVisible();
-    await expect(page.locator('input[id="from-account"]')).toBeVisible();
-    await expect(page.locator('input[id="to-account"]')).toBeVisible();
+    await expect(page.locator('select[id="from-account"]')).toBeVisible();
+    await expect(page.locator('select[id="to-account"]')).toBeVisible();
     await expect(page.locator('input[id="amount"]')).toBeVisible();
     await expect(page.locator('input[id="date"]')).toBeVisible();
 
@@ -167,12 +167,15 @@ test.describe('PFM PureScript App', () => {
     await amountField.fill(testAmount);
     await expect(amountField).toHaveValue(testAmount);
 
-    // Test account fields
-    const fromAccountField = page.locator('input[id="from-account"]');
-    const testFromAccount = 'Checking Account';
+    // Test account fields (now select dropdowns)
+    const fromAccountField = page.locator('select[id="from-account"]');
     
-    await fromAccountField.fill(testFromAccount);
-    await expect(fromAccountField).toHaveValue(testFromAccount);
+    // Wait a bit for accounts to load, then try to select
+    await page.waitForTimeout(1000);
+    
+    // Select the first available account (should be account ID 1)
+    await fromAccountField.selectOption('1');
+    await expect(fromAccountField).toHaveValue('1');
 
     // Close dialog
     await page.locator('.dialog-actions .button').first().click();
