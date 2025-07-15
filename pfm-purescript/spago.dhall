@@ -30,6 +30,7 @@
   , "spec"
   , "spec-node"
   , "strings"
+  , "transformers"
   , "yoga-json"
   ]
 , packages = ./packages.dhall

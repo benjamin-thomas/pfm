@@ -8,6 +8,8 @@ Always run `npm run test:all` before getting back to me (and make sure teh code 
 
 In case of troubles, always refer to the working approach here: ~/code/explore/purescript/ps-fullstack3
 
+Unless stated otherwise, consider we want to produce production quality code, no hacks!
+
 ## Goal
 
 The goal is to replace my Elm+Haskell app (a work in progress), with a fullstack PureScript solution.

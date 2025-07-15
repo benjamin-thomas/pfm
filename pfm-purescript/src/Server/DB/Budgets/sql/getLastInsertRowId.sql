@@ -1,0 +1,1 @@
+SELECT last_insert_rowid() as budget_id

@@ -35,9 +35,9 @@ import Node.FS.Aff as FS
 import Partial.Unsafe (unsafePartial)
 import SQLite3 as SQLite3
 import Server.Conversion (dbLedgerViewRowToLedgerViewRow, dbTransactionToTransaction)
-import Server.DB.Budget as Budget
+import Server.DB.Budgets.Queries as Budget
 import Server.DB.LedgerView as LedgerView
-import Server.DB.Transaction as Transaction
+import Server.DB.Transactions.Queries as Transaction
 import Server.OfxParser (StatementTransaction, TimeStamp(..), parseOfx)
 import Shared.Types (LedgerViewRow, Transaction, User(..))
 

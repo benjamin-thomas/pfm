@@ -8,7 +8,7 @@ import Prelude
 import Data.Int (toNumber)
 import Server.DateFormat (formatUnixTimestamp)
 import Server.DB.LedgerView (LedgerViewRowDB(..))
-import Server.DB.Transaction (TransactionDB(..))
+import Server.DB.Transactions.Queries (TransactionDB(..))
 import Shared.Types (LedgerViewRow(..), Transaction(..))
 
 -- | Convert database transaction to DTO
@@ -29,14 +29,13 @@ dbTransactionToTransaction (TransactionDB dbTx) =
   where
   centsToNumber :: Int -> Number
   centsToNumber cents = (toNumber cents) / 100.0
-  
-  
+
   -- Simple lookup for account names - in a real app this would come from the API
   getAccountName :: Int -> String
   getAccountName accountId = case accountId of
     1 -> "OpeningBalance"
     2 -> "Checking account"
-    3 -> "Savings account" 
+    3 -> "Savings account"
     4 -> "Unknown_INCOME"
     5 -> "Employer"
     6 -> "Unknown_EXPENSE"
