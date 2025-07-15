@@ -9,7 +9,7 @@ test.describe('PFM PureScript App', () => {
     await expect(page.locator('h1')).toContainText('PFM - PureScript');
 
     // Check that transactions section is visible
-    await expect(page.locator('h2')).toContainText('Transactions');
+    await expect(page.locator('h3')).toContainText('Transactions');
 
     // Wait for transaction list to load
     await page.waitForSelector('.transaction-list');

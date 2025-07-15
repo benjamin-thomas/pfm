@@ -4,8 +4,11 @@ import Prelude
 
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
+import Control.Apply (lift2)
+import Control.Parallel (parallel, sequential)
 import Data.Array (length, uncons)
 import Data.Either (Either(..))
+import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -25,6 +28,24 @@ import Shared.Types
   , User
   )
 import Yoga.JSON as JSON
+
+-- Data and Status types for parallel loading
+data Status a
+  = Loading
+  | Failed String
+  | Loaded a
+
+derive instance Generic (Status a) _
+instance Show a => Show (Status a) where
+  show Loading = "Loading"
+  show (Failed err) = "Failed: " <> err
+  show (Loaded a) = "Loaded: " <> show a
+
+type AppData =
+  { users :: Array User
+  , ledgerRows :: Array LedgerViewRow
+  , accounts :: Array Account
+  }
 
 -- Dialog state types
 type CreateDialogState = 
@@ -63,19 +84,13 @@ data EditDialogAction
   | EditDateChanged String
 
 type State =
-  { users :: Array User
-  , ledgerRows :: Array LedgerViewRow
-  , accounts :: Array Account
-  , loading :: Boolean
-  , error :: Maybe String
+  { data :: Status AppData
   , isDarkMode :: Boolean
   , dialog :: Maybe Dialog
   }
 
 data Action
-  = LoadUsers
-  | LoadLedgerView
-  | LoadAccounts
+  = LoadAllData
   | ToggleDarkMode
   | Initialize
   | OpenCreateDialog
@@ -85,14 +100,29 @@ data Action
   | CreateDialogChanged CreateDialogAction
   | EditDialogChanged EditDialogAction
 
+-- Parallel data fetching function
+fetchAllData :: Aff (Either String AppData)
+fetchAllData = sequential $
+  (\users ledgerRows accounts -> 
+    case users, ledgerRows, accounts of
+      Right u, Right l, Right a -> Right { users: u, ledgerRows: l, accounts: a }
+      Left err, _, _ -> Left err
+      _, Left err, _ -> Left err
+      _, _, Left err -> Left err
+  ) <$> parallel fetchUsers
+    <*> parallel fetchLedgerView
+    <*> parallel fetchAccounts
+
+-- Individual fetch functions
+fetchUsers :: Aff (Either String (Array User))
+fetchUsers = do
+  -- For now, return empty array since we don't have a users endpoint
+  pure (Right [])
+
 component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
   { initialState: \{ isDarkMode } ->
-      { users: []
-      , ledgerRows: []
-      , accounts: []
-      , loading: false
-      , error: Nothing
+      { data: Loading
       , isDarkMode
       , dialog: Nothing
       }
@@ -117,52 +147,50 @@ render state =
         ]
         [ HH.text (if state.isDarkMode then "☀️" else "🌙") ]
 
-    -- Ledger section  
-    , HH.div
-        [ HP.class_ (HH.ClassName "section") ]
-        [ HH.div
-            [ HP.class_ (HH.ClassName "section-header") ]
-            [ HH.h2
-                [ HP.class_ (HH.ClassName "section-title") ]
-                [ HH.text "Transactions" ]
+    -- Main content based on data loading status
+    , case state.data of
+        Loading -> 
+          HH.div
+            [ HP.class_ (HH.ClassName "loading-message") ]
+            [ HH.text "Loading application data..." ]
+        Failed err -> 
+          HH.div
+            [ HP.class_ (HH.ClassName "error-message") ]
+            [ HH.text $ "Error: " <> err 
+            , HH.br_
             , HH.button
-                [ HP.class_ (HH.ClassName "refresh-button")
-                , HE.onClick \_ -> LoadLedgerView
-                , HP.disabled state.loading
+                [ HP.class_ (HH.ClassName "button")
+                , HE.onClick \_ -> LoadAllData
                 ]
-                [ HH.text if state.loading then "Loading..." else "Refresh" ]
+                [ HH.text "Retry" ]
             ]
-        , case state.error of
-            Just err -> HH.div
-              [ HP.class_ (HH.ClassName "error-message") ]
-              [ HH.text $ "Error: " <> err ]
-            Nothing -> HH.text ""
-        , if state.loading then
-            HH.div
-              [ HP.class_ (HH.ClassName "loading-message") ]
-              [ HH.text "Loading ledger..." ]
-          else
-            renderLedgerView state
-        ]
-
-    -- Dialog rendering
-    , case state.dialog of
-        Just dialog -> renderDialog dialog
-        Nothing -> HH.text ""
+        Loaded appData ->
+          HH.div_
+            [ renderLedgerView state appData
+            -- Dialog rendering
+            , case state.dialog of
+                Just dialog -> renderDialog dialog appData
+                Nothing -> HH.text ""
+            ]
     ]
   where
 
-  renderLedgerView :: State -> H.ComponentHTML Action () m
-  renderLedgerView state =
+  renderLedgerView :: State -> AppData -> H.ComponentHTML Action () m
+  renderLedgerView state appData =
     HH.div [ HP.class_ (HH.ClassName "transaction-list") ]
       [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header") ]
           [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header-title") ]
               [ HH.h3_ [ HH.text "Transactions" ]
               , HH.span [ HP.class_ (HH.ClassName "transaction-count") ] 
-                  [ HH.text $ show (length state.ledgerRows) <> " transactions" ]
+                  [ HH.text $ show (length appData.ledgerRows) <> " transactions" ]
               ]
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
               [ HH.button
+                  [ HP.class_ (HH.ClassName "button")
+                  , HE.onClick \_ -> LoadAllData
+                  ]
+                  [ HH.text "Refresh" ]
+              , HH.button
                   [ HP.class_ (HH.ClassName "button button--primary")
                   , HE.onClick \_ -> OpenCreateDialog
                   ]
@@ -170,7 +198,7 @@ render state =
               ]
           ]
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
-          (map renderLedgerRow state.ledgerRows)
+          (map renderLedgerRow appData.ledgerRows)
       ]
 
   renderLedgerRow :: LedgerViewRow -> H.ComponentHTML Action () m
@@ -209,8 +237,8 @@ render state =
           ]
       ]
 
-  renderDialog :: Dialog -> H.ComponentHTML Action () m
-  renderDialog dialog =
+  renderDialog :: Dialog -> AppData -> H.ComponentHTML Action () m
+  renderDialog dialog appData =
     HH.dialog
       [ HP.class_ (HH.ClassName "transaction")
       , HP.id "transaction-dialog"
@@ -226,7 +254,7 @@ render state =
                       EditDialog _ -> "Edit Transaction"
                   ]
               ]
-          , renderDialogForm dialog
+          , renderDialogForm dialog appData
           , HH.div
               [ HP.class_ (HH.ClassName "dialog-actions") ]
               [ HH.button
@@ -243,38 +271,38 @@ render state =
           ]
       ]
 
-  renderDialogForm :: Dialog -> H.ComponentHTML Action () m
-  renderDialogForm dialog =
+  renderDialogForm :: Dialog -> AppData -> H.ComponentHTML Action () m
+  renderDialogForm dialog appData =
     case dialog of
-      CreateDialog createState -> renderCreateForm createState
-      EditDialog editState -> renderEditForm editState
+      CreateDialog createState -> renderCreateForm createState appData
+      EditDialog editState -> renderEditForm editState appData
 
-  renderCreateForm :: CreateDialogState -> H.ComponentHTML Action () m
-  renderCreateForm createState =
+  renderCreateForm :: CreateDialogState -> AppData -> H.ComponentHTML Action () m
+  renderCreateForm createState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
       [ makeTextField "Description" "description" createState.description 
           (CreateDialogChanged <<< CreateDescrChanged)
       , makeAccountSelect "From Account" "from-account" createState.fromAccountId 
-          (CreateDialogChanged <<< CreateFromAccountChanged) state.accounts
+          (CreateDialogChanged <<< CreateFromAccountChanged) appData.accounts
       , makeAccountSelect "To Account" "to-account" createState.toAccountId 
-          (CreateDialogChanged <<< CreateToAccountChanged) state.accounts
+          (CreateDialogChanged <<< CreateToAccountChanged) appData.accounts
       , makeTextField "Amount" "amount" createState.amount 
           (CreateDialogChanged <<< CreateAmountChanged)
       , makeDateField "Date" "date" createState.date 
           (CreateDialogChanged <<< CreateDateChanged)
       ]
 
-  renderEditForm :: EditDialogState -> H.ComponentHTML Action () m
-  renderEditForm editState =
+  renderEditForm :: EditDialogState -> AppData -> H.ComponentHTML Action () m
+  renderEditForm editState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
       [ makeTextField "Description" "description" editState.description 
           (EditDialogChanged <<< EditDescrChanged)
       , makeAccountSelect "From Account" "from-account" editState.fromAccountId 
-          (EditDialogChanged <<< EditFromAccountChanged) state.accounts
+          (EditDialogChanged <<< EditFromAccountChanged) appData.accounts
       , makeAccountSelect "To Account" "to-account" editState.toAccountId 
-          (EditDialogChanged <<< EditToAccountChanged) state.accounts
+          (EditDialogChanged <<< EditToAccountChanged) appData.accounts
       , makeTextField "Amount" "amount" editState.amount 
           (EditDialogChanged <<< EditAmountChanged)
       , makeDateField "Date" "date" editState.date 
@@ -349,21 +377,14 @@ render state =
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction = case _ of
   Initialize -> do
-    -- Load ledger view and accounts on startup
-    handleAction LoadLedgerView
-    handleAction LoadAccounts
-  LoadUsers -> pure unit -- Keep as reference but do nothing
-  LoadLedgerView -> do
-    H.modify_ \s -> s { loading = true, error = Nothing }
-    result <- H.liftAff fetchLedgerView
+    -- Load all data in parallel on startup
+    handleAction LoadAllData
+  LoadAllData -> do
+    H.modify_ \s -> s { data = Loading }
+    result <- H.liftAff fetchAllData
     case result of
-      Left err -> H.modify_ \s -> s { loading = false, error = Just err }
-      Right ledgerRows -> H.modify_ \s -> s { loading = false, ledgerRows = ledgerRows, error = Nothing }
-  LoadAccounts -> do
-    result <- H.liftAff fetchAccounts
-    case result of
-      Left err -> H.modify_ \s -> s { error = Just err }
-      Right accounts -> H.modify_ \s -> s { accounts = accounts, error = Nothing }
+      Left err -> H.modify_ \s -> s { data = Failed err }
+      Right appData -> H.modify_ \s -> s { data = Loaded appData }
   ToggleDarkMode -> do
     state <- H.get
     let newDarkMode = not state.isDarkMode
@@ -385,19 +406,22 @@ handleAction = case _ of
   OpenEditDialog transactionId -> do
     -- Find the transaction to edit from ledger rows
     state <- H.get
-    case findTransaction transactionId state.ledgerRows of
-      Just (LedgerViewRow row) -> do
-        let editState = 
-              { transactionId: row.transactionId
-              , description: row.description
-              , fromAccountId: show row.fromAccountId
-              , toAccountId: show row.toAccountId
-              , amount: show row.flowAmount
-              , date: row.date
-              }
-        H.modify_ \s -> s { dialog = Just (EditDialog editState) }
-        liftEffect $ dialogShow "transaction-dialog"
-      Nothing -> pure unit
+    case state.data of
+      Loaded appData -> do
+        case findTransaction transactionId appData.ledgerRows of
+          Just (LedgerViewRow row) -> do
+            let editState = 
+                  { transactionId: row.transactionId
+                  , description: row.description
+                  , fromAccountId: show row.fromAccountId
+                  , toAccountId: show row.toAccountId
+                  , amount: show row.flowAmount
+                  , date: row.date
+                  }
+            H.modify_ \s -> s { dialog = Just (EditDialog editState) }
+            liftEffect $ dialogShow "transaction-dialog"
+          Nothing -> pure unit
+      _ -> pure unit
   
   CloseDialog -> do
     H.modify_ \s -> s { dialog = Nothing }
@@ -410,14 +434,14 @@ handleAction = case _ of
         -- TODO: Implement create transaction API call
         liftEffect $ dialogClose "transaction-dialog"
         H.modify_ \s -> s { dialog = Nothing }
-        -- Refresh the ledger view
-        handleAction LoadLedgerView
+        -- Refresh all data
+        handleAction LoadAllData
       Just (EditDialog editState) -> do
         -- TODO: Implement edit transaction API call
         liftEffect $ dialogClose "transaction-dialog"
         H.modify_ \s -> s { dialog = Nothing }
-        -- Refresh the ledger view
-        handleAction LoadLedgerView
+        -- Refresh all data
+        handleAction LoadAllData
       Nothing -> pure unit
   
   CreateDialogChanged createAction -> do
