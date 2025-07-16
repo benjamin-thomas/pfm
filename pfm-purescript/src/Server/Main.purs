@@ -72,7 +72,7 @@ main = do
       Left err -> log $ "Failed to initialize database: " <> show err
       Right db -> do
         log "Database initialized successfully"
-        void $ startServer 8080 db
+        void $ startServer 8081 db
 
 startServer :: Int -> DBConnection -> ServerM
 startServer port db =

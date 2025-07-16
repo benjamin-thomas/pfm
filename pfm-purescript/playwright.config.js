@@ -20,7 +20,7 @@ export default {
   webServer: [
     {
       command: 'spago build && node -e "import(\'./output/Server.Main/index.js\').then(m => m.main())"',
-      port: 8080,
+      port: 8081,
       reuseExistingServer: !process.env.CI,
     },
     {

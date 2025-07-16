@@ -10,6 +10,7 @@
     "client": "parcel --port=1234 index.html",
     "server:alt": "rg --files ./packages.dhall ./src/ | entr -rc spago run --main Server.Main",
     "test:all": "npm run test && npm run test:e2e",
+    "test:all:watch": "rg --files ./test/ ./src/ | entr -rc npm run test:all",
     "test": "spago test",
     "test:watch": "rg --files ./test/ ./src/ | entr -rc spago test",
     "test:e2e": "playwright test",

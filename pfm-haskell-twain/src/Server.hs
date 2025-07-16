@@ -79,7 +79,7 @@ corsMiddleware app req respond = do
         req
         $ respond
             . Twain.withHeader
-                ("Access-Control-Allow-Origin", "http://localhost:3000")
+                ("Access-Control-Allow-Origin", "http://localhost:4000")
             . Twain.withHeader
                 ("Access-Control-Allow-Methods", "OPTIONS, GET, POST, PUT, DELETE, PATCH")
             . Twain.withHeader
