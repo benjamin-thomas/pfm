@@ -32,7 +32,8 @@ import Server.Database as DB
 import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
-import Server.DB.Transaction as Transaction
+import Server.DB.LedgerView.Queries as LedgerViewQueries
+import Server.DB.Transactions.Queries as TransactionQueries
 import Yoga.JSON as JSON
 
 data Route
@@ -133,7 +134,7 @@ makeRouter db { route: route', method } =
     AccountLedger accountId ->
       case method of
         Get -> do
-          ledgerRows <- DB.getLedgerViewRows accountId db
+          ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO accountId db
           ok $ JSON.writeJSON ledgerRows
         _ -> methodNotAllowed
 
@@ -156,18 +157,18 @@ makeRouter db { route: route', method } =
     Transactions ->
       case method of
         Get -> do
-          transactions <- DB.getAllTransactions db
+          transactions <- TransactionQueries.getAllTransactions db
           ok $ JSON.writeJSON transactions
         _ -> methodNotAllowed
 
     TransactionById transactionId ->
       case method of
         Get -> do
-          maybeTransaction <- DB.getTransactionById transactionId db
+          maybeTransaction <- TransactionQueries.getTransactionById transactionId db
           case maybeTransaction of
             Just transaction -> ok $ JSON.writeJSON transaction
             Nothing -> response 404 $ JSON.writeJSON { error: "Transaction not found" }
         Delete -> do
-          Transaction.deleteTransaction transactionId db
+          TransactionQueries.deleteTransaction transactionId db
           ok "Transaction deleted"
         _ -> methodNotAllowed

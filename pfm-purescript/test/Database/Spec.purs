@@ -11,12 +11,13 @@ import Effect.Exception (throw)
 import SQLite3 as SQLite3
 import Server.DB.Account as Account
 import Server.DB.Account (AccountDB(..))
+import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Budget as Budget
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category as Category
 import Server.DB.Category (CategoryDB(..))
-import Server.DB.Transaction as Transaction
-import Server.DB.Transaction (TransactionNewRow(..))
+import Server.DB.Transactions.Queries as TransactionQueries
+import Server.DB.Transactions.Queries (TransactionNewRow(..))
 import Server.Database as DB
 import Shared.Types (LedgerViewRow(..), Transaction(..))
 import Test.Spec (Spec, describe, it)
@@ -147,9 +148,9 @@ spec db = do
             }
 
         -- Insert test transaction
-        Transaction.insertTransaction testTxn db
+        TransactionQueries.insertTransaction testTxn db
 
-        transactions <- DB.getAllTransactions db
+        transactions <- TransactionQueries.getAllTransactions db
         length transactions `shouldSatisfy` (_ >= 1) -- Should have at least our test transaction
 
         -- Check that we have proper transaction structure
@@ -160,15 +161,15 @@ spec db = do
           Nothing -> liftEffect $ throw "No transactions found"
 
       it "should get transaction by ID" do
-        transactions <- DB.getAllTransactions db
+        transactions <- TransactionQueries.getAllTransactions db
         case transactions !! 0 of
           Just (Transaction txn) -> do
-            maybeTransaction <- DB.getTransactionById txn.id db
+            maybeTransaction <- TransactionQueries.getTransactionById txn.id db
             maybeTransaction `shouldEqual` Just (Transaction txn)
           Nothing -> liftEffect $ throw "No transactions found"
 
       it "should update a transaction" do
-        transactions <- DB.getAllTransactions db
+        transactions <- TransactionQueries.getAllTransactions db
         case transactions !! 0 of
           Just (Transaction txn) -> do
             let
@@ -184,10 +185,10 @@ spec db = do
                 }
 
             -- Update the transaction
-            Transaction.updateTransaction txn.id newTxnData db
+            TransactionQueries.updateTransaction txn.id newTxnData db
 
             -- Verify it was updated
-            maybeUpdated <- DB.getTransactionById txn.id db
+            maybeUpdated <- TransactionQueries.getTransactionById txn.id db
             case maybeUpdated of
               Just (Transaction updated) -> do
                 updated.description `shouldEqual` "Updated Description"
@@ -196,20 +197,20 @@ spec db = do
           Nothing -> liftEffect $ throw "No transactions found"
 
       it "should delete a transaction" do
-        transactions1 <- DB.getAllTransactions db
+        transactions1 <- TransactionQueries.getAllTransactions db
         let initialCount = length transactions1
 
         case transactions1 !! 0 of
           Just (Transaction txn) -> do
             -- Delete the transaction
-            Transaction.deleteTransaction txn.id db
+            TransactionQueries.deleteTransaction txn.id db
 
             -- Verify it was deleted
-            maybeDeleted <- DB.getTransactionById txn.id db
+            maybeDeleted <- TransactionQueries.getTransactionById txn.id db
             maybeDeleted `shouldEqual` Nothing
 
             -- Verify count decreased
-            transactions2 <- DB.getAllTransactions db
+            transactions2 <- TransactionQueries.getAllTransactions db
             length transactions2 `shouldEqual` (initialCount - 1)
           Nothing -> liftEffect $ throw "No transactions found"
 
@@ -242,11 +243,11 @@ spec db = do
             }
 
         -- Insert test transactions
-        Transaction.insertTransaction testTxn1 db
-        Transaction.insertTransaction testTxn2 db
+        TransactionQueries.insertTransaction testTxn1 db
+        TransactionQueries.insertTransaction testTxn2 db
 
         -- Get ledger view for checking account (ID = 2)
-        ledgerRows <- DB.getLedgerViewRows 2 db
+        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 db
         length ledgerRows `shouldSatisfy` (_ >= 2)
 
         -- Check that ledger rows have proper flow calculations
@@ -263,7 +264,7 @@ spec db = do
 
       it "should calculate running balance correctly" do
         -- Get ledger view again to test running balance calculation
-        ledgerRows <- DB.getLedgerViewRows 2 db
+        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 db
 
         case ledgerRows of
           [ LedgerViewRow row1, LedgerViewRow row2 ] -> do

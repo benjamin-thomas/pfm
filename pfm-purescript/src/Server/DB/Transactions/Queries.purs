@@ -3,6 +3,8 @@ module Server.DB.Transactions.Queries
   , TransactionNewRow(..)
   , getAllTransactionsDB
   , getTransactionByIdDB
+  , getAllTransactions
+  , getTransactionById
   , insertTransaction
   , updateTransaction
   , deleteTransaction
@@ -12,7 +14,9 @@ module Server.DB.Transactions.Queries
 import Prelude
 
 import Data.Array (head)
+import Data.Functor (map)
 import Data.Generic.Rep (class Generic)
+import Data.Int (toNumber)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -21,8 +25,10 @@ import Effect.Exception (throwException, error)
 import Yoga.JSON as JSON
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
+import Server.DateFormat (formatUnixTimestamp)
 import Server.DB.Utils (fromDbRows)
 import SQLite3 as SQLite3
+import Shared.Types (Transaction(..))
 import Yoga.JSON (class ReadForeign, class WriteForeign)
 
 -- | Database row type matching SQL column names
@@ -157,3 +163,51 @@ deleteAllTransactions db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/sql/deleteAllTransactions.sql"
   _ <- SQLite3.queryDB db sql []
   pure unit
+
+-- | Convert database transaction to DTO
+dbTransactionToTransaction :: TransactionDB -> Transaction
+dbTransactionToTransaction (TransactionDB dbTx) =
+  Transaction
+    { id: dbTx.transactionId
+    , budgetId: dbTx.budgetId
+    , fromAccountId: dbTx.fromAccountId
+    , fromAccountName: getAccountName dbTx.fromAccountId
+    , toAccountId: dbTx.toAccountId
+    , toAccountName: getAccountName dbTx.toAccountId
+    , uniqueFitId: dbTx.uniqueFitId
+    , date: formatUnixTimestamp dbTx.dateUnix
+    , description: dbTx.descr
+    , amount: centsToNumber dbTx.cents
+    }
+  where
+  centsToNumber :: Int -> Number
+  centsToNumber cents = (toNumber cents) / 100.0
+
+  -- Simple lookup for account names - in a real app this would come from the API
+  getAccountName :: Int -> String
+  getAccountName accountId = case accountId of
+    1 -> "OpeningBalance"
+    2 -> "Checking account"
+    3 -> "Savings account"
+    4 -> "Unknown_INCOME"
+    5 -> "Employer"
+    6 -> "Unknown_EXPENSE"
+    7 -> "Groceries"
+    8 -> "Communications"
+    9 -> "Transport"
+    10 -> "Health"
+    11 -> "Energy"
+    12 -> "Clothing"
+    13 -> "Leisure"
+    _ -> "Unknown Account"
+
+-- | Transaction operations (with DTO conversion)
+getAllTransactions :: SQLite3.DBConnection -> Aff (Array Transaction)
+getAllTransactions db = do
+  dbTransactions <- getAllTransactionsDB db
+  pure $ map dbTransactionToTransaction dbTransactions
+
+getTransactionById :: Int -> SQLite3.DBConnection -> Aff (Maybe Transaction)
+getTransactionById transactionId db = do
+  maybeDbTransaction <- getTransactionByIdDB transactionId db
+  pure $ map dbTransactionToTransaction maybeDbTransaction

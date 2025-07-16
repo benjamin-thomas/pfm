@@ -10,10 +10,11 @@ import Effect (Effect)
 import Effect.Aff (Aff, runAff_)
 import Effect.Class.Console (log, logShow)
 import SQLite3 as SQLite3
-import Server.DB.LedgerView as LedgerView
-import Server.DB.Transaction (TransactionDB(..))
+import Server.DB.LedgerView.Queries as LedgerViewQueries
+import Server.DB.Transactions.Queries (TransactionDB(..))
 import Server.Database (seedFromOfx)
 import Server.Database as DB
+import Server.DB.Transactions.Queries as TransactionQueries
 import Shared.Types (Transaction(..))
 
 {-
@@ -57,6 +58,6 @@ seed = run $ newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
 
 showTransactions :: Effect Unit
 showTransactions =
-  run $ newConn >>= DB.getAllTransactions >>= traverse_ logShow
+  run $ newConn >>= TransactionQueries.getAllTransactions >>= traverse_ logShow
 
-wip = newConn >>= LedgerView.getLedgerViewRows 4 <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow
+wip = newConn >>= LedgerViewQueries.getLedgerViewRows 4 <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow

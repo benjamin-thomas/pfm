@@ -2,9 +2,6 @@ module Server.Database
   ( createSchema
   , dateToUnixMs
   , dateToUnixS
-  , getAllTransactions
-  , getLedgerViewRows
-  , getTransactionById
   , initDatabase
   , seedFromOfx
   ) where
@@ -28,12 +25,10 @@ import Effect.Exception (throwException, error)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import SQLite3 as SQLite3
-import Server.Conversion (dbLedgerViewRowToLedgerViewRow, dbTransactionToTransaction)
-import Server.DB.Budgets.Queries as Budget
-import Server.DB.LedgerView as LedgerView
-import Server.DB.Transactions.Queries as Transaction
+import Server.DB.Budgets.Queries as BudgetQueries
+import Server.DB.Transactions.Queries as TransactionQueries
 import Server.OfxParser (StatementTransaction, TimeStamp(..), parseOfx)
-import Shared.Types (LedgerViewRow, Transaction, User(..))
+import Shared.Types (User(..))
 
 -- | Initialize the database and create tables
 initDatabase :: String -> Aff SQLite3.DBConnection
@@ -192,7 +187,7 @@ timestampToUnixMs ts = case spy "timestampToUnix" ts of
     -1
 
 -- | Convert StatementTransaction to TransactionNewRow
-fromOfxTransaction :: String -> StatementTransaction -> Transaction.TransactionNewRow
+fromOfxTransaction :: String -> StatementTransaction -> TransactionQueries.TransactionNewRow
 fromOfxTransaction accountNumber tx =
   let
     cents = floor $ Decimal.toNumber tx.amount * 100.0
@@ -210,7 +205,7 @@ fromOfxTransaction accountNumber tx =
 
     uniqueFitId = Just $ accountNumber <> ":" <> tx.fitId
   in
-    Transaction.TransactionNewRow
+    TransactionQueries.TransactionNewRow
       { budgetId: Nothing -- Will be set when inserting
       , fromAccountId
       , toAccountId
@@ -238,7 +233,7 @@ seedFromOfx ofxFilePath db = do
       liftEffect $ log $ "=== Processing " <> show (length batch.transactions) <> " transactions ==="
 
       -- Clear existing transactions
-      Transaction.deleteAllTransactions db
+      TransactionQueries.deleteAllTransactions db
 
       -- Process each transaction
       let reversedTransactions = reverse batch.transactions -- to have budget ids in logical order
@@ -253,36 +248,21 @@ seedFromOfx ofxFilePath db = do
       Just { head: tx, tail: rest } -> do
         let txnRow = fromOfxTransaction accountNumber tx
         liftEffect $ log $ "==> FROM OFX TRANSACTION: " <> show txnRow
-        let (Transaction.TransactionNewRow txnData) = txnRow
+        let (TransactionQueries.TransactionNewRow txnData) = txnRow
 
         -- Get or create budget for this transaction date
-        maybeBudgetId <- Budget.getBudgetIdForDate txnData.dateUnix dbConn
+        maybeBudgetId <- BudgetQueries.getBudgetIdForDate txnData.dateUnix dbConn
         budgetId <- case maybeBudgetId of
           Just bid -> pure bid
-          Nothing -> Budget.insertBudgetForDate txnData.dateUnix dbConn
+          Nothing -> BudgetQueries.insertBudgetForDate txnData.dateUnix dbConn
 
         -- Insert the transaction with the budget ID
-        let txnWithBudget = Transaction.TransactionNewRow $ txnData { budgetId = Just budgetId }
+        let txnWithBudget = TransactionQueries.TransactionNewRow $ txnData { budgetId = Just budgetId }
         liftEffect $ log $ "Budget ID: " <> show budgetId <> " for transaction"
-        Transaction.insertTransaction txnWithBudget dbConn
+        TransactionQueries.insertTransaction txnWithBudget dbConn
 
         -- Process remaining transactions
         processTransactions dbConn accountNumber rest
 
--- | Transaction operations (with DTO conversion)
-getAllTransactions :: SQLite3.DBConnection -> Aff (Array Transaction)
-getAllTransactions db = do
-  dbTransactions <- Transaction.getAllTransactionsDB db
-  pure $ map dbTransactionToTransaction dbTransactions
 
-getTransactionById :: Int -> SQLite3.DBConnection -> Aff (Maybe Transaction)
-getTransactionById transactionId db = do
-  maybeDbTransaction <- Transaction.getTransactionByIdDB transactionId db
-  pure $ map dbTransactionToTransaction maybeDbTransaction
-
--- | Get ledger view rows for a specific account (with DTO conversion)
-getLedgerViewRows :: Int -> SQLite3.DBConnection -> Aff (Array LedgerViewRow)
-getLedgerViewRows accountId db = do
-  dbRows <- LedgerView.getLedgerViewRows accountId db
-  pure $ map dbLedgerViewRowToLedgerViewRow dbRows
 
