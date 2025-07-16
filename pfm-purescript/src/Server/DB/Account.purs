@@ -5,15 +5,25 @@ module Server.DB.Account
 
 import Prelude
 
-import Data.Array (head)
-import Data.Functor (map)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import SQLite3 as SQLite3
+import Server.DB.Utils (fromDbRows)
 import Yoga.JSON (class ReadForeign, class WriteForeign)
 
+-- | Database row type matching SQL column names
+newtype AccountRow = MkAccountRow
+  { account_id :: Int
+  , category_id :: Int
+  , name :: String
+  , created_at :: Int
+  , updated_at :: Int
+  }
+
+derive instance Generic AccountRow _
+derive newtype instance ReadForeign AccountRow
+
+-- | Domain type with proper PureScript naming
 newtype AccountDB = AccountDB
   { accountId :: Int
   , categoryId :: Int
@@ -28,16 +38,18 @@ derive newtype instance Eq AccountDB
 derive newtype instance WriteForeign AccountDB
 derive newtype instance ReadForeign AccountDB
 
+-- | Convert database row to domain type
+rowToAccount :: AccountRow -> AccountDB
+rowToAccount (MkAccountRow row) = AccountDB
+  { accountId: row.account_id
+  , categoryId: row.category_id
+  , name: row.name
+  , createdAtUnix: row.created_at
+  , updatedAtUnix: row.updated_at
+  }
+
 -- | Get all accounts
 getAllAccounts :: SQLite3.DBConnection -> Aff (Array AccountDB)
 getAllAccounts db = do
   rows <- SQLite3.queryDB db "SELECT account_id, category_id, name, created_at, updated_at FROM accounts ORDER BY category_id, name" []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  pure $ map rowToAccount rowArray
-  where
-  rowToAccount :: Foreign -> AccountDB
-  rowToAccount row =
-    let
-      obj = unsafeFromForeign row :: { account_id :: Int, category_id :: Int, name :: String, created_at :: Int, updated_at :: Int }
-    in
-      AccountDB { accountId: obj.account_id, categoryId: obj.category_id, name: obj.name, createdAtUnix: obj.created_at, updatedAtUnix: obj.updated_at }
+  fromDbRows "accounts" rowToAccount rows

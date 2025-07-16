@@ -21,8 +21,8 @@ import Shared.Types (Transaction(..))
 Usage
 =====
 
-repl> run $ newConn >>= DB.getAllUsers
-repl> newConn >>= DB.getAllUsers # run
+repl> run $ newConn >>= DB.getSomething
+repl> newConn >>= DB.getSomething # run
 
 ---
 

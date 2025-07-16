@@ -30,16 +30,13 @@ import HTTPurple.Response (Response)
 import SQLite3 (DBConnection)
 import Server.Database as DB
 import Server.DB.Account as Account
-import Server.DB.Budget as Budget
+import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
 import Server.DB.Transaction as Transaction
-import Shared.Types (User(..))
 import Yoga.JSON as JSON
 
 data Route
   = Home
-  | Users
-  | UserById Int
   | Categories
   | CategoryById Int
   | Accounts
@@ -74,12 +71,7 @@ main = do
       Left err -> log $ "Failed to initialize database: " <> show err
       Right db -> do
         log "Database initialized successfully"
-        DB.seedDatabase db # runAff_
-          case _ of
-            Left err -> log $ "Failed to seed database: " <> show err
-            Right _ -> do
-              log "Database seeded successfully"
-              void $ startServer 8080 db
+        void $ startServer 8080 db
 
 startServer :: Int -> DBConnection -> ServerM
 startServer port db =
@@ -115,30 +107,6 @@ makeRouter db { route: route', method } =
         Get -> ok "PFM PureScript Server is running!"
         _ -> methodNotAllowed
 
-    Users ->
-      case method of
-        Get -> do
-          users <- DB.getAllUsers db
-          ok $ JSON.writeJSON users
-        Post -> do
-          -- For now, just create a test user
-          newUser <- DB.insertUser (User { id: Nothing, firstName: "New", lastName: "User" }) db
-          ok $ JSON.writeJSON newUser
-        _ -> methodNotAllowed
-
-    UserById userId ->
-      case method of
-        Get -> do
-          maybeUser <- DB.getUserById userId db
-          case maybeUser of
-            Just user -> ok $ JSON.writeJSON user
-            Nothing ->
-              response 404 $ JSON.writeJSON { error: "User not found" }
-        Delete -> do
-          DB.deleteUser userId db
-          ok "User deleted"
-        _ -> methodNotAllowed
-
     Categories ->
       case method of
         Get -> do
@@ -172,14 +140,14 @@ makeRouter db { route: route', method } =
     Budgets ->
       case method of
         Get -> do
-          budgets <- Budget.getAllBudgets db
+          budgets <- BudgetQueries.getAllBudgets db
           ok $ JSON.writeJSON budgets
         _ -> methodNotAllowed
 
     BudgetById budgetId ->
       case method of
         Get -> do
-          maybeBudget <- Budget.getBudgetById budgetId db
+          maybeBudget <- BudgetQueries.getBudgetById budgetId db
           case maybeBudget of
             Just budget -> ok $ JSON.writeJSON budget
             Nothing -> response 404 $ JSON.writeJSON { error: "Budget not found" }

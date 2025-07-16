@@ -15,9 +15,28 @@ import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
+import Server.DB.Utils (fromDbRows)
+import Yoga.JSON as JSON
 import SQLite3 as SQLite3
 import Yoga.JSON (class ReadForeign, class WriteForeign)
+
+-- | Database row type matching SQL column names  
+newtype BudgetRow = MkBudgetRow
+  { budget_id :: Int
+  , starts_on :: Int
+  , ends_on :: Int
+  , created_at :: Int
+  , updated_at :: Int
+  }
+
+derive instance Generic BudgetRow _
+derive newtype instance ReadForeign BudgetRow
+
+-- | Row type for budget ID queries
+newtype BudgetIdRow = MkBudgetIdRow { budget_id :: Int }
+
+derive instance Generic BudgetIdRow _
+derive newtype instance ReadForeign BudgetIdRow
 
 newtype BudgetDB = BudgetDB
   { budgetId :: Int
@@ -33,43 +52,37 @@ derive newtype instance Eq BudgetDB
 derive newtype instance WriteForeign BudgetDB
 derive newtype instance ReadForeign BudgetDB
 
+-- | Convert database row to domain type
+rowToBudgetDB :: BudgetRow -> BudgetDB
+rowToBudgetDB (MkBudgetRow row) = BudgetDB
+  { budgetId: row.budget_id
+  , startsOnUnix: row.starts_on
+  , endsOnUnix: row.ends_on
+  , createdAtUnix: row.created_at
+  , updatedAtUnix: row.updated_at
+  }
+
 -- | Get all budgets
 getAllBudgets :: SQLite3.DBConnection -> Aff (Array BudgetDB)
 getAllBudgets db = do
   rows <- SQLite3.queryDB db "SELECT budget_id, starts_on, ends_on, created_at, updated_at FROM budgets ORDER BY starts_on DESC" []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  pure $ map rowToBudget rowArray
-  where
-  rowToBudget :: Foreign -> BudgetDB
-  rowToBudget row =
-    let
-      obj = unsafeFromForeign row :: { budget_id :: Int, starts_on :: Int, ends_on :: Int, created_at :: Int, updated_at :: Int }
-    in
-      BudgetDB { budgetId: obj.budget_id, startsOnUnix: obj.starts_on, endsOnUnix: obj.ends_on, createdAtUnix: obj.created_at, updatedAtUnix: obj.updated_at }
+  fromDbRows "budgets" rowToBudgetDB rows
 
 -- | Get budget by ID
 getBudgetById :: Int -> SQLite3.DBConnection -> Aff (Maybe BudgetDB)
 getBudgetById budgetId db = do
-  rows <- SQLite3.queryDB db "SELECT budget_id, starts_on, ends_on, created_at, updated_at FROM budgets WHERE budget_id = ?" [ unsafeToForeign budgetId ]
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> pure Nothing
-    Just row -> do
-      let obj = unsafeFromForeign row :: { budget_id :: Int, starts_on :: Int, ends_on :: Int, created_at :: Int, updated_at :: Int }
-      pure $ Just $ BudgetDB { budgetId: obj.budget_id, startsOnUnix: obj.starts_on, endsOnUnix: obj.ends_on, createdAtUnix: obj.created_at, updatedAtUnix: obj.updated_at }
+  rows <- SQLite3.queryDB db "SELECT budget_id, starts_on, ends_on, created_at, updated_at FROM budgets WHERE budget_id = ?" [ JSON.writeImpl budgetId ]
+  budgets <- fromDbRows "budgets" rowToBudgetDB rows
+  pure $ head budgets
 
 -- | Get budget ID for a date (returns Nothing if not found)
 getBudgetIdForDate :: Int -> SQLite3.DBConnection -> Aff (Maybe Int)
 getBudgetIdForDate dateUnix db = do
   rows <- SQLite3.queryDB db
     "SELECT budget_id FROM budgets WHERE ? >= starts_on AND ? < ends_on"
-    [ unsafeToForeign dateUnix, unsafeToForeign dateUnix ]
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> pure Nothing
-    Just row -> do
-      let obj = unsafeFromForeign row :: { budget_id :: Int }
-      pure $ Just obj.budget_id
+    [ JSON.writeImpl dateUnix, JSON.writeImpl dateUnix ]
+  budgetIds <- fromDbRows "budget_ids" (\(MkBudgetIdRow row) -> row.budget_id) rows
+  pure $ head budgetIds
 
 -- | Insert a budget for a date (monthly budget)
 insertBudgetForDate :: Int -> SQLite3.DBConnection -> Aff Int
@@ -82,13 +95,11 @@ insertBudgetForDate dateUnix db = do
 
   _ <- SQLite3.queryDB db
     "INSERT INTO budgets (starts_on, ends_on) VALUES (?, ?)"
-    [ unsafeToForeign startsOnUnix, unsafeToForeign endsOnUnix ]
+    [ JSON.writeImpl startsOnUnix, JSON.writeImpl endsOnUnix ]
 
   -- Get the inserted budget ID
   rows <- SQLite3.queryDB db "SELECT last_insert_rowid() as budget_id" []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
+  budgetIds <- fromDbRows "budget_ids" (\(MkBudgetIdRow row) -> row.budget_id) rows
+  case head budgetIds of
     Nothing -> pure 1 -- fallback
-    Just row -> do
-      let obj = unsafeFromForeign row :: { budget_id :: Int }
-      pure obj.budget_id
+    Just budgetId -> pure budgetId

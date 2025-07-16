@@ -1,38 +1,32 @@
 module Server.Database
   ( createSchema
-  , deleteUser
+  , dateToUnixMs
+  , dateToUnixS
   , getAllTransactions
-  , getAllUsers
   , getLedgerViewRows
   , getTransactionById
-  , getUserById
   , initDatabase
-  , insertUser
-  , seedDatabase
   , seedFromOfx
   ) where
 
 import Prelude
 
-import Data.Array (head, reverse, length, uncons)
-import Data.DateTime (DateTime(..))
-import Data.DateTime.Instant (fromDateTime, unInstant)
+import Data.Array (length, reverse, uncons)
+import Data.Date (Date)
+import Data.DateTime.Instant (Instant, fromDate, unInstant)
 import Data.Decimal as Decimal
 import Data.Either (Either(..))
-import Data.Enum (toEnum)
 import Data.Int (floor)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (trim)
-import Data.Time (Time(..))
+import Debug (spy)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throwException, error)
-import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
-import Partial.Unsafe (unsafePartial)
 import SQLite3 as SQLite3
 import Server.Conversion (dbLedgerViewRowToLedgerViewRow, dbTransactionToTransaction)
 import Server.DB.Budgets.Queries as Budget
@@ -163,73 +157,39 @@ createSchema db = do
 
   liftEffect $ log "Database schema created successfully"
 
-getUserById :: Int -> SQLite3.DBConnection -> Aff (Maybe User)
-getUserById userId db = do
-  rows <- SQLite3.queryDB db "SELECT id, firstName, lastName FROM users WHERE id = ?" [ unsafeToForeign userId ]
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> pure Nothing
-    Just row -> do
-      let obj = unsafeFromForeign row :: { id :: Int, firstName :: String, lastName :: String }
-      pure $ Just $ User { id: Just obj.id, firstName: obj.firstName, lastName: obj.lastName }
+{-
 
--- | Get all users from the database
-getAllUsers :: SQLite3.DBConnection -> Aff (Array User)
-getAllUsers db = do
-  rows <- SQLite3.queryDB db "SELECT id, firstName, lastName FROM users" []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  pure $ map rowToUser rowArray
-  where
-  rowToUser :: Foreign -> User
-  rowToUser row =
-    let
-      obj = unsafeFromForeign row :: { id :: Int, firstName :: String, lastName :: String }
-    in
-      User { id: Just obj.id, firstName: obj.firstName, lastName: obj.lastName }
+> toDateTime <$> instant (Milliseconds 1752611105509.0)
+(Just (DateTime (Date (Year 2025) July (Day 15)) (Time (Hour 20) (Minute 25) (Second 5) (Millisecond 509))))
 
--- | Insert a new user into the database
-insertUser :: User -> SQLite3.DBConnection -> Aff User
-insertUser (User user) db = do
-  _ <- SQLite3.queryDB db
-    "INSERT INTO users (firstName, lastName) VALUES (?, ?)"
-    [ unsafeToForeign user.firstName, unsafeToForeign user.lastName ]
 
-  -- Get the newly created user
-  rows <- SQLite3.queryDB db
-    "SELECT id, firstName, lastName FROM users WHERE firstName = ? AND lastName = ? ORDER BY id DESC LIMIT 1"
-    [ unsafeToForeign user.firstName, unsafeToForeign user.lastName ]
 
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> pure $ User user -- fallback
-    Just row ->
-      let
-        obj = unsafeFromForeign row :: { id :: Int, firstName :: String, lastName :: String }
-      in
-        pure $ User { id: Just obj.id, firstName: obj.firstName, lastName: obj.lastName }
+ -}
+dateToUnixMs :: Date -> Number
+dateToUnixMs date =
+  let
+    inst :: Instant
+    inst = fromDate date
 
--- | Delete a user by ID
-deleteUser :: Int -> SQLite3.DBConnection -> Aff Unit
-deleteUser userId db = do
-  _ <- SQLite3.queryDB db "DELETE FROM users WHERE id = ?" [ unsafeToForeign userId ]
-  pure unit
+    milliseconds :: Number
+    milliseconds = unwrap (unInstant inst)
+  in
+    milliseconds
+
+dateToUnixS :: Date -> Int
+dateToUnixS date = floor $ dateToUnixMs date / 1000.0
 
 -- | Convert TimeStamp to Unix timestamp
-timestampToUnix :: TimeStamp -> Int
-timestampToUnix = case _ of
+timestampToUnixMs :: TimeStamp -> Int
+timestampToUnixMs ts = case spy "timestampToUnix" ts of
   ShortDate date ->
     let
-      midnight = unsafePartial $ case toEnum 0, toEnum 0, toEnum 0, toEnum 0 of
-        Just h, Just m, Just s, Just ms -> Time h m s ms
-      result = floor $ unwrap $ unInstant $ fromDateTime $ DateTime date midnight
+      result = dateToUnixMs date
     in
-      -- Convert from milliseconds to seconds 
-      result / 1000
+      spy "result (A)" $ floor result
   FullDate dateTime ->
-    let
-      result = floor $ unwrap $ unInstant $ fromDateTime dateTime
-    in
-      result / 1000
+    --TODO: unsafe crash not implemented
+    -1
 
 -- | Convert StatementTransaction to TransactionNewRow
 fromOfxTransaction :: String -> StatementTransaction -> Transaction.TransactionNewRow
@@ -255,7 +215,7 @@ fromOfxTransaction accountNumber tx =
       , fromAccountId
       , toAccountId
       , uniqueFitId
-      , dateUnix: timestampToUnix tx.posted
+      , dateUnix: timestampToUnixMs tx.posted
       , descrOrig: trim tx.name
       , descr: trim tx.name
       , cents: if cents < 0 then (-cents) else cents
@@ -292,6 +252,7 @@ seedFromOfx ofxFilePath db = do
       Nothing -> pure unit
       Just { head: tx, tail: rest } -> do
         let txnRow = fromOfxTransaction accountNumber tx
+        liftEffect $ log $ "==> FROM OFX TRANSACTION: " <> show txnRow
         let (Transaction.TransactionNewRow txnData) = txnRow
 
         -- Get or create budget for this transaction date
@@ -307,26 +268,6 @@ seedFromOfx ofxFilePath db = do
 
         -- Process remaining transactions
         processTransactions dbConn accountNumber rest
-
--- | Seed the database with initial data
-seedDatabase :: SQLite3.DBConnection -> Aff Unit
-seedDatabase db = do
-  liftEffect $ log "Checking if database needs seeding..."
-  rows <- SQLite3.queryDB db "SELECT COUNT(*) as count FROM users" []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> seed
-    Just row ->
-      let
-        obj = unsafeFromForeign row :: { count :: Int }
-      in
-        if obj.count == 0 then seed else liftEffect $ log "Database already has data, skipping seed"
-  where
-  seed = do
-    liftEffect $ log "Seeding database..."
-    _ <- insertUser (User { id: Nothing, firstName: "John", lastName: "Doe" }) db
-    _ <- insertUser (User { id: Nothing, firstName: "Jane", lastName: "Smith" }) db
-    liftEffect $ log "Database seeded successfully"
 
 -- | Transaction operations (with DTO conversion)
 getAllTransactions :: SQLite3.DBConnection -> Aff (Array Transaction)

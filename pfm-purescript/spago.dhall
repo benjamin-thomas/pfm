@@ -7,6 +7,7 @@
   , "arrays"
   , "console"
   , "datetime"
+  , "debug"
   , "decimals"
   , "effect"
   , "either"

@@ -10,7 +10,7 @@ import Data.Array (head)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Foreign (unsafeToForeign)
+import Yoga.JSON as JSON
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import Server.DB.Utils (fromDbRows)
@@ -18,7 +18,7 @@ import SQLite3 as SQLite3
 import Yoga.JSON (class ReadForeign, class WriteForeign)
 
 -- | Database row type matching SQL column names
-newtype CategoryRow = CategoryRow
+newtype CategoryRow = MkCategoryRow
   { category_id :: Int
   , name :: String
   , created_at :: Int
@@ -44,7 +44,7 @@ derive newtype instance ReadForeign CategoryDB
 
 -- | Convert database row to domain type
 rowToCategory :: CategoryRow -> CategoryDB
-rowToCategory (CategoryRow row) = CategoryDB
+rowToCategory (MkCategoryRow row) = CategoryDB
   { categoryId: row.category_id
   , name: row.name
   , createdAtUnix: row.created_at
@@ -55,7 +55,7 @@ rowToCategory (CategoryRow row) = CategoryDB
 getCategoryById :: Int -> SQLite3.DBConnection -> Aff (Maybe CategoryDB)
 getCategoryById categoryId db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Categories/sql/getCategoryById.sql"
-  rows <- SQLite3.queryDB db sql [unsafeToForeign categoryId]
+  rows <- SQLite3.queryDB db sql [ JSON.writeImpl categoryId ]
   categories <- fromDbRows "categories" rowToCategory rows
   pure $ head categories
 

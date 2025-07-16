@@ -10,16 +10,16 @@ import Prelude
 
 import Data.Array (head)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
-import Foreign (unsafeToForeign)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
-import Server.DB.Utils (fromDbRows)
 import SQLite3 as SQLite3
+import Server.DB.Utils (fromDbRows, headThrow)
 import Yoga.JSON (class ReadForeign, class WriteForeign)
+import Yoga.JSON as JSON
 
 -- | Database row type matching SQL column names
 newtype BudgetRow = BudgetRow
@@ -34,7 +34,7 @@ derive instance Generic BudgetRow _
 derive newtype instance ReadForeign BudgetRow
 
 -- | Row type for budget ID queries
-newtype BudgetIdRow = BudgetIdRow { budget_id :: Int }
+newtype BudgetIdRow = MkBudgetIdRow { budget_id :: Int }
 
 derive instance Generic BudgetIdRow _
 derive newtype instance ReadForeign BudgetIdRow
@@ -75,7 +75,7 @@ getAllBudgets db = do
 getBudgetById :: Int -> SQLite3.DBConnection -> Aff (Maybe BudgetDB)
 getBudgetById budgetId db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Budgets/sql/getBudgetById.sql"
-  rows <- SQLite3.queryDB db sql [unsafeToForeign budgetId]
+  rows <- SQLite3.queryDB db sql [ JSON.writeImpl budgetId ]
   budgets <- fromDbRows "budgets" rowToBudget rows
   pure $ head budgets
 
@@ -83,26 +83,16 @@ getBudgetById budgetId db = do
 getBudgetIdForDate :: Int -> SQLite3.DBConnection -> Aff (Maybe Int)
 getBudgetIdForDate dateUnix db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Budgets/sql/getBudgetIdForDate.sql"
-  rows <- SQLite3.queryDB db sql [unsafeToForeign dateUnix, unsafeToForeign dateUnix]
-  budgetIds <- fromDbRows "budget_ids" (\(BudgetIdRow row) -> row.budget_id) rows
+  rows <- SQLite3.queryDB db sql [ JSON.writeImpl dateUnix, JSON.writeImpl dateUnix ]
+  budgetIds <- fromDbRows "budget_ids" (\(MkBudgetIdRow row) -> row.budget_id) rows
   pure $ head budgetIds
 
 -- | Insert a budget for a date (monthly budget)
 insertBudgetForDate :: Int -> SQLite3.DBConnection -> Aff Int
 insertBudgetForDate dateUnix db = do
-  -- Create a monthly budget period
-  let startsOnUnix = dateUnix
-  let endsOnUnix = dateUnix + (30 * 24 * 60 * 60) -- 30 days later
-
-  liftEffect $ log $ "Creating budget: starts_on=" <> show startsOnUnix <> ", ends_on=" <> show endsOnUnix
+  liftEffect $ log $ "Creating budget: starts_on=" <> show dateUnix
 
   insertSql <- FS.readTextFile UTF8 "src/Server/DB/Budgets/sql/insertBudget.sql"
-  _ <- SQLite3.queryDB db insertSql [unsafeToForeign startsOnUnix, unsafeToForeign endsOnUnix]
-
-  -- Get the inserted budget ID
-  lastIdSql <- FS.readTextFile UTF8 "src/Server/DB/Budgets/sql/getLastInsertRowId.sql"
-  rows <- SQLite3.queryDB db lastIdSql []
-  budgetIds <- fromDbRows "budget_ids" (\(BudgetIdRow row) -> row.budget_id) rows
-  case head budgetIds of
-    Nothing -> pure 1 -- fallback
-    Just budgetId -> pure budgetId
+  rows <- SQLite3.queryDB db insertSql [ JSON.writeImpl dateUnix ]
+  budgetIds <- fromDbRows "budget_id" (\(MkBudgetIdRow row) -> row.budget_id) rows
+  headThrow budgetIds

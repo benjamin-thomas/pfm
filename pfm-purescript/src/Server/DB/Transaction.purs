@@ -19,9 +19,28 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throwException, error)
-import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
+import Server.DB.Utils (fromDbRows)
+import Yoga.JSON as JSON
 import SQLite3 as SQLite3
 import Yoga.JSON (class ReadForeign, class WriteForeign)
+
+-- | Database row type matching SQL column names
+newtype TransactionRow = MkTransactionRow
+  { transaction_id :: Int
+  , budget_id :: Int
+  , from_account_id :: Int
+  , to_account_id :: Int
+  , unique_fit_id :: Maybe String
+  , date :: Int
+  , descr_orig :: String
+  , descr :: String
+  , cents :: Int
+  , created_at :: Int
+  , updated_at :: Int
+  }
+
+derive instance Generic TransactionRow _
+derive newtype instance ReadForeign TransactionRow
 
 newtype TransactionDB = TransactionDB
   { transactionId :: Int
@@ -43,6 +62,22 @@ derive newtype instance Eq TransactionDB
 derive newtype instance ReadForeign TransactionDB
 derive newtype instance WriteForeign TransactionDB
 
+-- | Convert database row to domain type
+rowToTransactionDB :: TransactionRow -> TransactionDB
+rowToTransactionDB (MkTransactionRow row) = TransactionDB
+  { transactionId: row.transaction_id
+  , budgetId: row.budget_id
+  , fromAccountId: row.from_account_id
+  , toAccountId: row.to_account_id
+  , uniqueFitId: row.unique_fit_id
+  , dateUnix: row.date
+  , descrOrig: row.descr_orig
+  , descr: row.descr
+  , cents: row.cents
+  , createdAtUnix: row.created_at
+  , updatedAtUnix: row.updated_at
+  }
+
 newtype TransactionNewRow = TransactionNewRow
   { budgetId :: Maybe Int
   , fromAccountId :: Int
@@ -60,63 +95,16 @@ getAllTransactionsDB db = do
   rows <- SQLite3.queryDB db
     "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions ORDER BY date DESC"
     []
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  pure $ map rowToDbTransaction rowArray
-  where
-  rowToDbTransaction :: Foreign -> TransactionDB
-  rowToDbTransaction row =
-    let
-      obj = unsafeFromForeign row :: { transaction_id :: Int, budget_id :: Int, from_account_id :: Int, to_account_id :: Int, unique_fit_id :: Foreign, date :: Int, descr_orig :: String, descr :: String, cents :: Int, created_at :: Int, updated_at :: Int }
-      -- Handle NULL unique_fit_id safely
-      uniqueFitId = case unsafeFromForeign obj.unique_fit_id of
-        "" -> Nothing
-        s -> Just s
-    in
-      TransactionDB
-        { transactionId: obj.transaction_id
-        , budgetId: obj.budget_id
-        , fromAccountId: obj.from_account_id
-        , toAccountId: obj.to_account_id
-        , uniqueFitId: uniqueFitId
-        , dateUnix: obj.date
-        , descrOrig: obj.descr_orig
-        , descr: obj.descr
-        , cents: obj.cents
-        , createdAtUnix: obj.created_at
-        , updatedAtUnix: obj.updated_at
-        }
+  fromDbRows "transactions" rowToTransactionDB rows
 
 -- | Get transaction by ID (returns raw DB data)
 getTransactionByIdDB :: Int -> SQLite3.DBConnection -> Aff (Maybe TransactionDB)
 getTransactionByIdDB transactionId db = do
   rows <- SQLite3.queryDB db
     "SELECT transaction_id, budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents, created_at, updated_at FROM transactions WHERE transaction_id = ?"
-    [ unsafeToForeign transactionId ]
-  let rowArray = unsafeFromForeign rows :: Array Foreign
-  case head rowArray of
-    Nothing -> pure Nothing
-    Just row -> do
-      let
-        obj = unsafeFromForeign row :: { transaction_id :: Int, budget_id :: Int, from_account_id :: Int, to_account_id :: Int, unique_fit_id :: Foreign, date :: Int, descr_orig :: String, descr :: String, cents :: Int, created_at :: Int, updated_at :: Int }
-        -- Handle NULL unique_fit_id safely
-        uniqueFitId = case unsafeFromForeign obj.unique_fit_id of
-          "" -> Nothing
-          s -> Just s
-      let
-        dbTx = TransactionDB
-          { transactionId: obj.transaction_id
-          , budgetId: obj.budget_id
-          , fromAccountId: obj.from_account_id
-          , toAccountId: obj.to_account_id
-          , uniqueFitId: uniqueFitId
-          , dateUnix: obj.date
-          , descrOrig: obj.descr_orig
-          , descr: obj.descr
-          , cents: obj.cents
-          , createdAtUnix: obj.created_at
-          , updatedAtUnix: obj.updated_at
-          }
-      pure $ Just dbTx
+    [ JSON.writeImpl transactionId ]
+  transactions <- fromDbRows "transactions" rowToTransactionDB rows
+  pure $ head transactions
 
 -- | Insert a transaction into the database
 insertTransaction :: TransactionNewRow -> SQLite3.DBConnection -> Aff Unit
@@ -132,14 +120,14 @@ insertTransaction (TransactionNewRow txn) db = do
           (budget_id, from_account_id, to_account_id, unique_fit_id, date, descr_orig, descr, cents)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
-        [ unsafeToForeign budgetId
-        , unsafeToForeign txn.fromAccountId
-        , unsafeToForeign txn.toAccountId
-        , unsafeToForeign txn.uniqueFitId
-        , unsafeToForeign txn.dateUnix
-        , unsafeToForeign txn.descrOrig
-        , unsafeToForeign txn.descr
-        , unsafeToForeign txn.cents
+        [ JSON.writeImpl budgetId
+        , JSON.writeImpl txn.fromAccountId
+        , JSON.writeImpl txn.toAccountId
+        , JSON.writeImpl txn.uniqueFitId
+        , JSON.writeImpl txn.dateUnix
+        , JSON.writeImpl txn.descrOrig
+        , JSON.writeImpl txn.descr
+        , JSON.writeImpl txn.cents
         ]
       pure unit
 
@@ -153,19 +141,19 @@ updateTransaction transactionId (TransactionNewRow txn) db = do
     SET from_account_id = ?, to_account_id = ?, date = ?, descr = ?, cents = ?, updated_at = strftime('%s', 'now')
     WHERE transaction_id = ?
     """
-    [ unsafeToForeign txn.fromAccountId
-    , unsafeToForeign txn.toAccountId
-    , unsafeToForeign txn.dateUnix
-    , unsafeToForeign txn.descr
-    , unsafeToForeign txn.cents
-    , unsafeToForeign transactionId
+    [ JSON.writeImpl txn.fromAccountId
+    , JSON.writeImpl txn.toAccountId
+    , JSON.writeImpl txn.dateUnix
+    , JSON.writeImpl txn.descr
+    , JSON.writeImpl txn.cents
+    , JSON.writeImpl transactionId
     ]
   pure unit
 
 -- | Delete a transaction
 deleteTransaction :: Int -> SQLite3.DBConnection -> Aff Unit
 deleteTransaction transactionId db = do
-  _ <- SQLite3.queryDB db "DELETE FROM transactions WHERE transaction_id = ?" [ unsafeToForeign transactionId ]
+  _ <- SQLite3.queryDB db "DELETE FROM transactions WHERE transaction_id = ?" [ JSON.writeImpl transactionId ]
   pure unit
 
 -- | Delete all transactions from the database

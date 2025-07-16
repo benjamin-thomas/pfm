@@ -18,7 +18,7 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throwException, error)
-import Foreign (Foreign, unsafeFromForeign, unsafeToForeign)
+import Yoga.JSON as JSON
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import Server.DB.Utils (fromDbRows)
@@ -26,12 +26,12 @@ import SQLite3 as SQLite3
 import Yoga.JSON (class ReadForeign, class WriteForeign)
 
 -- | Database row type matching SQL column names
-newtype TransactionRow = TransactionRow
+newtype TransactionRow = MkTransactionRow
   { transaction_id :: Int
   , budget_id :: Int
   , from_account_id :: Int
   , to_account_id :: Int
-  , unique_fit_id :: Foreign -- Handle NULL values
+  , unique_fit_id :: Maybe String
   , date :: Int
   , descr_orig :: String
   , descr :: String
@@ -66,26 +66,19 @@ derive newtype instance WriteForeign TransactionDB
 
 -- | Convert database row to domain type
 rowToTransaction :: TransactionRow -> TransactionDB
-rowToTransaction (TransactionRow row) =
-  let
-    -- Handle NULL unique_fit_id safely
-    uniqueFitId = case unsafeFromForeign row.unique_fit_id of
-      "" -> Nothing
-      s -> Just s
-  in
-    TransactionDB
-      { transactionId: row.transaction_id
-      , budgetId: row.budget_id
-      , fromAccountId: row.from_account_id
-      , toAccountId: row.to_account_id
-      , uniqueFitId: uniqueFitId
-      , dateUnix: row.date
-      , descrOrig: row.descr_orig
-      , descr: row.descr
-      , cents: row.cents
-      , createdAtUnix: row.created_at
-      , updatedAtUnix: row.updated_at
-      }
+rowToTransaction (MkTransactionRow row) = TransactionDB
+  { transactionId: row.transaction_id
+  , budgetId: row.budget_id
+  , fromAccountId: row.from_account_id
+  , toAccountId: row.to_account_id
+  , uniqueFitId: row.unique_fit_id
+  , dateUnix: row.date
+  , descrOrig: row.descr_orig
+  , descr: row.descr
+  , cents: row.cents
+  , createdAtUnix: row.created_at
+  , updatedAtUnix: row.updated_at
+  }
 
 newtype TransactionNewRow = TransactionNewRow
   { budgetId :: Maybe Int
@@ -98,6 +91,8 @@ newtype TransactionNewRow = TransactionNewRow
   , cents :: Int
   }
 
+derive newtype instance Show TransactionNewRow
+
 -- | Get all transactions (returns raw DB data)
 getAllTransactionsDB :: SQLite3.DBConnection -> Aff (Array TransactionDB)
 getAllTransactionsDB db = do
@@ -109,7 +104,7 @@ getAllTransactionsDB db = do
 getTransactionByIdDB :: Int -> SQLite3.DBConnection -> Aff (Maybe TransactionDB)
 getTransactionByIdDB transactionId db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/sql/getTransactionById.sql"
-  rows <- SQLite3.queryDB db sql [unsafeToForeign transactionId]
+  rows <- SQLite3.queryDB db sql [ JSON.writeImpl transactionId ]
   transactions <- fromDbRows "transactions" rowToTransaction rows
   pure $ head transactions
 
@@ -123,14 +118,14 @@ insertTransaction (TransactionNewRow txn) db = do
     Just budgetId -> do
       sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/sql/insertTransaction.sql"
       _ <- SQLite3.queryDB db sql
-        [ unsafeToForeign budgetId
-        , unsafeToForeign txn.fromAccountId
-        , unsafeToForeign txn.toAccountId
-        , unsafeToForeign txn.uniqueFitId
-        , unsafeToForeign txn.dateUnix
-        , unsafeToForeign txn.descrOrig
-        , unsafeToForeign txn.descr
-        , unsafeToForeign txn.cents
+        [ JSON.writeImpl budgetId
+        , JSON.writeImpl txn.fromAccountId
+        , JSON.writeImpl txn.toAccountId
+        , JSON.writeImpl txn.uniqueFitId
+        , JSON.writeImpl txn.dateUnix
+        , JSON.writeImpl txn.descrOrig
+        , JSON.writeImpl txn.descr
+        , JSON.writeImpl txn.cents
         ]
       pure unit
 
@@ -140,12 +135,12 @@ updateTransaction transactionId (TransactionNewRow txn) db = do
   liftEffect $ log $ "Updating transaction: " <> show transactionId
   sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/sql/updateTransaction.sql"
   _ <- SQLite3.queryDB db sql
-    [ unsafeToForeign txn.fromAccountId
-    , unsafeToForeign txn.toAccountId
-    , unsafeToForeign txn.dateUnix
-    , unsafeToForeign txn.descr
-    , unsafeToForeign txn.cents
-    , unsafeToForeign transactionId
+    [ JSON.writeImpl txn.fromAccountId
+    , JSON.writeImpl txn.toAccountId
+    , JSON.writeImpl txn.dateUnix
+    , JSON.writeImpl txn.descr
+    , JSON.writeImpl txn.cents
+    , JSON.writeImpl transactionId
     ]
   pure unit
 
@@ -153,7 +148,7 @@ updateTransaction transactionId (TransactionNewRow txn) db = do
 deleteTransaction :: Int -> SQLite3.DBConnection -> Aff Unit
 deleteTransaction transactionId db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/sql/deleteTransaction.sql"
-  _ <- SQLite3.queryDB db sql [unsafeToForeign transactionId]
+  _ <- SQLite3.queryDB db sql [ JSON.writeImpl transactionId ]
   pure unit
 
 -- | Delete all transactions from the database

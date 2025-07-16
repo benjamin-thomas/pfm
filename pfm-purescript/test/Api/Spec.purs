@@ -28,43 +28,6 @@ spec port = do
           Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
           Right response -> shouldEqual (StatusCode 200) response.status
 
-    describe "Users Endpoints" do
-      it "should return users list" do
-        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/users")
-        case result of
-          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
-          Right response -> do
-            shouldEqual (StatusCode 200) response.status
-            -- Check Content-Type header
-            case response.headers of
-              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
-            case JSON.readJSON response.body of
-              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (users :: Array User) -> do
-                shouldEqual (length users) 2
-                -- Validate JSON structure
-                case users of
-                  [ User user1, User user2 ] -> do
-                    user1.firstName `shouldEqual` "John"
-                    user1.lastName `shouldEqual` "Doe"
-                    user2.firstName `shouldEqual` "Jane"
-                    user2.lastName `shouldEqual` "Smith"
-                  _ -> shouldEqual "Expected exactly 2 users" "Got different count"
-
-      it "should get user by ID" do
-        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/users/1")
-        case result of
-          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
-          Right response -> do
-            shouldEqual (StatusCode 200) response.status
-            case JSON.readJSON response.body of
-              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (user :: User) -> do
-                case user of
-                  User userData -> do
-                    userData.firstName `shouldEqual` "John"
-                    userData.lastName `shouldEqual` "Doe"
-
     describe "Categories Endpoints" do
       it "should get all categories" do
         result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/categories")

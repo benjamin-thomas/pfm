@@ -18,56 +18,56 @@ import Server.DB.Category (CategoryDB(..))
 import Server.DB.Transaction as Transaction
 import Server.DB.Transaction (TransactionNewRow(..))
 import Server.Database as DB
-import Shared.Types (LedgerViewRow(..), Transaction(..), User(..))
+import Shared.Types (LedgerViewRow(..), Transaction(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 
 spec :: SQLite3.DBConnection -> Spec Unit
 spec db = do
   describe "Database Integration Tests" do
-    describe "User Operations" do
-      it "should get one user" do
-        maybeUser <- DB.getUserById 1 db
-        maybeUser `shouldEqual`
-          Just (User { id: Just 1, firstName: "John", lastName: "Doe" })
-      it "should retrieve many users" do
-        users <- DB.getAllUsers db
-        users `shouldEqual`
-          [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-          , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-          ]
+    -- describe "User Operations" do
+    --   it "should get one user" do
+    --     maybeUser <- DB.getUserById 1 db
+    --     maybeUser `shouldEqual`
+    --       Just (User { id: Just 1, firstName: "John", lastName: "Doe" })
+    --   it "should retrieve many users" do
+    --     users <- DB.getAllUsers db
+    --     users `shouldEqual`
+    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
+    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
+    --       ]
 
-      it "should insert a new user" do
-        users1 <- DB.getAllUsers db
-        users1 `shouldEqual`
-          [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-          , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-          ]
-        let newUser = User { id: Nothing, firstName: "Alice", lastName: "Johnson" }
-        _ <- DB.insertUser newUser db
+    --   it "should insert a new user" do
+    --     users1 <- DB.getAllUsers db
+    --     users1 `shouldEqual`
+    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
+    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
+    --       ]
+    --     let newUser = User { id: Nothing, firstName: "Alice", lastName: "Johnson" }
+    --     _ <- DB.insertUser newUser db
 
-        users2 <- DB.getAllUsers db
-        users2 `shouldEqual`
-          [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-          , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-          , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
-          ]
+    --     users2 <- DB.getAllUsers db
+    --     users2 `shouldEqual`
+    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
+    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
+    --       , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
+    --       ]
 
-      it "should delete a user" do
-        users1 <- DB.getAllUsers db
-        users1 `shouldEqual`
-          [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-          , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-          , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
-          ]
-        -- First get all users to find Alice's ID
-        _ <- DB.deleteUser 3 db
+    --   it "should delete a user" do
+    --     users1 <- DB.getAllUsers db
+    --     users1 `shouldEqual`
+    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
+    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
+    --       , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
+    --       ]
+    --     -- First get all users to find Alice's ID
+    --     _ <- DB.deleteUser 3 db
 
-        users2 <- DB.getAllUsers db
-        users2 `shouldEqual`
-          [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-          , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-          ]
+    --     users2 <- DB.getAllUsers db
+    --     users2 `shouldEqual`
+    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
+    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
+    --       ]
 
     describe "Budget Operations (FIXME: theses tests are suboptimal for now)" do
       it "should get budget ID for a date" do
@@ -217,7 +217,7 @@ spec db = do
       it "should get ledger view for checking account" do
         -- First ensure we have a budget and some transactions
         budgetId <- Budget.insertBudgetForDate 1719792000 db
-        
+
         let
           testTxn1 = TransactionNewRow
             { budgetId: Just budgetId
@@ -229,7 +229,7 @@ spec db = do
             , descr: "Grocery Store"
             , cents: 5000 -- $50.00
             }
-            
+
           testTxn2 = TransactionNewRow
             { budgetId: Just budgetId
             , fromAccountId: 4 -- Unknown income
@@ -251,11 +251,11 @@ spec db = do
 
         -- Check that ledger rows have proper flow calculations
         case ledgerRows of
-          [LedgerViewRow row1, LedgerViewRow row2] -> do
+          [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First transaction: money going out from checking account (negative flow)
             row1.flowAmount `shouldSatisfy` (_ < 0.0)
             row1.runningBalance `shouldSatisfy` (_ < 0.0)
-            
+
             -- Second transaction: money coming into checking account (positive flow)
             row2.flowAmount `shouldSatisfy` (_ > 0.0)
             row2.runningBalance `shouldSatisfy` (_ > row1.runningBalance)
@@ -264,13 +264,13 @@ spec db = do
       it "should calculate running balance correctly" do
         -- Get ledger view again to test running balance calculation
         ledgerRows <- DB.getLedgerViewRows 2 db
-        
+
         case ledgerRows of
-          [LedgerViewRow row1, LedgerViewRow row2] -> do
+          [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First row: -$50.00, running balance should be -$50.00
             row1.flowAmount `shouldEqual` (-50.0)
             row1.runningBalance `shouldEqual` (-50.0)
-            
+
             -- Second row: +$2000.00, running balance should be $1950.00
             row2.flowAmount `shouldEqual` 2000.0
             row2.runningBalance `shouldEqual` 1950.0

@@ -10,6 +10,11 @@ In case of troubles, always refer to the working approach here: ~/code/explore/p
 
 Unless stated otherwise, consider we want to produce production quality code, no hacks!
 
+When iterating on small changes, run `spago build` often, especially when you're done working on a file.
+It's okay to leave the code broken for a bit (if there is a complex dependency chain for instance), but in
+general, we should try to apply the "always be compiling" principle. If the code is not compiling for too long,
+that means we took too big of a step, and we should probably take a step back.
+
 ## Goal
 
 The goal is to replace my Elm+Haskell app (a work in progress), with a fullstack PureScript solution.

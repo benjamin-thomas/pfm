@@ -1,5 +1,6 @@
 module Server.DB.Utils
   ( fromDbRows
+  , headThrow
   ) where
 
 import Prelude
@@ -19,3 +20,9 @@ fromDbRows :: forall a b. ReadForeign a => String -> (a -> b) -> Foreign -> Aff 
 fromDbRows resourceName rowToResource rows = case runExcept (JSON.readImpl rows) of
   Left err -> throwError $ error $ "Database decoding error for " <> resourceName <> ": " <> show err
   Right resourceRows -> pure $ map rowToResource resourceRows
+
+headThrow :: forall a. Array a -> Aff a
+headThrow xs = case xs of
+  [] -> throwError $ error "ABNORMAL: no items"
+  [ x ] -> pure x
+  _ -> throwError $ error "ABNORMAL: too many items"
