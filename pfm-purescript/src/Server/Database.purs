@@ -24,6 +24,7 @@ import Effect.Console (log)
 import Effect.Exception (throwException, error)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
+import Partial.Unsafe (unsafeCrashWith)
 import SQLite3 as SQLite3
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Transactions.Queries as TransactionQueries
@@ -179,12 +180,11 @@ timestampToUnixMs :: TimeStamp -> Int
 timestampToUnixMs ts = case spy "timestampToUnix" ts of
   ShortDate date ->
     let
-      result = dateToUnixMs date
+      result = dateToUnixS date
     in
-      spy "result (A)" $ floor result
+      spy "result (A)" result
   FullDate dateTime ->
-    --TODO: unsafe crash not implemented
-    -1
+    unsafeCrashWith "FullDate not implemented in timestampToUnixMs"
 
 -- | Convert StatementTransaction to TransactionNewRow
 fromOfxTransaction :: String -> StatementTransaction -> TransactionQueries.TransactionNewRow
@@ -263,6 +263,4 @@ seedFromOfx ofxFilePath db = do
 
         -- Process remaining transactions
         processTransactions dbConn accountNumber rest
-
-
 

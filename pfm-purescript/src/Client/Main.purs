@@ -48,7 +48,7 @@ type AppData =
   }
 
 -- Dialog state types
-type CreateDialogState = 
+type CreateDialogState =
   { description :: String
   , fromAccountId :: String
   , toAccountId :: String
@@ -56,7 +56,7 @@ type CreateDialogState =
   , date :: String
   }
 
-type EditDialogState = 
+type EditDialogState =
   { transactionId :: Int
   , description :: String
   , fromAccountId :: String
@@ -103,12 +103,12 @@ data Action
 -- Parallel data fetching function
 fetchAllData :: Aff (Either String AppData)
 fetchAllData = sequential $
-  (\users ledgerRows accounts -> 
-    case users, ledgerRows, accounts of
-      Right u, Right l, Right a -> Right { users: u, ledgerRows: l, accounts: a }
-      Left err, _, _ -> Left err
-      _, Left err, _ -> Left err
-      _, _, Left err -> Left err
+  ( \users ledgerRows accounts ->
+      case users, ledgerRows, accounts of
+        Right u, Right l, Right a -> Right { users: u, ledgerRows: l, accounts: a }
+        Left err, _, _ -> Left err
+        _, Left err, _ -> Left err
+        _, _, Left err -> Left err
   ) <$> parallel fetchUsers
     <*> parallel fetchLedgerView
     <*> parallel fetchAccounts
@@ -149,14 +149,14 @@ render state =
 
     -- Main content based on data loading status
     , case state.data of
-        Loading -> 
+        Loading ->
           HH.div
             [ HP.class_ (HH.ClassName "loading-message") ]
             [ HH.text "Loading application data..." ]
-        Failed err -> 
+        Failed err ->
           HH.div
             [ HP.class_ (HH.ClassName "error-message") ]
-            [ HH.text $ "Error: " <> err 
+            [ HH.text $ "Error: " <> err
             , HH.br_
             , HH.button
                 [ HP.class_ (HH.ClassName "button")
@@ -181,7 +181,7 @@ render state =
       [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header") ]
           [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header-title") ]
               [ HH.h3_ [ HH.text "Transactions" ]
-              , HH.span [ HP.class_ (HH.ClassName "transaction-count") ] 
+              , HH.span [ HP.class_ (HH.ClassName "transaction-count") ]
                   [ HH.text $ show (length appData.ledgerRows) <> " transactions" ]
               ]
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
@@ -205,37 +205,38 @@ render state =
   renderLedgerRow (LedgerViewRow row) =
     let
       isPositive = row.flowAmount > 0.0
-      amountClass = if isPositive then
-                      "transaction-item__amount transaction-item__amount--positive"
-                    else  
-                      "transaction-item__amount transaction-item__amount--negative"
+      amountClass =
+        if isPositive then
+          "transaction-item__amount transaction-item__amount--positive"
+        else
+          "transaction-item__amount transaction-item__amount--negative"
       amountSign = if isPositive then "+" else ""
     in
-    HH.li 
-      [ HP.class_ (HH.ClassName "transaction-item")
-      , HE.onClick \_ -> OpenEditDialog row.transactionId
-      ]
-      [ HH.div [ HP.class_ (HH.ClassName "transaction-item__row") ]
-          [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
-              [ HH.div [ HP.class_ (HH.ClassName "transaction-item__details") ]
-                  [ HH.div [ HP.class_ (HH.ClassName "transaction-item__description") ]
-                      [ HH.text row.description ]
-                  , HH.div [ HP.class_ (HH.ClassName "transaction-item__accounts") ]
-                      [ HH.text $ row.fromAccountName <> " → " <> row.toAccountName ]
-                  ]
-              , HH.div [ HP.class_ (HH.ClassName "transaction-item__date") ]
-                  [ HH.text row.date ]
-              , HH.div [ HP.class_ (HH.ClassName amountClass) ]
-                  [ HH.text $ amountSign <> show row.flowAmount <> " €" ]
-              ]
-          , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
-              [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
-                  [ HH.span [ HP.class_ (HH.ClassName "balance-after") ] 
-                      [ HH.text $ show row.runningBalance <> " €" ]
-                  ]
-              ]
-          ]
-      ]
+      HH.li
+        [ HP.class_ (HH.ClassName "transaction-item")
+        , HE.onClick \_ -> OpenEditDialog row.transactionId
+        ]
+        [ HH.div [ HP.class_ (HH.ClassName "transaction-item__row") ]
+            [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
+                [ HH.div [ HP.class_ (HH.ClassName "transaction-item__details") ]
+                    [ HH.div [ HP.class_ (HH.ClassName "transaction-item__description") ]
+                        [ HH.text row.description ]
+                    , HH.div [ HP.class_ (HH.ClassName "transaction-item__accounts") ]
+                        [ HH.text $ row.fromAccountName <> " → " <> row.toAccountName ]
+                    ]
+                , HH.div [ HP.class_ (HH.ClassName "transaction-item__date") ]
+                    [ HH.text row.date ]
+                , HH.div [ HP.class_ (HH.ClassName amountClass) ]
+                    [ HH.text $ amountSign <> show row.flowAmount <> " €" ]
+                ]
+            , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
+                [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
+                    [ HH.span [ HP.class_ (HH.ClassName "balance-after") ]
+                        [ HH.text $ show row.runningBalance <> " €" ]
+                    ]
+                ]
+            ]
+        ]
 
   renderDialog :: Dialog -> AppData -> H.ComponentHTML Action () m
   renderDialog dialog appData =
@@ -281,15 +282,17 @@ render state =
   renderCreateForm createState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
-      [ makeTextField "Description" "description" createState.description 
+      [ makeTextField "Description" "description" createState.description
           (CreateDialogChanged <<< CreateDescrChanged)
-      , makeAccountSelect "From Account" "from-account" createState.fromAccountId 
-          (CreateDialogChanged <<< CreateFromAccountChanged) appData.accounts
-      , makeAccountSelect "To Account" "to-account" createState.toAccountId 
-          (CreateDialogChanged <<< CreateToAccountChanged) appData.accounts
-      , makeTextField "Amount" "amount" createState.amount 
+      , makeAccountSelect "From Account" "from-account" createState.fromAccountId
+          (CreateDialogChanged <<< CreateFromAccountChanged)
+          appData.accounts
+      , makeAccountSelect "To Account" "to-account" createState.toAccountId
+          (CreateDialogChanged <<< CreateToAccountChanged)
+          appData.accounts
+      , makeTextField "Amount" "amount" createState.amount
           (CreateDialogChanged <<< CreateAmountChanged)
-      , makeDateField "Date" "date" createState.date 
+      , makeDateField "Date" "date" createState.date
           (CreateDialogChanged <<< CreateDateChanged)
       ]
 
@@ -297,15 +300,17 @@ render state =
   renderEditForm editState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
-      [ makeTextField "Description" "description" editState.description 
+      [ makeTextField "Description" "description" editState.description
           (EditDialogChanged <<< EditDescrChanged)
-      , makeAccountSelect "From Account" "from-account" editState.fromAccountId 
-          (EditDialogChanged <<< EditFromAccountChanged) appData.accounts
-      , makeAccountSelect "To Account" "to-account" editState.toAccountId 
-          (EditDialogChanged <<< EditToAccountChanged) appData.accounts
-      , makeTextField "Amount" "amount" editState.amount 
+      , makeAccountSelect "From Account" "from-account" editState.fromAccountId
+          (EditDialogChanged <<< EditFromAccountChanged)
+          appData.accounts
+      , makeAccountSelect "To Account" "to-account" editState.toAccountId
+          (EditDialogChanged <<< EditToAccountChanged)
+          appData.accounts
+      , makeTextField "Amount" "amount" editState.amount
           (EditDialogChanged <<< EditAmountChanged)
-      , makeDateField "Date" "date" editState.date 
+      , makeDateField "Date" "date" editState.date
           (EditDialogChanged <<< EditDateChanged)
       ]
 
@@ -360,12 +365,13 @@ render state =
           , HP.value value
           , HE.onValueInput onChange
           ]
-          ([ HH.option
-               [ HP.value ""
-               , HP.disabled true
-               ]
-               [ HH.text "Select an account..." ]
-           ] <> map renderAccountOption accounts)
+          ( [ HH.option
+                [ HP.value ""
+                , HP.disabled true
+                ]
+                [ HH.text "Select an account..." ]
+            ] <> map renderAccountOption accounts
+          )
       ]
 
   renderAccountOption :: Account -> H.ComponentHTML Action () m
@@ -391,18 +397,19 @@ handleAction = case _ of
     H.modify_ \s -> s { isDarkMode = newDarkMode }
     -- Call JavaScript to toggle theme
     liftEffect $ toggleTheme unit
-  
+
   OpenCreateDialog -> do
-    let initialState = 
-          { description: ""
-          , fromAccountId: ""
-          , toAccountId: ""
-          , amount: ""
-          , date: ""
-          }
+    let
+      initialState =
+        { description: ""
+        , fromAccountId: ""
+        , toAccountId: ""
+        , amount: ""
+        , date: ""
+        }
     H.modify_ \s -> s { dialog = Just (CreateDialog initialState) }
     liftEffect $ dialogShow "transaction-dialog"
-  
+
   OpenEditDialog transactionId -> do
     -- Find the transaction to edit from ledger rows
     state <- H.get
@@ -410,23 +417,24 @@ handleAction = case _ of
       Loaded appData -> do
         case findTransaction transactionId appData.ledgerRows of
           Just (LedgerViewRow row) -> do
-            let editState = 
-                  { transactionId: row.transactionId
-                  , description: row.description
-                  , fromAccountId: show row.fromAccountId
-                  , toAccountId: show row.toAccountId
-                  , amount: show row.flowAmount
-                  , date: row.date
-                  }
+            let
+              editState =
+                { transactionId: row.transactionId
+                , description: row.description
+                , fromAccountId: show row.fromAccountId
+                , toAccountId: show row.toAccountId
+                , amount: show row.flowAmount
+                , date: row.date
+                }
             H.modify_ \s -> s { dialog = Just (EditDialog editState) }
             liftEffect $ dialogShow "transaction-dialog"
           Nothing -> pure unit
       _ -> pure unit
-  
+
   CloseDialog -> do
     H.modify_ \s -> s { dialog = Nothing }
     liftEffect $ dialogClose "transaction-dialog"
-  
+
   SaveDialog -> do
     state <- H.get
     case state.dialog of
@@ -443,7 +451,7 @@ handleAction = case _ of
         -- Refresh all data
         handleAction LoadAllData
       Nothing -> pure unit
-  
+
   CreateDialogChanged createAction -> do
     state <- H.get
     case state.dialog of
@@ -451,7 +459,7 @@ handleAction = case _ of
         let newState = updateCreateState createAction createState
         H.modify_ \s -> s { dialog = Just (CreateDialog newState) }
       _ -> pure unit
-  
+
   EditDialogChanged editAction -> do
     state <- H.get
     case state.dialog of
@@ -467,9 +475,8 @@ findTransaction transactionId rows =
     Just { head: row, tail: rest } ->
       case row of
         LedgerViewRow r ->
-          if r.transactionId == transactionId
-            then Just row
-            else findTransaction transactionId rest
+          if r.transactionId == transactionId then Just row
+          else findTransaction transactionId rest
 
 updateCreateState :: CreateDialogAction -> CreateDialogState -> CreateDialogState
 updateCreateState action state =
@@ -489,28 +496,31 @@ updateEditState action state =
     EditAmountChanged amount -> state { amount = amount }
     EditDateChanged date -> state { date = date }
 
+baseUrl :: String
+baseUrl = "http://localhost:8081"
+
 fetchLedgerView :: Aff (Either String (Array LedgerViewRow))
 fetchLedgerView = do
   -- Fetch ledger view for checking account (ID = 2) from the API
-  result <- AX.get ResponseFormat.string "http://localhost:8080/accounts/2/ledger"
+  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts/2/ledger")
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
       case JSON.readJSON response.body of
         Left err -> pure $ Left $ "JSON decode error: " <> show err
-        Right (ledgerRows :: Array LedgerViewRow) -> 
+        Right (ledgerRows :: Array LedgerViewRow) ->
           pure $ Right ledgerRows
 
 fetchAccounts :: Aff (Either String (Array Account))
 fetchAccounts = do
   -- Fetch accounts from the API
-  result <- AX.get ResponseFormat.string "http://localhost:8080/accounts"
+  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts")
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
       case JSON.readJSON response.body of
         Left err -> pure $ Left $ "JSON decode error: " <> show err
-        Right (accounts :: Array Account) -> 
+        Right (accounts :: Array Account) ->
           pure $ Right accounts
 
 -- Foreign import to call JavaScript theme toggle
