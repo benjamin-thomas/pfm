@@ -4,12 +4,12 @@ import Prelude
 
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
-import Control.Apply (lift2)
 import Control.Parallel (parallel, sequential)
-import Data.Array (length, uncons)
+import Data.Array (length, reverse, uncons, zip, (:))
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
@@ -21,12 +21,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import Shared.Types
-  ( Account(..)
-  , LedgerViewRow(LedgerViewRow)
-  , Transaction(..)
-  , User
-  )
+import Shared.Types (Account(..), LedgerViewRow(LedgerViewRow), User)
 import Yoga.JSON as JSON
 
 -- Data and Status types for parallel loading
@@ -198,11 +193,14 @@ render state =
               ]
           ]
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
-          (map renderLedgerRow appData.ledgerRows)
+          (map renderLedgerRowWithBalance (reverse $ attachPriorBalance appData.ledgerRows))
       ]
 
-  renderLedgerRow :: LedgerViewRow -> H.ComponentHTML Action () m
-  renderLedgerRow (LedgerViewRow row) =
+  renderLedgerRowWithBalance :: { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
+  renderLedgerRowWithBalance { transaction, priorBalance } = renderLedgerRow transaction priorBalance
+
+  renderLedgerRow :: LedgerViewRow -> String -> H.ComponentHTML Action () m
+  renderLedgerRow (LedgerViewRow row) priorBalance =
     let
       isPositive = row.flowCents > 0
       amountClass =
@@ -231,8 +229,12 @@ render state =
                 ]
             , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
                 [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
-                    [ HH.span [ HP.class_ (HH.ClassName "balance-after") ]
-                        [ HH.text $ show row.runningBalance <> " €" ]
+                    [ HH.span [ HP.class_ (HH.ClassName "balance-before") ]
+                        [ HH.text $ priorBalance <> " €" ]
+                    , HH.span [ HP.class_ (HH.ClassName "arrow-icon") ]
+                        [ HH.text " → " ]
+                    , HH.span [ HP.class_ (HH.ClassName "balance-after") ]
+                        [ HH.text $ row.runningBalance <> " €" ]
                     ]
                 ]
             ]
@@ -466,6 +468,23 @@ handleAction = case _ of
         let newState = updateEditState editAction editState
         H.modify_ \s -> s { dialog = Just (EditDialog newState) }
       _ -> pure unit
+
+-- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
+attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
+attachPriorBalance transactions =
+  case uncons transactions of
+    Nothing -> []
+    Just { head: first, tail: rest } ->
+      let
+        firstWithPrior = { transaction: first, priorBalance: "0.00" }
+        restWithPrior = zip rest transactions
+          # map \(Tuple current previous) ->
+              let
+                (LedgerViewRow prevRow) = previous
+              in
+                { transaction: current, priorBalance: prevRow.runningBalance }
+      in
+        firstWithPrior : restWithPrior
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
