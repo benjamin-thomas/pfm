@@ -204,7 +204,7 @@ render state =
   renderLedgerRow :: LedgerViewRow -> H.ComponentHTML Action () m
   renderLedgerRow (LedgerViewRow row) =
     let
-      isPositive = row.flowAmount > 0.0
+      isPositive = row.flowCents > 0
       amountClass =
         if isPositive then
           "transaction-item__amount transaction-item__amount--positive"
@@ -220,14 +220,14 @@ render state =
             [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
                 [ HH.div [ HP.class_ (HH.ClassName "transaction-item__details") ]
                     [ HH.div [ HP.class_ (HH.ClassName "transaction-item__description") ]
-                        [ HH.text row.description ]
+                        [ HH.text row.descr ]
                     , HH.div [ HP.class_ (HH.ClassName "transaction-item__accounts") ]
                         [ HH.text $ row.fromAccountName <> " → " <> row.toAccountName ]
                     ]
                 , HH.div [ HP.class_ (HH.ClassName "transaction-item__date") ]
                     [ HH.text row.date ]
                 , HH.div [ HP.class_ (HH.ClassName amountClass) ]
-                    [ HH.text $ amountSign <> show row.flowAmount <> " €" ]
+                    [ HH.text $ amountSign <> row.flow <> " €" ]
                 ]
             , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
                 [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
@@ -395,7 +395,6 @@ handleAction = case _ of
     state <- H.get
     let newDarkMode = not state.isDarkMode
     H.modify_ \s -> s { isDarkMode = newDarkMode }
-    -- Call JavaScript to toggle theme
     liftEffect $ toggleTheme unit
 
   OpenCreateDialog -> do
@@ -420,10 +419,10 @@ handleAction = case _ of
             let
               editState =
                 { transactionId: row.transactionId
-                , description: row.description
+                , description: row.descr
                 , fromAccountId: show row.fromAccountId
                 , toAccountId: show row.toAccountId
-                , amount: show row.flowAmount
+                , amount: row.flow
                 , date: row.date
                 }
             H.modify_ \s -> s { dialog = Just (EditDialog editState) }

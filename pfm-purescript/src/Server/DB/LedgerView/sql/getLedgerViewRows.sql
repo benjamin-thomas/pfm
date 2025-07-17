@@ -7,10 +7,17 @@ SELECT y.transaction_id
      , y.date AS date_unix
      , date(y.date, 'unixepoch') AS date
      , y.descr
+     , SOUNDEX(y.descr) AS soundex_descr
      , y.flow_cents
+     , printf('%.2f', y.flow_cents / 100.0) AS flow
      , y.running_balance_cents
+     , printf('%.2f', y.running_balance_cents / 100.0) AS running_balance
      , y.created_at AS created_at_unix
+     , datetime(y.created_at, 'unixepoch') AS created_at_utc
+     , datetime(y.created_at, 'unixepoch', 'localtime') AS created_at_tz
      , y.updated_at AS updated_at_unix
+     , datetime(y.updated_at, 'unixepoch') AS updated_at_utc
+     , datetime(y.updated_at, 'unixepoch', 'localtime') AS updated_at_tz
 FROM (
         SELECT x.*
       , SUM(x.flow_cents) OVER (ORDER BY x.date ASC, x.transaction_id ASC) AS running_balance_cents
@@ -40,4 +47,7 @@ FROM (
         WHERE t.to_account_id = ? OR t.from_account_id = ?
         )x
 )y
+
+-- NOTE: The front computes the prior balance (first row is 0)
+--       So, because of this, it's better to reverse the rows there for now.
 ORDER BY y.date ASC, y.transaction_id ASC

@@ -4,7 +4,6 @@ module Server.Conversion
 
 import Prelude
 
-import Data.Int (toNumber)
 import Server.DB.LedgerView (LedgerViewRowDB(..))
 import Shared.Types (LedgerViewRow(..))
 
@@ -18,11 +17,18 @@ dbLedgerViewRowToLedgerViewRow (LedgerViewRowDB dbRow) =
     , fromAccountName: dbRow.fromAccountName
     , toAccountId: dbRow.toAccountId
     , toAccountName: dbRow.toAccountName
+    , dateUnix: dbRow.dateUnix
     , date: dbRow.date -- Already formatted by SQLite
-    , description: dbRow.descr
-    , flowAmount: centsToNumber dbRow.flowCents
-    , runningBalance: centsToNumber dbRow.runningBalanceCents
+    , descr: dbRow.descr
+    , soundexDescr: dbRow.soundexDescr
+    , flowCents: dbRow.flowCents
+    , flow: dbRow.flow
+    , runningBalanceCents: dbRow.runningBalanceCents
+    , runningBalance: dbRow.runningBalance
+    , createdAtUnix: dbRow.createdAtUnix
+    , createdAtUtc: dbRow.createdAtUtc
+    , createdAtTz: dbRow.createdAtTz
+    , updatedAtUnix: dbRow.updatedAtUnix
+    , updatedAtUtc: dbRow.updatedAtUtc
+    , updatedAtTz: dbRow.updatedAtTz
     }
-  where
-  centsToNumber :: Int -> Number
-  centsToNumber cents = (toNumber cents) / 100.0

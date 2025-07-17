@@ -254,12 +254,12 @@ spec db = do
         case ledgerRows of
           [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First transaction: money going out from checking account (negative flow)
-            row1.flowAmount `shouldSatisfy` (_ < 0.0)
-            row1.runningBalance `shouldSatisfy` (_ < 0.0)
+            row1.flowCents `shouldSatisfy` (_ < 0)
+            row1.runningBalanceCents `shouldSatisfy` (_ < 0)
 
             -- Second transaction: money coming into checking account (positive flow)
-            row2.flowAmount `shouldSatisfy` (_ > 0.0)
-            row2.runningBalance `shouldSatisfy` (_ > row1.runningBalance)
+            row2.flowCents `shouldSatisfy` (_ > 0)
+            row2.runningBalanceCents `shouldSatisfy` (_ > row1.runningBalanceCents)
           _ -> liftEffect $ throw "Expected exactly 2 ledger rows"
 
       it "should calculate running balance correctly" do
@@ -269,11 +269,11 @@ spec db = do
         case ledgerRows of
           [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First row: -$50.00, running balance should be -$50.00
-            row1.flowAmount `shouldEqual` (-50.0)
-            row1.runningBalance `shouldEqual` (-50.0)
+            row1.flowCents `shouldEqual` (-5000)
+            row1.runningBalanceCents `shouldEqual` (-5000)
 
             -- Second row: +$2000.00, running balance should be $1950.00
-            row2.flowAmount `shouldEqual` 2000.0
-            row2.runningBalance `shouldEqual` 1950.0
+            row2.flowCents `shouldEqual` 200000
+            row2.runningBalanceCents `shouldEqual` 195000
           _ -> liftEffect $ throw "Expected exactly 2 ledger rows for balance test"
 

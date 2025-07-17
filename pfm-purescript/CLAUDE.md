@@ -63,3 +63,13 @@ Example:
 This approach helps future maintainers understand the dependency graph and avoid accidentally removing required packages.
 
 Make sure to update these "comments" as we add or remove JS dependencies.
+
+### SQLite3 Special Installation
+
+The `sqlite3` package MUST be installed using the system SQLite library to enable SOUNDEX support:
+
+```bash
+npm install sqlite3 --build-from-source --sqlite=/usr
+```
+
+This is similar to the Haskell app's approach with the `+systemlib` flag in cabal.project.

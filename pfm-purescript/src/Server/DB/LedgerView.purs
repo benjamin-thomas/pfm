@@ -27,10 +27,17 @@ newtype LedgerViewRow = MkLedgerViewRow
   , date_unix :: Int
   , date :: String -- ISO date from SQLite
   , descr :: String
+  , soundex_descr :: String
   , flow_cents :: Int -- Positive for money coming in, negative for going out
+  , flow :: String -- Formatted as decimal string
   , running_balance_cents :: Int -- Running balance in cents
+  , running_balance :: String -- Formatted as decimal string
   , created_at_unix :: Int
+  , created_at_utc :: String
+  , created_at_tz :: String
   , updated_at_unix :: Int
+  , updated_at_utc :: String
+  , updated_at_tz :: String
   }
 
 derive instance Generic LedgerViewRow _
@@ -47,10 +54,17 @@ newtype LedgerViewRowDB = LedgerViewRowDB
   , dateUnix :: Int
   , date :: String -- ISO date from SQLite
   , descr :: String
+  , soundexDescr :: String
   , flowCents :: Int -- Positive for money coming in, negative for going out
+  , flow :: String -- Formatted as decimal string
   , runningBalanceCents :: Int -- Running balance in cents
+  , runningBalance :: String -- Formatted as decimal string
   , createdAtUnix :: Int
+  , createdAtUtc :: String
+  , createdAtTz :: String
   , updatedAtUnix :: Int
+  , updatedAtUtc :: String
+  , updatedAtTz :: String
   }
 
 derive instance Eq LedgerViewRowDB
@@ -73,10 +87,17 @@ rowToLedgerViewRowDB (MkLedgerViewRow row) = LedgerViewRowDB
   , dateUnix: row.date_unix
   , date: row.date
   , descr: row.descr
+  , soundexDescr: row.soundex_descr
   , flowCents: row.flow_cents
+  , flow: row.flow
   , runningBalanceCents: row.running_balance_cents
+  , runningBalance: row.running_balance
   , createdAtUnix: row.created_at_unix
+  , createdAtUtc: row.created_at_utc
+  , createdAtTz: row.created_at_tz
   , updatedAtUnix: row.updated_at_unix
+  , updatedAtUtc: row.updated_at_utc
+  , updatedAtTz: row.updated_at_tz
   }
 
 -- | Get ledger view rows for a specific account ID

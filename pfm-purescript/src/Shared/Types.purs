@@ -58,10 +58,20 @@ newtype LedgerViewRow = LedgerViewRow
   , fromAccountName :: String
   , toAccountId :: Int
   , toAccountName :: String
+  , dateUnix :: Int
   , date :: String -- ISO date string
-  , description :: String
-  , flowAmount :: Number -- Positive for inflow, negative for outflow
-  , runningBalance :: Number -- Running balance
+  , descr :: String
+  , soundexDescr :: String
+  , flowCents :: Int
+  , flow :: String -- Formatted as decimal string
+  , runningBalanceCents :: Int
+  , runningBalance :: String -- Formatted as decimal string
+  , createdAtUnix :: Int
+  , createdAtUtc :: String
+  , createdAtTz :: String
+  , updatedAtUnix :: Int
+  , updatedAtUtc :: String
+  , updatedAtTz :: String
   }
 
 derive instance Generic LedgerViewRow _

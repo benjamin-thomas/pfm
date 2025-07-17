@@ -32,7 +32,9 @@
       "the SQLite database."
     ],
     "sqlite3": [
-      "Required by PureScript's 'node-sqlite3' package."
+      "Required by PureScript's 'node-sqlite3' package.",
+      "IMPORTANT: Must be installed with system SQLite for SOUNDEX support:",
+      "npm install sqlite3 --build-from-source --sqlite=/usr"
     ],
     "xhr2": [
       "Required by the PureScript 'affjax-node' package.",
