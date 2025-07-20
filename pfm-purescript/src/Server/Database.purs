@@ -13,7 +13,7 @@ import Data.Date (Date)
 import Data.DateTime.Instant (Instant, fromDate, unInstant)
 import Data.Decimal as Decimal
 import Data.Either (Either(..))
-import Data.Int (floor)
+import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (trim)
@@ -29,7 +29,6 @@ import SQLite3 as SQLite3
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.OfxParser (StatementTransaction, TimeStamp(..), parseOfx)
-import Shared.Types (User(..))
 
 -- | Initialize the database and create tables
 initDatabase :: String -> Aff SQLite3.DBConnection
@@ -173,7 +172,7 @@ dateToUnixMs date =
     milliseconds
 
 dateToUnixS :: Date -> Int
-dateToUnixS date = floor $ dateToUnixMs date / 1000.0
+dateToUnixS date = Int.floor $ dateToUnixMs date / 1000.0
 
 -- | Convert TimeStamp to Unix timestamp
 timestampToUnixMs :: TimeStamp -> Int
@@ -190,7 +189,7 @@ timestampToUnixMs ts = case spy "timestampToUnix" ts of
 fromOfxTransaction :: String -> StatementTransaction -> TransactionQueries.TransactionNewRow
 fromOfxTransaction accountNumber tx =
   let
-    cents = floor $ Decimal.toNumber tx.amount * 100.0
+    cents = Int.round $ Decimal.toNumber tx.amount * 100.0
 
     -- Hard-coded account IDs (matching Haskell version)
     checkingAccountId = 2

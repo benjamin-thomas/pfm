@@ -7,7 +7,7 @@
     "preserver": "spago build",
     "server": "rg --files ./output/Server.Main/index.js | entr -rc node -e \"import('./output/Server.Main/index.js').then(m => m.main())\"",
     "preclient": "spago build",
-    "client": "parcel --port=1234 index.html",
+    "client": "parcel --port=4001 index.html",
     "server:alt": "rg --files ./packages.dhall ./src/ | entr -rc spago run --main Server.Main",
     "test:all": "npm run test && npm run test:e2e",
     "test:all:watch": "rg --files ./test/ ./src/ | entr -rc npm run test:all",

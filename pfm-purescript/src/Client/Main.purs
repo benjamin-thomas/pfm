@@ -160,7 +160,7 @@ render state =
                 [ HH.text "Retry" ]
             ]
         Loaded appData ->
-          HH.div_
+          HH.div [ HP.class_ (HH.ClassName "section") ]
             [ renderLedgerView state appData
             -- Dialog rendering
             , case state.dialog of
