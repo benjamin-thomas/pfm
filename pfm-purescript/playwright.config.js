@@ -3,7 +3,7 @@ export default {
   timeout: 30000,
   retries: 2,
   use: {
-    baseURL: 'http://localhost:1234',
+    baseURL: 'http://localhost:4001',
     headless: true,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -24,8 +24,8 @@ export default {
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'spago build && parcel serve --port=1234 index.html',
-      port: 1234,
+      command: 'spago build && parcel serve --port=4001 index.html',
+      port: 4001,
       reuseExistingServer: !process.env.CI,
     },
   ],

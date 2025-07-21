@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('PFM PureScript App', () => {
   test('should display ledger view and allow dark mode toggle', async ({ page }) => {
     // Navigate to the app
-    await page.goto('http://localhost:1234');
+    await page.goto('/');
 
     // Check that the app loads
     await expect(page.locator('h1')).toContainText('PFM - PureScript');
@@ -36,7 +36,7 @@ test.describe('PFM PureScript App', () => {
   });
 
   test('should display transaction amounts with correct styling', async ({ page }) => {
-    await page.goto('http://localhost:1234');
+    await page.goto('/');
 
     // Wait for transaction list to load
     await page.waitForSelector('.transaction-list');
@@ -48,12 +48,12 @@ test.describe('PFM PureScript App', () => {
     // If there are any transactions, they should be properly styled
     const positiveCount = await positiveAmounts.count();
     const negativeCount = await negativeAmounts.count();
-    
+
     expect(positiveCount + negativeCount).toBeGreaterThanOrEqual(0);
   });
 
   test('should open and close create transaction dialog', async ({ page }) => {
-    await page.goto('http://localhost:1234');
+    await page.goto('/');
 
     // Wait for transaction list to load
     await page.waitForSelector('.transaction-list');
@@ -93,7 +93,7 @@ test.describe('PFM PureScript App', () => {
   });
 
   test('should open and close edit transaction dialog', async ({ page }) => {
-    await page.goto('http://localhost:1234');
+    await page.goto('/');
 
     // Wait for transaction list to load
     await page.waitForSelector('.transaction-list');
@@ -140,7 +140,7 @@ test.describe('PFM PureScript App', () => {
   });
 
   test('should allow form field interaction in dialogs', async ({ page }) => {
-    await page.goto('http://localhost:1234');
+    await page.goto('/');
 
     // Wait for transaction list to load
     await page.waitForSelector('.transaction-list');
@@ -156,23 +156,23 @@ test.describe('PFM PureScript App', () => {
     // Test form field interaction
     const descriptionField = page.locator('input[id="description"]');
     const testDescription = 'Test Transaction Description';
-    
+
     await descriptionField.fill(testDescription);
     await expect(descriptionField).toHaveValue(testDescription);
 
     // Test amount field
     const amountField = page.locator('input[id="amount"]');
     const testAmount = '123.45';
-    
+
     await amountField.fill(testAmount);
     await expect(amountField).toHaveValue(testAmount);
 
     // Test account fields (now select dropdowns)
     const fromAccountField = page.locator('select[id="from-account"]');
-    
+
     // Wait a bit for accounts to load, then try to select
     await page.waitForTimeout(1000);
-    
+
     // Select the first available account (should be account ID 1)
     await fromAccountField.selectOption('1');
     await expect(fromAccountField).toHaveValue('1');
