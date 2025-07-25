@@ -4,7 +4,11 @@ import Prelude hiding ((/))
 
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.String (Pattern(..), split)
+import Data.Int (fromString)
+import Data.Traversable (traverse)
+import Foreign.Object as FO
 import Effect (Effect)
 import Effect.Aff (runAff_)
 import Effect.Console (log)
@@ -41,6 +45,7 @@ data Route
   | Categories
   | CategoryById Int
   | Accounts
+  | AccountBalances
   | AccountLedger Int
   | Budgets
   | BudgetById Int
@@ -57,6 +62,7 @@ route = mkRoute
   , "Categories": "categories" / noArgs
   , "CategoryById": "categories" / int segment
   , "Accounts": "accounts" / noArgs
+  , "AccountBalances": "accounts" / "balances" / noArgs
   , "AccountLedger": "accounts" / int segment / "ledger"
   , "Budgets": "budgets" / noArgs
   , "BudgetById": "budgets" / int segment
@@ -101,22 +107,22 @@ jsonMiddleware route' request = do
   pure $ response { headers = header "Content-Type" "application/json" <> response.headers }
 
 makeRouter :: DBConnection -> Request Route -> ResponseM
-makeRouter db { route: route', method } =
-  case route' of
+makeRouter db req =
+  case req.route of
     Home ->
-      case method of
+      case req.method of
         Get -> ok "PFM PureScript Server is running!"
         _ -> methodNotAllowed
 
     Categories ->
-      case method of
+      case req.method of
         Get -> do
           categories <- Category.getAllCategories db
           ok $ JSON.writeJSON categories
         _ -> methodNotAllowed
 
     CategoryById categoryId ->
-      case method of
+      case req.method of
         Get -> do
           maybeCategory <- Category.getCategoryById categoryId db
           case maybeCategory of
@@ -125,28 +131,45 @@ makeRouter db { route: route', method } =
         _ -> methodNotAllowed
 
     Accounts ->
-      case method of
+      case req.method of
         Get -> do
           accounts <- Account.getAllAccounts db
           ok $ JSON.writeJSON accounts
         _ -> methodNotAllowed
 
+    AccountBalances ->
+      case req.method of
+        Get -> do
+          let accountIdsParam = FO.lookup "accountIds" req.query
+          case accountIdsParam of
+            Nothing -> response 400 $ JSON.writeJSON { error: "Missing accountIds parameter" }
+            Just idsStr -> do
+              let
+                idStrings = split (Pattern ",") idsStr
+                parsedIds = traverse fromString idStrings
+              case parsedIds of
+                Nothing -> response 400 $ JSON.writeJSON { error: "Invalid accountIds parameter: must be comma-separated integers" }
+                Just accountIds -> do
+                  balances <- Account.getAccountBalances accountIds db
+                  ok $ JSON.writeJSON balances
+        _ -> methodNotAllowed
+
     AccountLedger accountId ->
-      case method of
+      case req.method of
         Get -> do
           ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO accountId db
           ok $ JSON.writeJSON ledgerRows
         _ -> methodNotAllowed
 
     Budgets ->
-      case method of
+      case req.method of
         Get -> do
           budgets <- BudgetQueries.getAllBudgets db
           ok $ JSON.writeJSON budgets
         _ -> methodNotAllowed
 
     BudgetById budgetId ->
-      case method of
+      case req.method of
         Get -> do
           maybeBudget <- BudgetQueries.getBudgetById budgetId db
           case maybeBudget of
@@ -155,14 +178,14 @@ makeRouter db { route: route', method } =
         _ -> methodNotAllowed
 
     Transactions ->
-      case method of
+      case req.method of
         Get -> do
           transactions <- TransactionQueries.getAllTransactions db
           ok $ JSON.writeJSON transactions
         _ -> methodNotAllowed
 
     TransactionById transactionId ->
-      case method of
+      case req.method of
         Get -> do
           maybeTransaction <- TransactionQueries.getTransactionById transactionId db
           case maybeTransaction of

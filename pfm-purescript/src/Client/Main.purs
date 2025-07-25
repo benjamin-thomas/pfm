@@ -8,7 +8,7 @@ import Control.Parallel (parallel, sequential)
 import Data.Array (length, reverse, uncons, zip, (:))
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff)
@@ -21,7 +21,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
-import Shared.Types (Account(..), LedgerViewRow(LedgerViewRow), User)
+import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User)
 import Yoga.JSON as JSON
 
 -- Data and Status types for parallel loading
@@ -40,6 +40,7 @@ type AppData =
   { users :: Array User
   , ledgerRows :: Array LedgerViewRow
   , accounts :: Array Account
+  , balances :: Array AccountBalanceRead
   }
 
 -- Dialog state types
@@ -97,16 +98,20 @@ data Action
 
 -- Parallel data fetching function
 fetchAllData :: Aff (Either String AppData)
-fetchAllData = sequential $
-  ( \users ledgerRows accounts ->
-      case users, ledgerRows, accounts of
-        Right u, Right l, Right a -> Right { users: u, ledgerRows: l, accounts: a }
-        Left err, _, _ -> Left err
-        _, Left err, _ -> Left err
-        _, _, Left err -> Left err
-  ) <$> parallel fetchUsers
+fetchAllData = do
+  results <- sequential $ 
+    { users: _, ledgerRows: _, accounts: _, balances: _ }
+    <$> parallel fetchUsers
     <*> parallel fetchLedgerView
     <*> parallel fetchAccounts
+    <*> parallel fetchBalances
+  
+  pure $ do
+    users <- results.users
+    ledgerRows <- results.ledgerRows
+    accounts <- results.accounts
+    balances <- results.balances
+    pure { users, ledgerRows, accounts, balances }
 
 -- Individual fetch functions
 fetchUsers :: Aff (Either String (Array User))
@@ -159,19 +164,71 @@ render state =
                 ]
                 [ HH.text "Retry" ]
             ]
-        Loaded appData ->
-          HH.div [ HP.class_ (HH.ClassName "section") ]
-            [ renderLedgerView state appData
-            -- Dialog rendering
-            , case state.dialog of
-                Just dialog -> renderDialog dialog appData
-                Nothing -> HH.text ""
-            ]
+        Loaded appData -> HH.span
+          []
+          [ HH.div
+              [ HP.class_ (HH.ClassName "section") ]
+              [ renderBalanceCards appData
+              ]
+          , HH.div
+              [ HP.class_ (HH.ClassName "section") ]
+              [ renderLedgerView appData ]
+          , case state.dialog of
+              Just dialog -> renderDialog dialog appData
+              Nothing -> HH.text ""
+          ]
     ]
   where
 
-  renderLedgerView :: State -> AppData -> H.ComponentHTML Action () m
-  renderLedgerView state appData =
+  renderBalanceCards :: AppData -> H.ComponentHTML Action () m
+  renderBalanceCards appData =
+    HH.div []
+      [ HH.h2 [ HP.class_ (HH.ClassName "section-title") ]
+          [ HH.text "Balances" ]
+      , HH.div
+          [ HP.class_ (HH.ClassName "balances") ]
+          (map renderBalanceCard appData.balances)
+      ]
+
+  renderBalanceCard :: AccountBalanceRead -> H.ComponentHTML Action () m
+  renderBalanceCard (AccountBalanceRead balance) =
+    let
+      colorAccent =
+        if balance.categoryName == "Assets" then
+          "#3498db"
+        else if balance.categoryName == "Expenses" then
+          "#e74c3c"
+        else
+          "#9b59b6"
+
+      -- Format amount with 2 decimal places
+      formattedAmount =
+        let
+          intPart = balance.accountBalance / 100
+          decPart =
+            if balance.accountBalance >= 0 then balance.accountBalance `mod` 100
+            else -(balance.accountBalance `mod` 100)
+          decStr = if decPart < 10 then "0" <> show decPart else show decPart
+        in
+          show intPart <> "." <> decStr <> " €"
+    in
+      HH.div
+        [ HP.class_ (HH.ClassName "balance-card")
+        , HP.style ("border-left-color: " <> colorAccent)
+        ]
+        [ HH.div
+            [ HP.class_ (HH.ClassName "balance-card__category") ]
+            [ HH.text balance.categoryName ]
+        , HH.div
+            [ HP.class_ (HH.ClassName "balance-card__account") ]
+            [ HH.text balance.accountName ]
+        , HH.div
+            [ HP.class_ (HH.ClassName "balance-card__amount") ]
+            [ HH.text formattedAmount ]
+        ]
+
+  renderLedgerView :: AppData -> H.ComponentHTML Action () m
+  renderLedgerView appData =
     HH.div [ HP.class_ (HH.ClassName "transaction-list") ]
       [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header") ]
           [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header-title") ]
@@ -540,6 +597,19 @@ fetchAccounts = do
         Left err -> pure $ Left $ "JSON decode error: " <> show err
         Right (accounts :: Array Account) ->
           pure $ Right accounts
+
+fetchBalances :: Aff (Either String (Array AccountBalanceRead))
+fetchBalances = do
+  -- Fetch account balances from the API
+  -- Using accountIds=2,3 to match the Elm implementation
+  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts/balances?accountIds=2,3")
+  case result of
+    Left err -> pure $ Left $ "Network error: " <> AX.printError err
+    Right response ->
+      case JSON.readJSON response.body of
+        Left err -> pure $ Left $ "JSON decode error: " <> show err
+        Right (balances :: Array AccountBalanceRead) ->
+          pure $ Right balances
 
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit

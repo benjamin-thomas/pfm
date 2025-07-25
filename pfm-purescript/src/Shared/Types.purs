@@ -79,3 +79,17 @@ derive newtype instance Show LedgerViewRow
 derive newtype instance Eq LedgerViewRow
 derive newtype instance ReadForeign LedgerViewRow
 derive newtype instance WriteForeign LedgerViewRow
+
+newtype AccountBalanceRead = AccountBalanceRead
+  { accountId :: Int
+  , accountName :: String
+  , categoryId :: Int
+  , categoryName :: String
+  , accountBalance :: Int
+  }
+
+derive instance Generic AccountBalanceRead _
+derive newtype instance Show AccountBalanceRead
+derive newtype instance Eq AccountBalanceRead
+derive newtype instance ReadForeign AccountBalanceRead
+derive newtype instance WriteForeign AccountBalanceRead

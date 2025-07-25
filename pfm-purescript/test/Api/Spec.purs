@@ -13,7 +13,7 @@ import Data.Maybe (Maybe(..))
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
-import Shared.Types (LedgerViewRow, Transaction, User(..))
+import Shared.Types (AccountBalanceRead(..), LedgerViewRow, Transaction, User(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.JSON as JSON
@@ -115,6 +115,86 @@ spec port = do
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (ledgerRows :: Array LedgerViewRow) ->
                 length ledgerRows `shouldSatisfy` (_ >= 0) -- May be empty initially
+
+    describe "Account Balances Endpoint" do
+      it "should get account balances with valid accountIds" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=2,3")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (balances :: Array AccountBalanceRead) -> do
+                length balances `shouldSatisfy` (_ >= 2) -- Should have at least 2 balances
+                -- Validate JSON structure of first balance
+                case head balances of
+                  Just (AccountBalanceRead balance) -> do
+                    balance.accountId `shouldSatisfy` (\id -> id == 2 || id == 3)
+                    balance.categoryId `shouldEqual` 2 -- Assets category
+                    balance.categoryName `shouldEqual` "Assets"
+                    balance.accountName `shouldSatisfy` (\name -> name == "Checking account" || name == "Savings account")
+                    balance.accountBalance `shouldSatisfy` (_ >= 0) -- Balance in cents
+                  Nothing -> shouldEqual "Expected at least one balance" "No balances found"
+
+      it "should return 400 error when accountIds parameter is missing" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 400) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left _ -> shouldEqual "Expected valid JSON" "Got JSON error"
+              Right (errorObj :: { error :: String }) ->
+                errorObj.error `shouldEqual` "Missing accountIds parameter"
+
+      it "should return 400 error when accountIds parameter contains invalid values" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=abc,xyz")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 400) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left _ -> shouldEqual "Expected valid JSON" "Got JSON error"
+              Right (errorObj :: { error :: String }) ->
+                errorObj.error `shouldEqual` "Invalid accountIds parameter: must be comma-separated integers"
+
+      it "should return 400 error when accountIds parameter is empty" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 400) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left _ -> shouldEqual "Expected valid JSON" "Got JSON error"
+              Right (errorObj :: { error :: String }) ->
+                errorObj.error `shouldEqual` "Invalid accountIds parameter: must be comma-separated integers"
+
+      it "should return empty array for non-existent account IDs" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=999,1000")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            -- Check Content-Type header
+            case response.headers of
+              headers -> headers `shouldSatisfy` (\h -> contains (Pattern "application/json") (show h))
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (balances :: Array AccountBalanceRead) ->
+                length balances `shouldEqual` 0
 
     describe "Budgets Endpoints" do
       it "should get all budgets" do

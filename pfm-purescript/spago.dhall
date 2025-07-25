@@ -15,6 +15,7 @@
   , "exceptions"
   , "foldable-traversable"
   , "foreign"
+  , "foreign-object"
   , "halogen"
   , "http-methods"
   , "httpurple"
