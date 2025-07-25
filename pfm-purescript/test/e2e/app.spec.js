@@ -139,6 +139,38 @@ test.describe('PFM PureScript App', () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test('should populate date field correctly in edit dialog', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Wait for at least one transaction to be present
+    await page.waitForSelector('.transaction-item');
+
+    // Click on the first transaction item
+    const firstTransaction = page.locator('.transaction-item').first();
+    await firstTransaction.click();
+
+    // Wait for dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Check that date field has a proper datetime-local value (not empty or invalid format)
+    const dateField = page.locator('input[id="date"]');
+    const dateValue = await dateField.inputValue();
+
+    // Date field should not be empty
+    expect(dateValue).not.toBe('');
+
+    // Date field should match datetime-local format (YYYY-MM-DDTHH:mm)
+    const dateTimeLocalPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+    expect(dateValue).toMatch(dateTimeLocalPattern);
+
+    // Close dialog
+    await page.locator('.dialog-actions .button').first().click();
+  });
+
   test('should allow form field interaction in dialogs', async ({ page }) => {
     await page.goto('/');
 

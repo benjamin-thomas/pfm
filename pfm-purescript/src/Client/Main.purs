@@ -99,13 +99,13 @@ data Action
 -- Parallel data fetching function
 fetchAllData :: Aff (Either String AppData)
 fetchAllData = do
-  results <- sequential $ 
+  results <- sequential $
     { users: _, ledgerRows: _, accounts: _, balances: _ }
-    <$> parallel fetchUsers
-    <*> parallel fetchLedgerView
-    <*> parallel fetchAccounts
-    <*> parallel fetchBalances
-  
+      <$> parallel fetchUsers
+      <*> parallel fetchLedgerView
+      <*> parallel fetchAccounts
+      <*> parallel fetchBalances
+
   pure $ do
     users <- results.users
     ledgerRows <- results.ledgerRows
@@ -482,7 +482,7 @@ handleAction = case _ of
                 , fromAccountId: show row.fromAccountId
                 , toAccountId: show row.toAccountId
                 , amount: row.flow
-                , date: row.date
+                , date: formatUnixToDateTimeLocal row.dateUnix
                 }
             H.modify_ \s -> s { dialog = Just (EditDialog editState) }
             liftEffect $ dialogShow "transaction-dialog"
@@ -617,6 +617,9 @@ foreign import toggleTheme :: Unit -> Effect Unit
 -- Foreign imports for dialog control
 foreign import dialogShow :: String -> Effect Unit
 foreign import dialogClose :: String -> Effect Unit
+
+-- Foreign import for date formatting
+foreign import formatUnixToDateTimeLocal :: Int -> String
 
 type InitArgs = { isDarkMode :: Boolean }
 
