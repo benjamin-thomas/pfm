@@ -409,7 +409,7 @@ render state =
       , makeAccountSelect "To Account" "to-account" createState.toAccountId
           (CreateDialogChanged <<< CreateToAccountChanged)
           appData.accounts
-      , makeTextField
+      , makeNumberField
           { label: "Amount"
           , fieldId: "amount"
           , value: createState.amount
@@ -437,7 +437,7 @@ render state =
       , makeAccountSelect "To Account" "to-account" editState.toAccountId
           (EditDialogChanged <<< EditToAccountChanged)
           appData.accounts
-      , makeTextField
+      , makeNumberField
           { label: "Amount"
           , fieldId: "amount"
           , value: editState.amount
@@ -490,6 +490,34 @@ render state =
           , HP.value value
           , HE.onValueInput onChange
           ]
+      ]
+
+  makeNumberField
+    :: { label :: String
+       , fieldId :: String
+       , value :: String
+       , onChange :: String -> Action
+       , autofocus :: Boolean
+       }
+    -> H.ComponentHTML Action () m
+  makeNumberField { label, fieldId, value, onChange, autofocus } =
+    HH.div
+      [ HP.class_ (HH.ClassName "field") ]
+      [ HH.label
+          [ HP.class_ (HH.ClassName "field__label")
+          , HP.for fieldId
+          ]
+          [ HH.text label ]
+      , HH.input
+          ( [ HP.class_ (HH.ClassName "field__input")
+            , HP.id fieldId
+            , HP.type_ HP.InputNumber
+            , HP.step (HP.Step 0.01)
+            , HP.min 0.0
+            , HP.value value
+            , HE.onValueInput onChange
+            ] <> if autofocus then [ HP.autofocus true ] else []
+          )
       ]
 
   makeAccountSelect :: String -> String -> String -> (String -> Action) -> Array Account -> H.ComponentHTML Action () m
