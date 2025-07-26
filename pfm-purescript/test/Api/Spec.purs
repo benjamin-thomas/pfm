@@ -394,3 +394,105 @@ spec port = do
                                 updated.descr `shouldEqual` "Updated transaction"
                                 updated.flowCents `shouldEqual` (-2500)
                                 updated.toAccountId `shouldEqual` 7
+
+      it "should delete an existing transaction and update balances" do
+        -- Get initial balance
+        initialBalanceResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=2")
+        initialBalance <- case initialBalanceResult of
+          Left err -> do
+            shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+            pure 0
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> do
+                shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+                pure 0
+              Right (balances :: Array AccountBalanceRead) -> do
+                case Array.head balances of
+                  Just (AccountBalanceRead balance) -> pure balance.accountBalance
+                  Nothing -> pure 0
+
+        -- Create a transaction to delete
+        let
+          createData =
+            { budgetId: Nothing :: Maybe Int
+            , fromAccountId: 2 -- Checking account
+            , toAccountId: 6 -- Unknown expense
+            , dateUnix: 1719792000
+            , descr: "Transaction to delete"
+            , cents: 5000 -- $50.00
+            }
+
+        createResult <- AX.request AX.defaultRequest
+          { method = Left POST
+          , url = "http://localhost:" <> show port <> "/transactions"
+          , responseFormat = ResponseFormat.string
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.string $ JSON.writeJSON createData
+          }
+
+        case createResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right _ -> pure unit
+
+        -- Get the transaction ID and verify it exists
+        ledgerResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+        transactionId <- case ledgerResult of
+          Left err -> do
+            shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+            pure 0
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> do
+                shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+                pure 0
+              Right (transactions :: Array LedgerViewRow) -> do
+                let deleteTxn = Array.find (\(LedgerViewRow row) -> row.descr == "Transaction to delete") transactions
+                case deleteTxn of
+                  Nothing -> do
+                    shouldEqual "Transaction found" "Transaction not found"
+                    pure 0
+                  Just (LedgerViewRow txn) -> do
+                    txn.descr `shouldEqual` "Transaction to delete"
+                    txn.flowCents `shouldEqual` (-5000)
+                    pure txn.transactionId
+
+        -- Delete the transaction
+        deleteResult <- AX.request AX.defaultRequest
+          { method = Left DELETE
+          , url = "http://localhost:" <> show port <> "/transactions/" <> show transactionId
+          , responseFormat = ResponseFormat.string
+          , content = Nothing
+          }
+
+        case deleteResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            response.body `shouldEqual` "Transaction deleted"
+
+        -- Verify the transaction is gone
+        verifyResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+        case verifyResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (remainingTransactions :: Array LedgerViewRow) -> do
+                let deletedTxn = Array.find (\(LedgerViewRow row) -> row.descr == "Transaction to delete") remainingTransactions
+                case deletedTxn of
+                  Nothing -> pure unit -- Good, transaction is gone
+                  Just _ -> shouldEqual "Transaction deleted" "Transaction still exists"
+
+        -- Verify balance is restored
+        finalBalanceResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=2")
+        case finalBalanceResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (balances :: Array AccountBalanceRead) -> do
+                case Array.head balances of
+                  Just (AccountBalanceRead balance) ->
+                    balance.accountBalance `shouldEqual` initialBalance
+                  Nothing -> shouldEqual "Balance found" "No balance found"

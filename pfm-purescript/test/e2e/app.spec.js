@@ -328,4 +328,67 @@ test.describe('PFM PureScript App', () => {
     await expect(page.locator('.transaction-item__description').first()).toContainText('(edited)');
   });
 
+  test('should delete a transaction with confirmation', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Count initial transactions
+    const initialCount = await page.locator('.transaction-item').count();
+    expect(initialCount).toBeGreaterThan(0);
+
+    // Click on the first transaction to edit it
+    const firstTransaction = page.locator('.transaction-item').first();
+
+    // Get its description so we can verify it's gone later
+    const descriptionToDelete = await firstTransaction.locator('.transaction-item__description').textContent();
+
+    await firstTransaction.click();
+
+    // Wait for edit dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Check that three-dot menu is present
+    const menuButton = page.locator('.menu-button');
+    await expect(menuButton).toBeVisible();
+    await expect(menuButton).toHaveAttribute('aria-label', 'More options');
+
+    // Hover over menu to show dropdown
+    await menuButton.hover();
+
+    // Check that delete menu item is visible
+    const deleteMenuItem = page.locator('.menu-item', { hasText: 'Delete' });
+    await expect(deleteMenuItem).toBeVisible();
+
+    // Set up dialog handler before clicking delete
+    page.on('dialog', async dialog => {
+      expect(dialog.type()).toBe('confirm');
+      expect(dialog.message()).toBe('Are you sure you want to delete this transaction?');
+      await dialog.accept(); // Confirm deletion
+    });
+
+    // Click delete menu item
+    await deleteMenuItem.click();
+
+    // Wait for dialog to close
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+    // Wait for transaction list to refresh
+    await page.waitForTimeout(2000);
+
+    // Reload page to verify data persistence
+    await page.reload();
+    await page.waitForSelector('.transaction-list');
+
+    // Verify transaction count decreased
+    const finalCount = await page.locator('.transaction-item').count();
+    expect(finalCount).toBe(initialCount - 1);
+
+    // Verify the deleted transaction is no longer in the list
+    const remainingDescriptions = await page.locator('.transaction-item__description').allTextContents();
+    expect(remainingDescriptions).not.toContain(descriptionToDelete);
+  });
+
 });

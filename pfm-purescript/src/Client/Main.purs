@@ -12,7 +12,7 @@ import Data.Array (length, reverse, uncons, zip, (:))
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Number
 import Data.String as String
 import Data.Tuple (Tuple(..))
@@ -100,6 +100,7 @@ data Action
   | OpenEditDialog Int
   | CloseDialog
   | SaveDialog
+  | DeleteTransaction
   | CreateDialogChanged CreateDialogAction
   | EditDialogChanged EditDialogAction
 
@@ -320,6 +321,29 @@ render state =
                       CreateDialog _ -> "Create Transaction"
                       EditDialog _ -> "Edit Transaction"
                   ]
+              , case dialog of
+                  CreateDialog _ -> HH.text ""
+                  EditDialog _ ->
+                    HH.div
+                      [ HP.class_ (HH.ClassName "dialog-menu") ]
+                      [ HH.button
+                          [ HP.class_ (HH.ClassName "menu-button")
+                          , HP.attr (HH.AttrName "aria-label") "More options"
+                          ]
+                          [ HH.text "⋮" ]
+                      , HH.div
+                          [ HP.class_ (HH.ClassName "menu-dropdown") ]
+                          [ HH.button
+                              [ HP.class_ (HH.ClassName "menu-item")
+                              , HE.onClick \_ -> DeleteTransaction
+                              ]
+                              [ HH.text "Delete" ]
+                          , HH.button
+                              [ HP.class_ (HH.ClassName "menu-item menu-item--disabled")
+                              ]
+                              [ HH.text "Duplicate" ]
+                          ]
+                      ]
               ]
           , renderDialogForm dialog appData
           , HH.div
@@ -348,16 +372,26 @@ render state =
   renderCreateForm createState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
-      [ makeTextField "Description" "description" createState.description
-          (CreateDialogChanged <<< CreateDescrChanged)
+      [ makeTextField
+          { label: "Description"
+          , fieldId: "description"
+          , value: createState.description
+          , onChange: CreateDialogChanged <<< CreateDescrChanged
+          , autofocus: false
+          }
       , makeAccountSelect "From Account" "from-account" createState.fromAccountId
           (CreateDialogChanged <<< CreateFromAccountChanged)
           appData.accounts
       , makeAccountSelect "To Account" "to-account" createState.toAccountId
           (CreateDialogChanged <<< CreateToAccountChanged)
           appData.accounts
-      , makeTextField "Amount" "amount" createState.amount
-          (CreateDialogChanged <<< CreateAmountChanged)
+      , makeTextField
+          { label: "Amount"
+          , fieldId: "amount"
+          , value: createState.amount
+          , onChange: CreateDialogChanged <<< CreateAmountChanged
+          , autofocus: false
+          }
       , makeDateField "Date" "date" createState.date
           (CreateDialogChanged <<< CreateDateChanged)
       ]
@@ -366,22 +400,39 @@ render state =
   renderEditForm editState appData =
     HH.form
       [ HP.class_ (HH.ClassName "dialog-form") ]
-      [ makeTextField "Description" "description" editState.description
-          (EditDialogChanged <<< EditDescrChanged)
+      [ makeTextField
+          { label: "Description"
+          , fieldId: "description"
+          , value: editState.description
+          , onChange: EditDialogChanged <<< EditDescrChanged
+          , autofocus: false
+          }
       , makeAccountSelect "From Account" "from-account" editState.fromAccountId
           (EditDialogChanged <<< EditFromAccountChanged)
           appData.accounts
       , makeAccountSelect "To Account" "to-account" editState.toAccountId
           (EditDialogChanged <<< EditToAccountChanged)
           appData.accounts
-      , makeTextField "Amount" "amount" editState.amount
-          (EditDialogChanged <<< EditAmountChanged)
+      , makeTextField
+          { label: "Amount"
+          , fieldId: "amount"
+          , value: editState.amount
+          , onChange: EditDialogChanged <<< EditAmountChanged
+          , autofocus: true
+          }
       , makeDateField "Date" "date" editState.date
           (EditDialogChanged <<< EditDateChanged)
       ]
 
-  makeTextField :: String -> String -> String -> (String -> Action) -> H.ComponentHTML Action () m
-  makeTextField label fieldId value onChange =
+  makeTextField
+    :: { label :: String
+       , fieldId :: String
+       , value :: String
+       , onChange :: String -> Action
+       , autofocus :: Boolean
+       }
+    -> H.ComponentHTML Action () m
+  makeTextField { label, fieldId, value, onChange, autofocus } =
     HH.div
       [ HP.class_ (HH.ClassName "field") ]
       [ HH.label
@@ -390,12 +441,13 @@ render state =
           ]
           [ HH.text label ]
       , HH.input
-          [ HP.class_ (HH.ClassName "field__input")
-          , HP.id fieldId
-          , HP.type_ HP.InputText
-          , HP.value value
-          , HE.onValueInput onChange
-          ]
+          ( [ HP.class_ (HH.ClassName "field__input")
+            , HP.id fieldId
+            , HP.type_ HP.InputText
+            , HP.value value
+            , HE.onValueInput onChange
+            ] <> if autofocus then [ HP.autofocus true ] else []
+          )
       ]
 
   makeDateField :: String -> String -> String -> (String -> Action) -> H.ComponentHTML Action () m
@@ -593,6 +645,31 @@ handleAction action = case Debug.spy "action" action of
         H.modify_ \s -> s { dialog = Just (EditDialog newState) }
       _ -> pure unit
 
+  DeleteTransaction -> do
+    state <- H.get
+    case state.dialog of
+      Just (EditDialog editState) -> do
+        confirmed <- liftEffect $ confirmDialog "Are you sure you want to delete this transaction?"
+        when confirmed do
+          -- Send DELETE request
+          result <- H.liftAff $ AX.request
+            AX.defaultRequest
+              { method = Left DELETE
+              , url = baseUrl <> "/transactions/" <> show editState.transactionId
+              , responseFormat = ResponseFormat.string
+              }
+          case result of
+            Left err -> do
+              liftEffect $ log $ "Error deleting transaction: " <> AX.printError err
+            -- TODO: Show error in toast notification when implemented
+            Right response -> do
+              liftEffect $ log $ "Transaction deleted successfully. Status: " <> show response.status
+              liftEffect $ dialogClose "transaction-dialog"
+              H.modify_ \s -> s { dialog = Nothing }
+              -- Refresh all data
+              handleAction LoadAllData
+      _ -> pure unit
+
 -- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
 attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
 attachPriorBalance transactions =
@@ -687,6 +764,9 @@ foreign import dialogClose :: String -> Effect Unit
 
 -- Foreign import for date formatting
 foreign import formatUnixToDateTimeLocal :: Int -> String
+
+-- Foreign import for native confirmation dialog
+foreign import confirmDialog :: String -> Effect Boolean
 
 type InitArgs = { isDarkMode :: Boolean }
 

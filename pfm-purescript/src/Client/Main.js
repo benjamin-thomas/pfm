@@ -34,3 +34,8 @@ export const parseDateTimeLocal = (dateTimeStr) => {
     const date = new Date(dateTimeStr);
     return Math.floor(date.getTime() / 1000); // Convert milliseconds to seconds
 };
+
+// Native browser confirmation dialog
+export const confirmDialog = (message) => () => {
+    return window.confirm(message);
+};
