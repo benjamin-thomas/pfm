@@ -22,6 +22,7 @@ import Test.Spec.Runner.Node (runSpecAndExitProcess)
 foreign import removeFile :: String -> Effect Unit
 foreign import getRandomPort :: Effect Int
 foreign import getUniqueId :: Effect String
+foreign import registerExitHandler :: Effect Unit -> Effect Unit
 
 -- Removed seedDatabase function - now using setupTestFixtures from TestUtils
 
@@ -31,6 +32,11 @@ main = do
   uniqueId <- getUniqueId
   let dbPath = "./db.integration-test-" <> uniqueId <> ".sqlite"
   log $ "Using test database: " <> dbPath
+
+  -- Register cleanup handler to remove test database on exit
+  registerExitHandler do
+    log $ "Cleaning up test database: " <> dbPath
+    removeFile dbPath
 
   initDatabase dbPath # runAff_
     case _ of

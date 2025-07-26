@@ -14,3 +14,9 @@ export const getRandomPort = () => {
 };
 
 export const getUniqueId = () => randomUUID();
+
+export const registerExitHandler = (cleanup) => () => {
+    process.on('exit', cleanup);
+    process.on('SIGINT', cleanup);
+    process.on('SIGTERM', cleanup);
+};
