@@ -27,50 +27,6 @@ import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 spec :: SQLite3.DBConnection -> Spec Unit
 spec db = do
   describe "Database Integration Tests" do
-    -- describe "User Operations" do
-    --   it "should get one user" do
-    --     maybeUser <- DB.getUserById 1 db
-    --     maybeUser `shouldEqual`
-    --       Just (User { id: Just 1, firstName: "John", lastName: "Doe" })
-    --   it "should retrieve many users" do
-    --     users <- DB.getAllUsers db
-    --     users `shouldEqual`
-    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-    --       ]
-
-    --   it "should insert a new user" do
-    --     users1 <- DB.getAllUsers db
-    --     users1 `shouldEqual`
-    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-    --       ]
-    --     let newUser = User { id: Nothing, firstName: "Alice", lastName: "Johnson" }
-    --     _ <- DB.insertUser newUser db
-
-    --     users2 <- DB.getAllUsers db
-    --     users2 `shouldEqual`
-    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-    --       , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
-    --       ]
-
-    --   it "should delete a user" do
-    --     users1 <- DB.getAllUsers db
-    --     users1 `shouldEqual`
-    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-    --       , User { id: Just 3, firstName: "Alice", lastName: "Johnson" }
-    --       ]
-    --     -- First get all users to find Alice's ID
-    --     _ <- DB.deleteUser 3 db
-
-    --     users2 <- DB.getAllUsers db
-    --     users2 `shouldEqual`
-    --       [ User { id: Just 1, firstName: "John", lastName: "Doe" }
-    --       , User { id: Just 2, firstName: "Jane", lastName: "Smith" }
-    --       ]
-
     describe "Budget Operations (FIXME: theses tests are suboptimal for now)" do
       it "should get budget ID for a date" do
         withTestTransaction db do
@@ -124,9 +80,9 @@ spec db = do
       it "should get account balances for specific accounts" do
         withTestTransaction db do
           -- Get balances for checking account (2) and savings account (3)
-          balances <- Account.getAccountBalances [2, 3] db
+          balances <- Account.getAccountBalances [ 2, 3 ] db
           length balances `shouldSatisfy` (_ >= 2) -- Should have at least 2 balances
-          
+
           -- Verify balance structure
           case balances !! 0 of
             Just (AccountBalanceDB balance) -> do
@@ -144,14 +100,14 @@ spec db = do
 
       it "should handle non-existent account IDs gracefully" do
         withTestTransaction db do
-          balances <- Account.getAccountBalances [999, 1000] db
+          balances <- Account.getAccountBalances [ 999, 1000 ] db
           length balances `shouldEqual` 0
 
       it "should calculate correct balances after transactions" do
         withTestTransaction db do
           -- First ensure we have a budget
           budgetId <- Budget.insertBudgetForDate 1719792000 db
-          
+
           -- Insert transactions that affect the balance
           let
             -- Money going out from checking account
@@ -165,7 +121,7 @@ spec db = do
               , descr: "Test expense"
               , cents: 10000 -- $100.00
               }
-            
+
             -- Money coming into checking account
             incomingTxn = TransactionNewRow
               { budgetId: Just budgetId
@@ -177,15 +133,15 @@ spec db = do
               , descr: "Test income"
               , cents: 25000 -- $250.00
               }
-          
+
           -- Insert transactions
           TransactionQueries.insertTransaction outgoingTxn db
           TransactionQueries.insertTransaction incomingTxn db
-          
+
           -- Get balance for checking account
-          balances <- Account.getAccountBalances [2] db
+          balances <- Account.getAccountBalances [ 2 ] db
           length balances `shouldEqual` 1
-          
+
           case balances !! 0 of
             Just (AccountBalanceDB balance) -> do
               balance.accountId `shouldEqual` 2
@@ -207,7 +163,7 @@ spec db = do
         withTestTransaction db do
           -- Create a test budget within this test
           budgetId <- Budget.insertBudgetForDate 1719792000 db
-          
+
           -- Now test getting it by ID
           maybeBudget <- Budget.getBudgetById budgetId db
           case maybeBudget of
@@ -250,7 +206,7 @@ spec db = do
         withTestTransaction db do
           -- Create test data within this test
           budgetId <- Budget.insertBudgetForDate 1719792000 db
-          
+
           let
             testTxn = TransactionNewRow
               { budgetId: Just budgetId
@@ -265,7 +221,7 @@ spec db = do
 
           -- Insert the test transaction
           TransactionQueries.insertTransaction testTxn db
-          
+
           -- Get all transactions to find our test transaction
           transactions <- TransactionQueries.getAllTransactions db
           case transactions !! 0 of
@@ -279,7 +235,7 @@ spec db = do
         withTestTransaction db do
           -- Create test data within this test
           budgetId <- Budget.insertBudgetForDate 1719792000 db
-          
+
           let
             originalTxn = TransactionNewRow
               { budgetId: Just budgetId
@@ -294,7 +250,7 @@ spec db = do
 
           -- Insert the test transaction
           TransactionQueries.insertTransaction originalTxn db
-          
+
           -- Get the transaction we just created
           transactions <- TransactionQueries.getAllTransactions db
           case transactions !! 0 of
@@ -327,7 +283,7 @@ spec db = do
         withTestTransaction db do
           -- Create test data within this test
           budgetId <- Budget.insertBudgetForDate 1719792000 db
-          
+
           let
             testTxn = TransactionNewRow
               { budgetId: Just budgetId
@@ -342,7 +298,7 @@ spec db = do
 
           -- Insert the test transaction
           TransactionQueries.insertTransaction testTxn db
-          
+
           -- Get initial count (should be 1)
           transactions1 <- TransactionQueries.getAllTransactions db
           let initialCount = length transactions1
@@ -400,9 +356,13 @@ spec db = do
 
         -- Check that ledger rows have proper flow calculations
         -- Look for our specific test transactions
-        let testRows = filter (\(LedgerViewRow r) -> 
-              r.descr == "Grocery Store" || r.descr == "Salary") ledgerRows
-        
+        let
+          testRows = filter
+            ( \(LedgerViewRow r) ->
+                r.descr == "Grocery Store" || r.descr == "Salary"
+            )
+            ledgerRows
+
         case testRows of
           [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First transaction: money going out from checking account (negative flow)
@@ -417,9 +377,13 @@ spec db = do
         ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 db
 
         -- Look for our specific test transactions
-        let testRows = filter (\(LedgerViewRow r) -> 
-              r.descr == "Grocery Store" || r.descr == "Salary") ledgerRows
-        
+        let
+          testRows = filter
+            ( \(LedgerViewRow r) ->
+                r.descr == "Grocery Store" || r.descr == "Salary"
+            )
+            ledgerRows
+
         case testRows of
           [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
             -- First row: -$50.00
@@ -427,8 +391,8 @@ spec db = do
 
             -- Second row: +$2000.00
             row2.flowCents `shouldEqual` 200000
-            
-            -- Running balance calculation depends on previous transactions
-            -- So we can only verify the flow amounts are correct
+
+          -- Running balance calculation depends on previous transactions
+          -- So we can only verify the flow amounts are correct
           _ -> liftEffect $ throw "Expected exactly 2 test ledger rows for balance test"
 

@@ -17,10 +17,10 @@ import SQLite3 as SQLite3
 withTestTransaction :: forall a. SQLite3.DBConnection -> Aff a -> Aff a
 withTestTransaction db testAction = do
   liftEffect $ log "Beginning test transaction..."
-  
+
   -- Try to create a savepoint first - this works if we're already in a transaction
   savepointResult <- attempt $ SQLite3.queryDB db "SAVEPOINT test_isolation_sp" []
-  
+
   case savepointResult of
     Right _ -> do
       -- Already in a transaction, use savepoint rollback for nested isolation

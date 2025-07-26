@@ -31,7 +31,7 @@ main = do
   uniqueId <- getUniqueId
   let dbPath = "./db.integration-test-" <> uniqueId <> ".sqlite"
   log $ "Using test database: " <> dbPath
-  
+
   initDatabase dbPath # runAff_
     case _ of
       Left err -> throw $ "Failed to initialize database: " <> show err
@@ -44,9 +44,12 @@ main = do
               case _ of
                 Left err -> throw $ "Failed to setup test fixtures: " <> show err
                 Right _ -> do
-                  liftEffect $ log "Running database tests only (server disabled temporarily)..."
-                  runSpecAndExitProcess [ consoleReporter ] do
+                  port <- liftEffect getRandomPort
+                  liftEffect $ log $ "Starting test server on port: " <> show port
+                  liftEffect $ void $ startServer port db
+                  liftEffect $ log "Test server started successfully"
+                  liftEffect $ runSpecAndExitProcess [ consoleReporter ] do
                     OfxParserSpec.spec
                     DatabaseSpec.spec db
-                    -- ApiSpec.spec port -- Disabled for now
+                    ApiSpec.spec port
 
