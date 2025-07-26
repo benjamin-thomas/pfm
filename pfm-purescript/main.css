@@ -825,6 +825,18 @@ dialog.transaction::backdrop {
     box-sizing: border-box;
 }
 
+/* Remove spinner buttons from number inputs in dark mode only */
+html.dark-theme .field__input {
+    appearance: textfield;
+    -moz-appearance: textfield; /* Firefox */
+}
+
+html.dark-theme .field__input::-webkit-outer-spin-button,
+html.dark-theme .field__input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
 .field__input:focus, .field__input.just-focused {
     outline: none;
     border-color: var(--color-primary);
