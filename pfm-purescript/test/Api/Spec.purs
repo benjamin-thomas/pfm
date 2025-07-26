@@ -9,7 +9,7 @@ import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Data.Array (length, head, find) as Array
 import Data.Either (Either(..))
-import Data.String (contains, Pattern(..))
+import Data.String (contains, Pattern(..), toLower)
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..))
 import Server.DB.Account (AccountDB(..))
@@ -117,6 +117,66 @@ spec port = do
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (ledgerRows :: Array LedgerViewRow) ->
                 Array.length ledgerRows `shouldSatisfy` (_ >= 0) -- May be empty initially
+
+      it "should filter ledger view by description" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?description=Grocery")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) -> do
+                -- All returned rows should contain "Grocery" in description (case insensitive)
+                let allMatch = Array.find (\(LedgerViewRow row) -> not (contains (Pattern "grocery") (toLower row.descr))) ledgerRows
+                case allMatch of
+                  Nothing -> pure unit -- All good, all results match filter
+                  Just _ -> shouldEqual "All results match filter" "Some results don't match description filter"
+
+      it "should filter ledger view by minimum amount" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?minAmount=4000")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) -> do
+                -- All returned rows should have amount >= 4000 cents (40.00 euros) in absolute terms
+                let allMatch = Array.find (\(LedgerViewRow row) -> (if row.flowCents < 0 then (-row.flowCents) else row.flowCents) < 4000) ledgerRows
+                case allMatch of
+                  Nothing -> pure unit -- All good, all results match filter
+                  Just _ -> shouldEqual "All results match min amount filter" "Some results don't match minimum amount filter"
+
+      it "should filter ledger view by maximum amount" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?maxAmount=3000")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) -> do
+                -- All returned rows should have amount <= 3000 cents (30.00 euros) in absolute terms
+                let allMatch = Array.find (\(LedgerViewRow row) -> (if row.flowCents < 0 then (-row.flowCents) else row.flowCents) > 3000) ledgerRows
+                case allMatch of
+                  Nothing -> pure unit -- All good, all results match filter
+                  Just _ -> shouldEqual "All results match max amount filter" "Some results don't match maximum amount filter"
+
+      it "should filter ledger view for unknown expenses only" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?unknownExpensesOnly=1")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) -> do
+                -- All returned rows should be to Unknown_EXPENSE
+                let allMatch = Array.find (\(LedgerViewRow row) -> row.toAccountName /= "Unknown_EXPENSE") ledgerRows
+                case allMatch of
+                  Nothing -> pure unit -- All good, all results match filter
+                  Just _ -> shouldEqual "All results are unknown expenses" "Some results are not unknown expenses"
 
     describe "Account Balances Endpoint" do
       it "should get account balances with valid accountIds" do

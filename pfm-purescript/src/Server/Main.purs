@@ -4,7 +4,7 @@ import Prelude hiding ((/))
 
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), split)
 import Data.Int (fromString)
 import Data.Traversable (traverse)
@@ -40,6 +40,7 @@ import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
 import Server.DB.LedgerView.Queries as LedgerViewQueries
+import Server.DB.LedgerView (LedgerViewFilters)
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
@@ -196,7 +197,8 @@ makeRouter db req =
     AccountLedger accountId ->
       case req.method of
         Get -> do
-          ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO accountId db
+          let filters = parseFilters req.query
+          ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO accountId filters db
           ok $ JSON.writeJSON ledgerRows
         Options -> ok ""
         _ -> methodNotAllowed
@@ -289,3 +291,15 @@ makeRouter db req =
           ok "Transaction deleted"
         Options -> ok ""
         _ -> methodNotAllowed
+
+-- Helper functions for query parameter parsing
+
+-- | Parse filter parameters from query object
+parseFilters :: FO.Object String -> LedgerViewFilters
+parseFilters query =
+  { description: FO.lookup "description" query
+  , soundex: FO.lookup "soundex" query
+  , minAmount: FO.lookup "minAmount" query >>= fromString
+  , maxAmount: FO.lookup "maxAmount" query >>= fromString
+  , unknownExpensesOnly: (_ == "1") <$> FO.lookup "unknownExpensesOnly" query
+  }

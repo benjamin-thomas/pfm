@@ -5,25 +5,31 @@ module Server.DB.LedgerView.Queries
 
 import Prelude
 
-import Data.Functor (map)
-import Data.Int (toNumber)
+import Data.Maybe (Maybe(..))
 import Effect.Aff (Aff)
-import Node.Encoding (Encoding(..))
-import Node.FS.Aff as FS
-import Server.Conversion (dbLedgerViewRowToLedgerViewRow)
-import Server.DB.LedgerView (LedgerViewRowDB)
-import Server.DB.LedgerView as LedgerView
 import SQLite3 as SQLite3
+import Server.Conversion (dbLedgerViewRowToLedgerViewRow)
+import Server.DB.LedgerView (LedgerViewRowDB, LedgerViewFilters)
+import Server.DB.LedgerView as LedgerView
 import Shared.Types (LedgerViewRow)
-import Yoga.JSON as JSON
+
+-- | Empty filters (to get all rows)
+emptyFilters :: LedgerViewFilters
+emptyFilters =
+  { description: Nothing
+  , soundex: Nothing
+  , minAmount: Nothing
+  , maxAmount: Nothing
+  , unknownExpensesOnly: Nothing
+  }
 
 -- | Get ledger view rows for a specific account ID (returns DB types)
 getLedgerViewRows :: Int -> SQLite3.DBConnection -> Aff (Array LedgerViewRowDB)
 getLedgerViewRows accountId db = do
-  LedgerView.getLedgerViewRows accountId db
+  LedgerView.getLedgerViewRows accountId emptyFilters db
 
--- | Get ledger view rows for a specific account ID (with DTO conversion)
-getLedgerViewRowsAsDTO :: Int -> SQLite3.DBConnection -> Aff (Array LedgerViewRow)
-getLedgerViewRowsAsDTO accountId db = do
-  dbRows <- LedgerView.getLedgerViewRows accountId db
+-- | Get ledger view rows for a specific account ID with optional filters (with DTO conversion)
+getLedgerViewRowsAsDTO :: Int -> LedgerViewFilters -> SQLite3.DBConnection -> Aff (Array LedgerViewRow)
+getLedgerViewRowsAsDTO accountId filters db = do
+  dbRows <- LedgerView.getLedgerViewRows accountId filters db
   pure $ map dbLedgerViewRowToLedgerViewRow dbRows

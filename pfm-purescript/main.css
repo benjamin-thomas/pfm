@@ -315,8 +315,8 @@ a:hover {
 }
 
 /* Remove spinner buttons from number inputs */
-.transaction-search__input::-webkit-outer-spin-button,
-.transaction-search__input::-webkit-inner-spin-button {
+.dark-theme .transaction-search__input::-webkit-outer-spin-button,
+.dark-theme .transaction-search__input::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
 }

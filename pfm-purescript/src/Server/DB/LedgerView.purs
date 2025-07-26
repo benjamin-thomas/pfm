@@ -1,20 +1,40 @@
 module Server.DB.LedgerView
   ( LedgerViewRowDB(..)
+  , LedgerViewFilters(..)
   , getLedgerViewRows
   ) where
 
 import Prelude
 
-import Data.Array (head)
 import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Nullable (Nullable, toNullable)
 import Effect.Aff (Aff)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import Server.DB.Utils (fromDbRows)
 import SQLite3 as SQLite3
-import Yoga.JSON (class ReadForeign)
+import SQLite3 (queryObjectDB)
+import Yoga.JSON (class ReadForeign, class WriteForeign)
 import Yoga.JSON as JSON
+
+-- | Filter parameters for ledger view queries
+type LedgerViewFilters =
+  { description :: Maybe String -- Filter by description (case insensitive LIKE)
+  , soundex :: Maybe String -- Filter by soundex similarity  
+  , minAmount :: Maybe Int -- Minimum amount in cents
+  , maxAmount :: Maybe Int -- Maximum amount in cents
+  , unknownExpensesOnly :: Maybe Boolean -- Show only unknown expenses
+  }
+
+-- | Query parameters for SQL named parameters
+type LedgerViewQueryParams =
+  { "$accountId" :: Int
+  , "$descriptionFilter" :: Nullable String
+  , "$minAmountCents" :: Nullable Int
+  , "$maxAmountCents" :: Nullable Int
+  , "$unknownExpensesOnly" :: Boolean
+  }
 
 -- | Database row type matching SQL column names
 newtype LedgerViewRow = MkLedgerViewRow
@@ -69,11 +89,16 @@ newtype LedgerViewRowDB = LedgerViewRowDB
 
 derive instance Eq LedgerViewRowDB
 instance Show LedgerViewRowDB where
-  show (LedgerViewRowDB row) = 
-    "LedgerViewRowDB { transactionId: " <> show row.transactionId <> 
-    ", descr: \"" <> row.descr <> "\"" <>
-    ", flowCents: " <> show row.flowCents <>
-    ", runningBalanceCents: " <> show row.runningBalanceCents <> " }"
+  show (LedgerViewRowDB row) =
+    "LedgerViewRowDB { transactionId: " <> show row.transactionId
+      <> ", descr: \""
+      <> row.descr
+      <> "\""
+      <> ", flowCents: "
+      <> show row.flowCents
+      <> ", runningBalanceCents: "
+      <> show row.runningBalanceCents
+      <> " }"
 
 -- | Convert database row to domain type
 rowToLedgerViewRowDB :: LedgerViewRow -> LedgerViewRowDB
@@ -100,9 +125,18 @@ rowToLedgerViewRowDB (MkLedgerViewRow row) = LedgerViewRowDB
   , updatedAtTz: row.updated_at_tz
   }
 
--- | Get ledger view rows for a specific account ID
-getLedgerViewRows :: Int -> SQLite3.DBConnection -> Aff (Array LedgerViewRowDB)
-getLedgerViewRows accountId db = do
+-- | Get ledger view rows for a specific account ID with optional filters
+getLedgerViewRows :: Int -> LedgerViewFilters -> SQLite3.DBConnection -> Aff (Array LedgerViewRowDB)
+getLedgerViewRows accountId filters db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/LedgerView/sql/getLedgerViewRows.sql"
-  rows <- SQLite3.queryDB db sql [ JSON.writeImpl accountId, JSON.writeImpl accountId, JSON.writeImpl accountId ]
+  let
+    params :: LedgerViewQueryParams
+    params =
+      { "$accountId": accountId
+      , "$descriptionFilter": toNullable filters.description
+      , "$minAmountCents": toNullable filters.minAmount
+      , "$maxAmountCents": toNullable filters.maxAmount
+      , "$unknownExpensesOnly": fromMaybe false filters.unknownExpensesOnly
+      }
+  rows <- queryObjectDB db sql params
   fromDbRows "ledger_view" rowToLedgerViewRowDB rows

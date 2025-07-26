@@ -9,20 +9,22 @@ import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
 import Data.Array (length, reverse, uncons, zip, (:))
+import Data.Array as Array
+import Data.String as String
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Number as Number
-import Data.String as String
 import Data.Tuple (Tuple(..))
 import Debug as Debug
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
+import Data.Time.Duration (Milliseconds(..))
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
@@ -108,15 +110,32 @@ data EditDialogAction
   | EditAmountChanged String
   | EditDateChanged String
 
+type FilterState =
+  { description :: String
+  , minAmount :: String
+  , maxAmount :: String
+  , unknownExpensesOnly :: Boolean
+  }
+
+data FilterAction
+  = FilterDescriptionChanged String
+  | FilterMinAmountChanged String
+  | FilterMaxAmountChanged String
+  | FilterUnknownExpensesToggled
+  | ClearFilters
+
 type State =
   { data :: Status AppData
   , isDarkMode :: Boolean
   , dialog :: Maybe Dialog
   , apiBaseUrl :: ApiBaseUrl
+  , filterState :: FilterState
+  , debounceTimerId :: Maybe H.ForkId
   }
 
 data Action
   = LoadAllData
+  | LoadLedgerView
   | ToggleDarkMode
   | Initialize
   | OpenCreateDialog
@@ -126,14 +145,16 @@ data Action
   | DeleteTransaction
   | CreateDialogChanged CreateDialogAction
   | EditDialogChanged EditDialogAction
+  | FilterChanged FilterAction
+  | DebouncedFilterUpdate
 
 -- Parallel data fetching function
-fetchAllData :: ApiBaseUrl -> Aff (Either String AppData)
-fetchAllData apiBaseUrl = do
+fetchAllData :: ApiBaseUrl -> FilterState -> Aff (Either String AppData)
+fetchAllData apiBaseUrl filterState = do
   results <- sequential $
     { users: _, ledgerRows: _, accounts: _, balances: _ }
       <$> parallel fetchUsers
-      <*> parallel (fetchLedgerView apiBaseUrl)
+      <*> parallel (fetchLedgerView apiBaseUrl filterState)
       <*> parallel (fetchAccounts apiBaseUrl)
       <*> parallel (fetchBalances apiBaseUrl)
 
@@ -157,6 +178,13 @@ component = H.mkComponent
       , isDarkMode
       , dialog: Nothing
       , apiBaseUrl: mkApiBaseUrl apiBaseUrl
+      , filterState:
+          { description: ""
+          , minAmount: ""
+          , maxAmount: ""
+          , unknownExpensesOnly: false
+          }
+      , debounceTimerId: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -270,19 +298,83 @@ render state =
               ]
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
               [ HH.button
-                  [ HP.class_ (HH.ClassName "button")
-                  , HE.onClick \_ -> LoadAllData
-                  ]
-                  [ HH.text "Refresh" ]
-              , HH.button
                   [ HP.class_ (HH.ClassName "button button--primary")
                   , HE.onClick \_ -> OpenCreateDialog
                   ]
-                  [ HH.text "Create Transaction" ]
+                  [ HH.text "Add Transaction" ]
               ]
           ]
+      , renderFilterForm state.filterState
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
           (map renderLedgerRowWithBalance (reverse $ attachPriorBalance appData.ledgerRows))
+      ]
+
+  renderFilterForm :: FilterState -> H.ComponentHTML Action () m
+  renderFilterForm filterState =
+    HH.div [ HP.class_ (HH.ClassName "transaction-search") ]
+      [ HH.div [ HP.class_ (HH.ClassName "transaction-search__row") ]
+          [ HH.div [ HP.class_ (HH.ClassName "transaction-search__field") ]
+              [ HH.label [ HP.for "search-description" ] [ HH.text "Description" ]
+              , HH.input
+                  [ HP.type_ HP.InputText
+                  , HP.id "search-description"
+                  , HE.onValueInput (\str -> FilterChanged (FilterDescriptionChanged str))
+                  , HP.value filterState.description
+                  , HP.placeholder "Search by description"
+                  , HP.autocomplete HP.AutocompleteOff
+                  , HP.class_ (HH.ClassName "transaction-search__input")
+                  ]
+              ]
+          , HH.div [ HP.class_ (HH.ClassName "transaction-search__field") ]
+              [ HH.label [ HP.for "search-amount-min" ] [ HH.text "Min Amount" ]
+              , HH.input
+                  [ HP.type_ HP.InputNumber
+                  , HP.id "search-amount-min"
+                  , HP.placeholder "40.00"
+                  , HP.min 0.0
+                  , HE.onValueInput (\str -> FilterChanged (FilterMinAmountChanged str))
+                  , HP.value filterState.minAmount
+                  , HP.class_ (HH.ClassName "transaction-search__input")
+                  ]
+              ]
+          , HH.div [ HP.class_ (HH.ClassName "transaction-search__field") ]
+              [ HH.label [ HP.for "search-amount-max" ] [ HH.text "Max Amount" ]
+              , HH.input
+                  [ HP.type_ HP.InputNumber
+                  , HP.id "search-amount-max"
+                  , HP.placeholder "100.00"
+                  , HP.min 0.0
+                  , HE.onValueInput (\str -> FilterChanged (FilterMaxAmountChanged str))
+                  , HP.value filterState.maxAmount
+                  , HP.class_ (HH.ClassName "transaction-search__input")
+                  ]
+              ]
+          ]
+      , HH.div [ HP.class_ (HH.ClassName "transaction-search__row transaction-search__row--bottom") ]
+          [ HH.div [ HP.class_ (HH.ClassName "transaction-search__field transaction-search__field--checkbox") ]
+              [ HH.label [ HP.class_ (HH.ClassName "checkbox-container") ]
+                  [ HH.input
+                      [ HP.type_ HP.InputCheckbox
+                      , HP.checked filterState.unknownExpensesOnly
+                      , HE.onClick \_ -> FilterChanged FilterUnknownExpensesToggled
+                      ]
+                  , HH.span
+                      [ HP.class_ (HH.ClassName "checkbox-label")
+                      , HP.style "margin-left: 3px"
+                      ]
+                      [ HH.text "Unknown expenses" ]
+                  ]
+              ]
+          , HH.div [ HP.class_ (HH.ClassName "transaction-search__field--button") ]
+              [ HH.button
+                  [ HP.class_ (HH.ClassName "search-clear-button")
+                  , HP.type_ HP.ButtonButton
+                  , HP.id "form-clear-button"
+                  , HE.onClick \_ -> FilterChanged ClearFilters
+                  ]
+                  [ HH.text "Clear" ]
+              ]
+          ]
       ]
 
   renderLedgerRowWithBalance :: { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
@@ -558,10 +650,20 @@ handleAction action = case Debug.spy "action" action of
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
     state <- H.get
-    result <- H.liftAff $ fetchAllData state.apiBaseUrl
+    result <- H.liftAff $ fetchAllData state.apiBaseUrl state.filterState
     case result of
       Left err -> H.modify_ \s -> s { data = Failed err }
       Right appData -> H.modify_ \s -> s { data = Loaded appData }
+  LoadLedgerView -> do
+    state <- H.get
+    case state.data of
+      Loaded appData -> do
+        result <- H.liftAff $ fetchLedgerView state.apiBaseUrl state.filterState
+        case result of
+          Left err -> H.modify_ \s -> s { data = Failed err }
+          Right ledgerRows ->
+            H.modify_ \s -> s { data = Loaded (appData { ledgerRows = ledgerRows }) }
+      _ -> pure unit -- Only update if data is already loaded
   ToggleDarkMode -> do
     state <- H.get
     let newDarkMode = not state.isDarkMode
@@ -724,6 +826,30 @@ handleAction action = case Debug.spy "action" action of
               handleAction LoadAllData
       _ -> pure unit
 
+  FilterChanged filterAction -> do
+    state <- H.get
+    let newFilterState = updateFilterState filterAction state.filterState
+    H.modify_ \s -> s { filterState = newFilterState }
+
+    -- Cancel existing timer if any
+    case state.debounceTimerId of
+      Nothing -> pure unit
+      Just timerId -> H.kill timerId
+
+    -- Set up new debounce timer
+    timerId <- H.fork do
+      H.liftAff $ delay (Milliseconds 200.0)
+      handleAction DebouncedFilterUpdate
+
+    -- Store the new timer ID
+    H.modify_ \s -> s { debounceTimerId = Just timerId }
+
+  DebouncedFilterUpdate -> do
+    -- Clear the timer ID since it fired
+    H.modify_ \s -> s { debounceTimerId = Nothing }
+    -- Now actually load the filtered data
+    handleAction LoadLedgerView
+
 -- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
 attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
 attachPriorBalance transactions =
@@ -769,12 +895,29 @@ updateEditState action state =
     EditAmountChanged amount -> state { amount = amount }
     EditDateChanged date -> state { date = date }
 
+updateFilterState :: FilterAction -> FilterState -> FilterState
+updateFilterState action state =
+  case action of
+    FilterDescriptionChanged desc -> state { description = desc }
+    FilterMinAmountChanged minAmount -> state { minAmount = minAmount }
+    FilterMaxAmountChanged maxAmount -> state { maxAmount = maxAmount }
+    FilterUnknownExpensesToggled -> state { unknownExpensesOnly = not state.unknownExpensesOnly }
+    ClearFilters ->
+      { description: ""
+      , minAmount: ""
+      , maxAmount: ""
+      , unknownExpensesOnly: false
+      }
+
 -- baseUrl is now passed as apiBaseUrl in state
 
-fetchLedgerView :: ApiBaseUrl -> Aff (Either String (Array LedgerViewRow))
-fetchLedgerView apiBaseUrl = do
+fetchLedgerView :: ApiBaseUrl -> FilterState -> Aff (Either String (Array LedgerViewRow))
+fetchLedgerView apiBaseUrl filterState = do
+  -- Build query parameters from filter state
+  let queryParams = buildQueryParams filterState
+  let url = unApiBaseUrl $ appendPath apiBaseUrl ("/accounts/2/ledger" <> queryParams)
   -- Fetch ledger view for checking account (ID = 2) from the API
-  result <- AX.get ResponseFormat.string (unApiBaseUrl $ appendPath apiBaseUrl "/accounts/2/ledger")
+  result <- AX.get ResponseFormat.string url
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
@@ -860,4 +1003,39 @@ stripNegativeSign :: String -> String
 stripNegativeSign amountStr =
   if String.take 1 amountStr == "-" then String.drop 1 amountStr
   else amountStr
+
+-- Convert euro amount string to cents integer (e.g., "40.50" -> 4050)
+eurosToCents :: String -> Maybe Int
+eurosToCents euroStr = do
+  euros <- Number.fromString euroStr
+  pure $ Int.round $ euros * 100.0
+
+-- Build query parameters from filter state
+buildQueryParams :: FilterState -> String
+buildQueryParams fsUntrimmed =
+  let
+    fs = fsUntrimmed
+      { description = String.trim fsUntrimmed.description
+      , minAmount = String.trim fsUntrimmed.minAmount
+      , maxAmount = String.trim fsUntrimmed.maxAmount
+      , unknownExpensesOnly = fsUntrimmed.unknownExpensesOnly
+      }
+    whenStr str encoded = if str /= "" then Just encoded else Nothing
+    whenBool bool encoded = if bool then Just encoded else Nothing
+
+    -- Convert euro amounts to cents for API
+    minAmountCents = if fs.minAmount == "" then Nothing else eurosToCents fs.minAmount
+    maxAmountCents = if fs.maxAmount == "" then Nothing else eurosToCents fs.maxAmount
+
+    params =
+      Array.catMaybes
+        [ whenStr fs.description $ "description=" <> fs.description
+        , map (\cents -> "minAmount=" <> show cents) minAmountCents
+        , map (\cents -> "maxAmount=" <> show cents) maxAmountCents
+        , whenBool fs.unknownExpensesOnly "unknownExpensesOnly=1"
+        ]
+  in
+    case params of
+      [] -> ""
+      _ -> "?" <> String.joinWith "&" params
 

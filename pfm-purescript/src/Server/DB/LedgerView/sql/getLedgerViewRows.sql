@@ -32,7 +32,7 @@ FROM (
                 , t.descr
                 , t.created_at
                 , t.updated_at
-                , t.cents * CASE WHEN t.from_account_id = ? THEN -1 ELSE 1 END AS flow_cents
+                , t.cents * CASE WHEN t.from_account_id = $accountId THEN -1 ELSE 1 END AS flow_cents
         FROM transactions AS t
 
         INNER JOIN accounts AS a
@@ -44,7 +44,11 @@ FROM (
         INNER JOIN budgets AS bu
                 ON t.budget_id = bu.budget_id
 
-        WHERE t.to_account_id = ? OR t.from_account_id = ?
+        WHERE (t.to_account_id = $accountId OR t.from_account_id = $accountId)
+          AND (CASE WHEN $descriptionFilter IS NOT NULL AND TRIM($descriptionFilter) <> "" THEN t.descr LIKE '%' || $descriptionFilter || '%' ELSE 1 END)
+          AND (CASE WHEN $minAmountCents IS NOT NULL THEN ABS(t.cents) >= $minAmountCents ELSE 1 END)
+          AND (CASE WHEN $maxAmountCents IS NOT NULL THEN ABS(t.cents) <= $maxAmountCents ELSE 1 END)
+          AND (CASE WHEN $unknownExpensesOnly = 1 THEN t.to_account_id = 6 ELSE 1 END)
         )x
 )y
 

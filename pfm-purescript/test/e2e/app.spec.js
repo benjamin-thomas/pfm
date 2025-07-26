@@ -65,7 +65,7 @@ test.describe('PFM PureScript App', () => {
     // Click the "Create Transaction" button
     const createButton = page.locator('.transaction-list__header-buttons .button--primary');
     await expect(createButton).toBeVisible();
-    await expect(createButton).toContainText('Create Transaction');
+    await expect(createButton).toContainText('Add Transaction');
     await createButton.click();
 
     // Wait for dialog to be visible
@@ -431,4 +431,311 @@ test.describe('PFM PureScript App', () => {
     expect(remainingDescriptions).not.toContain(descriptionToDelete);
   });
 
+  test('should display transaction filter menu', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Check that filter menu is visible
+    const filterMenu = page.locator('.transaction-search');
+    await expect(filterMenu).toBeVisible();
+
+    // Check that description filter field is present
+    const descriptionFilter = page.locator('input#search-description');
+    await expect(descriptionFilter).toBeVisible();
+    await expect(descriptionFilter).toHaveAttribute('placeholder', 'Search by description');
+
+    // Check that min/max amount filters are present
+    const minAmountFilter = page.locator('input#search-amount-min');
+    await expect(minAmountFilter).toBeVisible();
+    
+    const maxAmountFilter = page.locator('input#search-amount-max');
+    await expect(maxAmountFilter).toBeVisible();
+
+    // Check that unknown expenses checkbox is present
+    const unknownExpensesCheckbox = page.locator('input[type="checkbox"]');
+    await expect(unknownExpensesCheckbox).toBeVisible();
+
+    // Check that clear button is present
+    const clearButton = page.locator('#form-clear-button');
+    await expect(clearButton).toBeVisible();
+    await expect(clearButton).toContainText('Clear');
+  });
+
+  test('should filter transactions by description', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Get initial transaction count
+    const initialCount = await page.locator('.transaction-item').count();
+    
+    // Add a test transaction with known description
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    const uniqueDescription = `Filter test GROCERY ${Date.now()}`;
+    await page.locator('input[id="description"]').fill(uniqueDescription);
+    await page.locator('select[id="from-account"]').selectOption('2');
+    await page.locator('select[id="to-account"]').selectOption('6');
+    await page.locator('input[id="amount"]').fill('25.00');
+    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
+
+    await page.locator('.dialog-actions .button--primary').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    // Now test filtering by description
+    const descriptionFilter = page.locator('input#search-description');
+    await descriptionFilter.fill('GROCERY');
+
+    // Give time for filter to be applied
+    await page.waitForTimeout(1000);
+
+    // Check that only transactions with "GROCERY" in description are shown
+    const filteredTransactions = await page.locator('.transaction-item').count();
+    const visibleDescriptions = await page.locator('.transaction-item__description').allTextContents();
+    
+    // All visible descriptions should contain "GROCERY" (case insensitive)
+    for (const desc of visibleDescriptions) {
+      expect(desc.toLowerCase()).toContain('grocery');
+    }
+
+    // Clear filter and verify all transactions are shown again
+    const clearButton = page.locator('#form-clear-button');
+    await clearButton.click();
+    await page.waitForTimeout(1000);
+
+    const clearedCount = await page.locator('.transaction-item').count();
+    expect(clearedCount).toBeGreaterThanOrEqual(filteredTransactions);
+  });
+
+  test('should filter transactions by amount range', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Add test transactions with known amounts
+    for (const [amount, desc] of [['10.00', 'Small'], ['50.00', 'Medium'], ['100.00', 'Large']]) {
+      const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+      await createButton.click();
+
+      const dialog = page.locator('#transaction-dialog');
+      await expect(dialog).toBeVisible();
+
+      await page.locator('input[id="description"]').fill(`${desc} transaction ${Date.now()}`);
+      await page.locator('select[id="from-account"]').selectOption('2');
+      await page.locator('select[id="to-account"]').selectOption('6');
+      await page.locator('input[id="amount"]').fill(amount);
+      await page.locator('input[id="date"]').fill('2024-07-01T10:30');
+
+      await page.locator('.dialog-actions .button--primary').click();
+      await expect(dialog).not.toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(1000);
+    }
+
+    await page.waitForTimeout(2000);
+
+    // Test minimum amount filter
+    const minAmountFilter = page.locator('input#search-amount-min');
+    await minAmountFilter.fill('50.00'); // 50.00 euros
+    await page.waitForTimeout(1000);
+
+    // All visible transactions should have amount >= 50.00
+    const visibleAmounts = await page.locator('.transaction-item__amount').allTextContents();
+    for (const amountText of visibleAmounts) {
+      const amount = parseFloat(amountText.replace(/[^0-9.-]/g, ''));
+      expect(Math.abs(amount)).toBeGreaterThanOrEqual(50.0);
+    }
+
+    // Clear filter
+    await page.locator('#form-clear-button').click();
+    await page.waitForTimeout(1000);
+
+    // Test maximum amount filter
+    const maxAmountFilter = page.locator('input#search-amount-max');
+    await maxAmountFilter.fill('50.00'); // 50.00 euros
+    await page.waitForTimeout(1000);
+
+    // All visible transactions should have amount <= 50.00
+    const visibleAmounts2 = await page.locator('.transaction-item__amount').allTextContents();
+    for (const amountText of visibleAmounts2) {
+      const amount = parseFloat(amountText.replace(/[^0-9.-]/g, ''));
+      expect(Math.abs(amount)).toBeLessThanOrEqual(50.0);
+    }
+  });
+
+  test('should filter for unknown expenses only', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Add a known expense transaction
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    await page.locator('input[id="description"]').fill(`Known expense ${Date.now()}`);
+    await page.locator('select[id="from-account"]').selectOption('2');
+    await page.locator('select[id="to-account"]').selectOption('7'); // Groceries (known expense)
+    await page.locator('input[id="amount"]').fill('30.00');
+    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
+
+    await page.locator('.dialog-actions .button--primary').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    // Check unknown expenses checkbox
+    const unknownExpensesCheckbox = page.locator('input[type="checkbox"]');
+    await unknownExpensesCheckbox.check();
+    await page.waitForTimeout(1000);
+
+    // All visible transactions should be TO Unknown_EXPENSE account
+    const visibleTransactions = await page.locator('.transaction-item').count();
+    if (visibleTransactions > 0) {
+      const accountTexts = await page.locator('.transaction-item__accounts').allTextContents();
+      for (const accountText of accountTexts) {
+        expect(accountText).toContain('Unknown_EXPENSE');
+      }
+    }
+
+    // Uncheck and verify all transactions are shown again
+    await unknownExpensesCheckbox.uncheck();
+    await page.waitForTimeout(1000);
+
+    const allCount = await page.locator('.transaction-item').count();
+    expect(allCount).toBeGreaterThanOrEqual(visibleTransactions);
+  });
+
+  test('should combine multiple filters', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Add test transaction with specific criteria
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    const uniqueDescription = `MULTI filter test ${Date.now()}`;
+    await page.locator('input[id="description"]').fill(uniqueDescription);
+    await page.locator('select[id="from-account"]').selectOption('2');
+    await page.locator('select[id="to-account"]').selectOption('6'); // Unknown expense
+    await page.locator('input[id="amount"]').fill('75.50');
+    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
+
+    await page.locator('.dialog-actions .button--primary').click();
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+    await page.waitForTimeout(2000);
+
+    // Apply multiple filters
+    const descriptionFilter = page.locator('input#search-description');
+    await descriptionFilter.fill('MULTI');
+
+    const minAmountFilter = page.locator('input#search-amount-min');
+    await minAmountFilter.fill('70.00'); // 70.00 euros
+
+    const maxAmountFilter = page.locator('input#search-amount-max');
+    await maxAmountFilter.fill('80.00'); // 80.00 euros
+
+    const unknownExpensesCheckbox = page.locator('input[type="checkbox"]');
+    await unknownExpensesCheckbox.check();
+
+    await page.waitForTimeout(1000);
+
+    // Verify all visible transactions meet all criteria
+    const visibleTransactions = await page.locator('.transaction-item').count();
+    if (visibleTransactions > 0) {
+      const descriptions = await page.locator('.transaction-item__description').allTextContents();
+      const amounts = await page.locator('.transaction-item__amount').allTextContents();
+      const accounts = await page.locator('.transaction-item__accounts').allTextContents();
+
+      for (let i = 0; i < visibleTransactions; i++) {
+        // Check description contains "MULTI"
+        expect(descriptions[i].toLowerCase()).toContain('multi');
+        
+        // Check amount is between 70.00 and 80.00
+        const amount = parseFloat(amounts[i].replace(/[^0-9.-]/g, ''));
+        expect(Math.abs(amount)).toBeGreaterThanOrEqual(70.0);
+        expect(Math.abs(amount)).toBeLessThanOrEqual(80.0);
+        
+        // Check it's an unknown expense
+        expect(accounts[i]).toContain('Unknown_EXPENSE');
+      }
+    }
+
+    // Clear all filters
+    const clearButton = page.locator('#form-clear-button');
+    await clearButton.click();
+    await page.waitForTimeout(1000);
+
+    // Verify filters are cleared
+    await expect(descriptionFilter).toHaveValue('');
+    await expect(minAmountFilter).toHaveValue('');
+    await expect(maxAmountFilter).toHaveValue('');
+    await expect(unknownExpensesCheckbox).not.toBeChecked();
+  });
+
+  test('should update transaction count text when filtering', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Get initial count text
+    const countElement = page.locator('.transaction-count');
+    await expect(countElement).toBeVisible();
+    
+    const initialCountText = await countElement.textContent();
+    expect(initialCountText).toMatch(/\d+ transactions?/);
+
+    // Apply a filter that should reduce results
+    const descriptionFilter = page.locator('input#search-description');
+    await descriptionFilter.fill('nonexistent filter term that matches nothing');
+    await page.waitForTimeout(1000);
+
+    // Count text should update to show filtered results
+    const filteredCountText = await countElement.textContent();
+    expect(filteredCountText).toMatch(/\d+ of \d+ transactions?|0 transactions?/);
+
+    // Clear filter
+    const clearButton = page.locator('#form-clear-button');
+    await clearButton.click();
+    await page.waitForTimeout(1000);
+
+    // Count should return to original
+    const clearedCountText = await countElement.textContent();
+    expect(clearedCountText).toBe(initialCountText);
+  });
+
+});
+
+test.describe('Transaction Filter UI Integration', () => {
+  test('should remove refresh button and rename create button', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Verify refresh button is NOT present
+    const refreshButton = page.locator('.transaction-list__header-buttons', { hasText: 'Refresh' });
+    await expect(refreshButton).not.toBeVisible();
+
+    // Verify create button is renamed to "Add Transaction"
+    const addButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await expect(addButton).toBeVisible();
+    await expect(addButton).toContainText('Add Transaction');
+  });
 });

@@ -5,6 +5,8 @@
 /.psc-ide-port
 /dist/
 /db.sqlite
+/db.sqlite-shm
+/db.sqlite-wal
 /db.e2e-test.sqlite
 /db.e2e-test.sqlite-shm
 /db.e2e-test.sqlite-wal

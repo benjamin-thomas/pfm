@@ -4,13 +4,15 @@ module Test.Database.Spec
 
 import Prelude
 
-import Data.Array (length, filter, (!!))
+import Data.Array (length, filter, (!!), head)
 import Data.Maybe (Maybe(Just, Nothing))
 import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import SQLite3 as SQLite3
 import Server.DB.Account as Account
 import Server.DB.Account (AccountDB(..), AccountBalanceDB(..))
+import Server.DB.LedgerView as LedgerView
+import Server.DB.LedgerView (LedgerViewRowDB(..))
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Budget as Budget
 import Server.DB.Budget (BudgetDB(..))
@@ -18,7 +20,6 @@ import Server.DB.Category as Category
 import Server.DB.Category (CategoryDB(..))
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.DB.Transactions.Queries (TransactionNewRow(..))
-import Server.Database as DB
 import Shared.Types (LedgerViewRow(..), Transaction(..))
 import Test.Database.TestUtils (withTestTransaction)
 import Test.Spec (Spec, describe, it)
@@ -351,7 +352,8 @@ spec db = do
         TransactionQueries.insertTransaction testTxn2 db
 
         -- Get ledger view for checking account (ID = 2)
-        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 db
+        let emptyFilters = { description: Nothing, soundex: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 emptyFilters db
         length ledgerRows `shouldSatisfy` (_ >= 2)
 
         -- Check that ledger rows have proper flow calculations
@@ -374,7 +376,8 @@ spec db = do
 
       it "should calculate running balance correctly" do
         -- Get ledger view again to test running balance calculation
-        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 db
+        let emptyFilters = { description: Nothing, soundex: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+        ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 emptyFilters db
 
         -- Look for our specific test transactions
         let
@@ -395,4 +398,63 @@ spec db = do
           -- Running balance calculation depends on previous transactions
           -- So we can only verify the flow amounts are correct
           _ -> liftEffect $ throw "Expected exactly 2 test ledger rows for balance test"
+
+      it "should filter by description" do
+        -- Test description filter with existing data
+        let
+          filters = { description: Just "Grocery", soundex: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+
+        filteredRows <- LedgerView.getLedgerViewRows 2 filters db
+
+        -- Should only return the Grocery Store transaction
+        length filteredRows `shouldEqual` 1
+        case head filteredRows of
+          Just (LedgerViewRowDB row) -> row.descr `shouldEqual` "Grocery Store"
+          Nothing -> liftEffect $ throw "Expected one filtered row"
+
+      it "should filter by minimum amount" do
+        -- Test minimum amount filter (filter for amounts >= $100 = 10000 cents)
+        let
+          filters = { description: Nothing, soundex: Nothing, minAmount: Just 10000, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+
+        filteredRows <- LedgerView.getLedgerViewRows 2 filters db
+
+        -- Should only return the Salary transaction ($2000 > $100, Grocery Store $50 < $100)
+        length filteredRows `shouldEqual` 1
+        case head filteredRows of
+          Just (LedgerViewRowDB row) -> do
+            row.descr `shouldEqual` "Salary"
+            row.flowCents `shouldEqual` 200000
+          Nothing -> liftEffect $ throw "Expected one filtered row"
+
+      it "should filter by maximum amount" do
+        -- Test maximum amount filter (filter for amounts <= $100 = 10000 cents)
+        let
+          filters = { description: Nothing, soundex: Nothing, minAmount: Nothing, maxAmount: Just 10000, unknownExpensesOnly: Nothing }
+
+        filteredRows <- LedgerView.getLedgerViewRows 2 filters db
+
+        -- Should only return the Grocery Store transaction ($50 <= $100, Salary $2000 > $100)
+        length filteredRows `shouldEqual` 1
+        case head filteredRows of
+          Just (LedgerViewRowDB row) -> do
+            row.descr `shouldEqual` "Grocery Store"
+            row.flowCents `shouldEqual` (-5000) -- Note: negative because money going out
+          Nothing -> liftEffect $ throw "Expected one filtered row"
+
+      it "should filter by unknown expenses only" do
+        -- Test unknown expenses filter - only show expenses going to "Unknown expense" account (ID=6)
+        let
+          filters = { description: Nothing, soundex: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Just true }
+
+        filteredRows <- LedgerView.getLedgerViewRows 2 filters db
+
+        -- Should only return the Grocery Store transaction (goes to Unknown expense account)
+        -- The Salary transaction goes from Unknown income (4) to Checking (2), so it's not an unknown expense
+        length filteredRows `shouldEqual` 1
+        case head filteredRows of
+          Just (LedgerViewRowDB row) -> do
+            row.descr `shouldEqual` "Grocery Store"
+            row.toAccountId `shouldEqual` 6 -- Unknown expense account
+          Nothing -> liftEffect $ throw "Expected one filtered row"
 
