@@ -13,6 +13,7 @@ import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Newtype (class Newtype)
 import Data.Number as Number
 import Data.String as String
 import Data.Tuple (Tuple(..))
@@ -30,6 +31,27 @@ import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
 import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User)
 import Yoga.JSON as JSON
+
+-- Type-safe wrapper for API base URL
+newtype ApiBaseUrl = ApiBaseUrl String
+
+derive instance newtypeApiBaseUrl :: Newtype ApiBaseUrl _
+
+-- Make ApiBaseUrl concatenatable with strings
+instance semigroupApiBaseUrl :: Semigroup ApiBaseUrl where
+  append (ApiBaseUrl a) (ApiBaseUrl b) = ApiBaseUrl (a <> b)
+
+-- Helper to create ApiBaseUrl from String  
+mkApiBaseUrl :: String -> ApiBaseUrl
+mkApiBaseUrl = ApiBaseUrl
+
+-- Helper to append string to ApiBaseUrl
+appendPath :: ApiBaseUrl -> String -> ApiBaseUrl
+appendPath (ApiBaseUrl base) path = ApiBaseUrl (base <> path)
+
+-- Helper to extract URL string for HTTP requests
+unApiBaseUrl :: ApiBaseUrl -> String
+unApiBaseUrl (ApiBaseUrl url) = url
 
 -- Data and Status types for parallel loading
 data Status a
@@ -90,6 +112,7 @@ type State =
   { data :: Status AppData
   , isDarkMode :: Boolean
   , dialog :: Maybe Dialog
+  , apiBaseUrl :: ApiBaseUrl
   }
 
 data Action
@@ -105,14 +128,14 @@ data Action
   | EditDialogChanged EditDialogAction
 
 -- Parallel data fetching function
-fetchAllData :: Aff (Either String AppData)
-fetchAllData = do
+fetchAllData :: ApiBaseUrl -> Aff (Either String AppData)
+fetchAllData apiBaseUrl = do
   results <- sequential $
     { users: _, ledgerRows: _, accounts: _, balances: _ }
       <$> parallel fetchUsers
-      <*> parallel fetchLedgerView
-      <*> parallel fetchAccounts
-      <*> parallel fetchBalances
+      <*> parallel (fetchLedgerView apiBaseUrl)
+      <*> parallel (fetchAccounts apiBaseUrl)
+      <*> parallel (fetchBalances apiBaseUrl)
 
   pure $ do
     users <- results.users
@@ -129,10 +152,11 @@ fetchUsers = do
 
 component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
-  { initialState: \{ isDarkMode } ->
+  { initialState: \{ isDarkMode, apiBaseUrl } ->
       { data: Loading
       , isDarkMode
       , dialog: Nothing
+      , apiBaseUrl: mkApiBaseUrl apiBaseUrl
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -505,7 +529,8 @@ handleAction action = case Debug.spy "action" action of
     handleAction LoadAllData
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
-    result <- H.liftAff fetchAllData
+    state <- H.get
+    result <- H.liftAff $ fetchAllData state.apiBaseUrl
     case result of
       Left err -> H.modify_ \s -> s { data = Failed err }
       Right appData -> H.modify_ \s -> s { data = Loaded appData }
@@ -579,7 +604,7 @@ handleAction action = case Debug.spy "action" action of
             result <- H.liftAff $ AX.request
               AX.defaultRequest
                 { method = Left POST
-                , url = baseUrl <> "/transactions"
+                , url = unApiBaseUrl $ appendPath state.apiBaseUrl "/transactions"
                 , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
                 , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
                 , responseFormat = ResponseFormat.string
@@ -615,7 +640,7 @@ handleAction action = case Debug.spy "action" action of
             result <- H.liftAff $ AX.request
               AX.defaultRequest
                 { method = Left PUT
-                , url = baseUrl <> "/transactions/" <> show editState.transactionId
+                , url = unApiBaseUrl $ appendPath state.apiBaseUrl ("/transactions/" <> show editState.transactionId)
                 , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
                 , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
                 , responseFormat = ResponseFormat.string
@@ -656,7 +681,7 @@ handleAction action = case Debug.spy "action" action of
           result <- H.liftAff $ AX.request
             AX.defaultRequest
               { method = Left DELETE
-              , url = baseUrl <> "/transactions/" <> show editState.transactionId
+              , url = unApiBaseUrl $ appendPath state.apiBaseUrl ("/transactions/" <> show editState.transactionId)
               , responseFormat = ResponseFormat.string
               }
           case result of
@@ -716,13 +741,12 @@ updateEditState action state =
     EditAmountChanged amount -> state { amount = amount }
     EditDateChanged date -> state { date = date }
 
-baseUrl :: String
-baseUrl = "http://localhost:8081"
+-- baseUrl is now passed as apiBaseUrl in state
 
-fetchLedgerView :: Aff (Either String (Array LedgerViewRow))
-fetchLedgerView = do
+fetchLedgerView :: ApiBaseUrl -> Aff (Either String (Array LedgerViewRow))
+fetchLedgerView apiBaseUrl = do
   -- Fetch ledger view for checking account (ID = 2) from the API
-  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts/2/ledger")
+  result <- AX.get ResponseFormat.string (unApiBaseUrl $ appendPath apiBaseUrl "/accounts/2/ledger")
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
@@ -731,10 +755,10 @@ fetchLedgerView = do
         Right (ledgerRows :: Array LedgerViewRow) ->
           pure $ Right ledgerRows
 
-fetchAccounts :: Aff (Either String (Array Account))
-fetchAccounts = do
+fetchAccounts :: ApiBaseUrl -> Aff (Either String (Array Account))
+fetchAccounts apiBaseUrl = do
   -- Fetch accounts from the API
-  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts")
+  result <- AX.get ResponseFormat.string (unApiBaseUrl $ appendPath apiBaseUrl "/accounts")
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
@@ -743,11 +767,11 @@ fetchAccounts = do
         Right (accounts :: Array Account) ->
           pure $ Right accounts
 
-fetchBalances :: Aff (Either String (Array AccountBalanceRead))
-fetchBalances = do
+fetchBalances :: ApiBaseUrl -> Aff (Either String (Array AccountBalanceRead))
+fetchBalances apiBaseUrl = do
   -- Fetch account balances from the API
   -- Using accountIds=2,3 to match the Elm implementation
-  result <- AX.get ResponseFormat.string (baseUrl <> "/accounts/balances?accountIds=2,3")
+  result <- AX.get ResponseFormat.string (unApiBaseUrl $ appendPath apiBaseUrl "/accounts/balances?accountIds=2,3")
   case result of
     Left err -> pure $ Left $ "Network error: " <> AX.printError err
     Right response ->
@@ -772,11 +796,12 @@ foreign import confirmDialog :: String -> Effect Boolean
 -- Foreign import for getting current datetime
 foreign import getCurrentDateTimeLocal :: Effect String
 
-type InitArgs = { isDarkMode :: Boolean }
+type InitArgs = { isDarkMode :: Boolean, apiBaseUrl :: String }
 
 main :: InitArgs -> Effect Unit
 main initArgs = do
-  log "[CLIENT] Booting up..."
+  log "[CLIENT/PS] Booting up..."
+  log $ "[CLIENT/PS] API Base URL: " <> initArgs.apiBaseUrl
   HA.runHalogenAff do
     body <- HA.awaitBody
     runUI component initArgs body

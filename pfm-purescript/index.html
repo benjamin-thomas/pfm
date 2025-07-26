@@ -11,12 +11,35 @@
 <body>
     <div id="app"></div>
     <script type="module">
+        // Parcel has a `process.env.API_BASE_URL` functionality, but it seems very buggy.
+        // We can't have 2 parcel processes running simultaneously, their env vars get mixed up otherwise.
+
+        // Determine API base URL based on client URL
+        const currentUrl = window.location.href;
+        let apiBaseUrl;
+
+        switch (currentUrl) {
+            case 'http://localhost:4001/':
+                apiBaseUrl = 'http://localhost:8081'; // Dev environment
+                break;
+            case 'http://localhost:4002/':
+                apiBaseUrl = 'http://localhost:8082'; // Test environment
+                break;
+            default:
+                throw new Error(`Unknown client URL: ${currentUrl}. Expected http://localhost:4001/ or http://localhost:4002/`);
+        }
+
+        console.log(`[CLIENT/JS] Client URL: ${currentUrl}, Using API: ${apiBaseUrl}`);
+
         import { main } from './output/Client.Main/index.js';
         const colorTheme = localStorage.getItem('COLOR_THEME') || 'light';
         if (colorTheme === 'dark') {
             document.documentElement.classList.add('dark-theme');
         }
-        main({ isDarkMode: colorTheme === 'dark' })();
+        main({
+            isDarkMode: colorTheme === 'dark',
+            apiBaseUrl: apiBaseUrl
+        })();
     </script>
 </body>
 

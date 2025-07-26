@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
+# Require APP_ENV to be set
+if [ -z "${APP_ENV:-}" ]; then
+    echo "Error: APP_ENV environment variable is required (dev|test)"
+    exit 1
+fi
+
+node -e "import('./output/Server.Main/index.js').then(m => m.main())"

@@ -12,6 +12,8 @@ import Foreign.Object as FO
 import Effect (Effect)
 import Effect.Aff (runAff_)
 import Effect.Console (log)
+import Effect.Exception (throw)
+import Node.Process (lookupEnv)
 import HTTPurple
   ( class Generic
   , Method(..)
@@ -41,6 +43,9 @@ import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
+
+-- Server configuration types
+data Environment = Dev | Test
 
 data Route
   = Home
@@ -75,12 +80,39 @@ route = mkRoute
 main :: Effect Unit
 main = do
   log "[SERVER] Booting up..."
-  DB.initDatabase "./db.sqlite" # runAff_
+
+  -- Require mandatory APP_ENV environment variable
+  appEnv <- lookupEnv "APP_ENV"
+  case appEnv of
+    Nothing -> throw "APP_ENV environment variable is required (dev|test)"
+    Just "dev" -> do
+      log "[SERVER] Starting in development mode"
+      startAppWithConfig { port: 8081, dbPath: "./db.sqlite", shouldResetSchema: false }
+    Just "test" -> do
+      log "[SERVER] Starting in e2e-test mode"
+      startAppWithConfig { port: 8082, dbPath: "./db.e2e-test.sqlite", shouldResetSchema: true }
+    Just other -> throw $ "Invalid APP_ENV: " <> other <> " (must be dev|test)"
+
+startAppWithConfig :: { port :: Int, dbPath :: String, shouldResetSchema :: Boolean } -> Effect Unit
+startAppWithConfig { port, dbPath, shouldResetSchema } = do
+  log $ "[SERVER] Using database: " <> dbPath
+  log $ "[SERVER] Starting server on port: " <> show port
+  DB.initDatabase dbPath # runAff_
     case _ of
       Left err -> log $ "Failed to initialize database: " <> show err
       Right db -> do
         log "Database initialized successfully"
-        void $ startServer 8081 db
+        if shouldResetSchema then do
+          log "[SERVER] Resetting database schema and seeding with fixtures (test mode)"
+          DB.seedFromOfx "test/OfxParser/fixture.ofx" db # runAff_
+            case _ of
+              Left seedErr -> log $ "Failed to seed database: " <> show seedErr
+              Right _ -> do
+                log "Database schema ready and seeded with test fixtures"
+                void $ startServer port db
+        else do
+          log "[SERVER] Using existing database schema (dev mode)"
+          void $ startServer port db
 
 startServer :: Int -> DBConnection -> ServerM
 startServer port db =

@@ -1,0 +1,9 @@
+- use `AX.post` instead of `AX.defaultRequest`?
+- bogus amount 7.77x passes
+  - likely due to lax js parsing -> use a dedicated parser?
+- better CORS handling?
+  - `Options -> ok ""` everywhere, this should be handled via a middleware
+- e2e tests should use custom test-db
+- can we have test coverage in PureScript?
+- implement toast
+- randomize test order

@@ -25,6 +25,7 @@
   , "newtype"
   , "node-buffer"
   , "node-fs"
+  , "node-process"
   , "node-sqlite3"
   , "numbers"
   , "parallel"

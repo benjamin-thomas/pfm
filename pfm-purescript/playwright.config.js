@@ -3,7 +3,7 @@ export default {
   timeout: 30000,
   retries: 2,
   use: {
-    baseURL: 'http://localhost:4001',
+    baseURL: 'http://localhost:4002', // Test client port
     headless: true,
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -19,13 +19,13 @@ export default {
   ],
   webServer: [
     {
-      command: 'spago build && node -e "import(\'./output/Server.Main/index.js\').then(m => m.main())"',
-      port: 8081,
+      command: 'spago build && APP_ENV=test ./manage/server', // Uses APP_ENV=test
+      port: 8082, // Test server port
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'spago build && parcel serve --port=4001 index.html',
-      port: 4001,
+      command: 'npm run client:test', // Test client
+      port: 4002, // Test client port
       reuseExistingServer: !process.env.CI,
     },
   ],

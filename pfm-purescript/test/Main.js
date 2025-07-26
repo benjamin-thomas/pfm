@@ -1,5 +1,6 @@
 import { existsSync, unlinkSync } from 'fs';
 import { createServer } from 'net';
+import { randomUUID } from 'crypto';
 
 export const removeFile = (path) => () =>
     existsSync(path) && unlinkSync(path);
@@ -11,3 +12,5 @@ export const getRandomPort = () => {
     server.close();
     return port;
 };
+
+export const getUniqueId = () => randomUUID();
