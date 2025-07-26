@@ -2,14 +2,21 @@ module Client.Main (main) where
 
 import Prelude
 
+import Data.HTTP.Method (Method(..))
+import Affjax.RequestBody as RequestBody
+import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
 import Data.Array (length, reverse, uncons, zip, (:))
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
+import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, isJust, isNothing)
+import Data.Number as Number
+import Data.String as String
 import Data.Tuple (Tuple(..))
+import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
@@ -440,7 +447,7 @@ render state =
       [ HH.text account.name ]
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
-handleAction = case _ of
+handleAction action = case Debug.spy "action" action of
   Initialize -> do
     -- Load all data in parallel on startup
     handleAction LoadAllData
@@ -481,7 +488,7 @@ handleAction = case _ of
                 , description: row.descr
                 , fromAccountId: show row.fromAccountId
                 , toAccountId: show row.toAccountId
-                , amount: row.flow
+                , amount: stripNegativeSign row.flow
                 , date: formatUnixToDateTimeLocal row.dateUnix
                 }
             H.modify_ \s -> s { dialog = Just (EditDialog editState) }
@@ -497,17 +504,77 @@ handleAction = case _ of
     state <- H.get
     case state.dialog of
       Just (CreateDialog createState) -> do
-        -- TODO: Implement create transaction API call
-        liftEffect $ dialogClose "transaction-dialog"
-        H.modify_ \s -> s { dialog = Nothing }
-        -- Refresh all data
-        handleAction LoadAllData
+        -- Parse datetime-local to Unix timestamp
+        let dateUnix = dateTimeLocalToUnix createState.date
+        -- Convert amount string to cents
+        case parseAmount createState.amount of
+          Nothing -> do
+            liftEffect $ log "Invalid amount format"
+          Just cents -> do
+            -- Create transaction request body
+            let
+              transactionData =
+                { budgetId: (Nothing :: Maybe Int)
+                , fromAccountId: parseAccountId createState.fromAccountId
+                , toAccountId: parseAccountId createState.toAccountId
+                , dateUnix: dateUnix
+                , descr: createState.description
+                , cents: cents
+                }
+            liftEffect $ log $ "Sending transaction: " <> JSON.writeJSON transactionData
+            -- Send POST request
+            result <- H.liftAff $ AX.request
+              AX.defaultRequest
+                { method = Left POST
+                , url = baseUrl <> "/transactions"
+                , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+                , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
+                , responseFormat = ResponseFormat.string
+                }
+            case result of
+              Left err -> liftEffect $ log $ "Error creating transaction: " <> AX.printError err
+              Right response -> do
+                liftEffect $ log $ "Transaction created successfully. Status: " <> show response.status
+                liftEffect $ dialogClose "transaction-dialog"
+                H.modify_ \s -> s { dialog = Nothing }
+                -- Refresh all data
+                handleAction LoadAllData
       Just (EditDialog editState) -> do
-        -- TODO: Implement edit transaction API call
-        liftEffect $ dialogClose "transaction-dialog"
-        H.modify_ \s -> s { dialog = Nothing }
-        -- Refresh all data
-        handleAction LoadAllData
+        -- Parse datetime-local to Unix timestamp
+        let dateUnix = dateTimeLocalToUnix editState.date
+        -- Convert amount string to cents
+        case parseAmount editState.amount of
+          Nothing -> do
+            liftEffect $ log "Invalid amount format"
+          Just cents -> do
+            -- Create transaction update request body
+            let
+              transactionData =
+                { budgetId: (Nothing :: Maybe Int)
+                , fromAccountId: parseAccountId editState.fromAccountId
+                , toAccountId: parseAccountId editState.toAccountId
+                , dateUnix: dateUnix
+                , descr: editState.description
+                , cents: cents
+                }
+            liftEffect $ log $ "Updating transaction " <> show editState.transactionId <> ": " <> JSON.writeJSON transactionData
+            -- Send PUT request
+            result <- H.liftAff $ AX.request
+              AX.defaultRequest
+                { method = Left PUT
+                , url = baseUrl <> "/transactions/" <> show editState.transactionId
+                , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+                , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
+                , responseFormat = ResponseFormat.string
+                }
+            case result of
+              Left err -> liftEffect $ log $ "Error updating transaction: " <> AX.printError err
+              Right response -> do
+                liftEffect $ log $ "Transaction updated successfully. Status: " <> show response.status
+                liftEffect $ dialogClose "transaction-dialog"
+                H.modify_ \s -> s { dialog = Nothing }
+                -- Refresh all data
+                handleAction LoadAllData
       Nothing -> pure unit
 
   CreateDialogChanged createAction -> do
@@ -629,4 +696,31 @@ main initArgs = do
   HA.runHalogenAff do
     body <- HA.awaitBody
     runUI component initArgs body
+
+-- Helper functions for transaction creation
+
+-- Convert datetime-local string (YYYY-MM-DDTHH:mm) to Unix timestamp
+dateTimeLocalToUnix :: String -> Int
+dateTimeLocalToUnix dateTimeStr =
+  -- Use the foreign function for parsing
+  parseDateTimeLocal dateTimeStr
+
+-- Foreign import for parsing datetime-local
+foreign import parseDateTimeLocal :: String -> Int
+
+-- Parse amount string (e.g., "42.50") to cents (always positive)
+parseAmount :: String -> Maybe Int
+parseAmount amountStr = do
+  amount <- Number.fromString amountStr
+  pure $ Int.round (Number.abs amount * 100.0)
+
+-- Parse account ID string to Int
+parseAccountId :: String -> Int
+parseAccountId idStr = fromMaybe 0 (Int.fromString idStr)
+
+-- Strip negative sign from amount string to ensure positive values in dialogs
+stripNegativeSign :: String -> String
+stripNegativeSign amountStr =
+  if String.take 1 amountStr == "-" then String.drop 1 amountStr
+  else amountStr
 

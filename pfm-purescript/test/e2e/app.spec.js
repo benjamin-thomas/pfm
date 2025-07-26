@@ -214,4 +214,118 @@ test.describe('PFM PureScript App', () => {
     await expect(dialog).not.toBeVisible();
   });
 
+  test('should create a new transaction', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Count initial transactions
+    const initialTransactions = await page.locator('.transaction-item').count();
+
+    // Open create dialog
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    // Wait for dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Fill in the form with a unique description
+    const uniqueDescription = `Test transaction from e2e ${Date.now()}`;
+    const descriptionField = page.locator('input[id="description"]');
+    await descriptionField.fill(uniqueDescription);
+
+    const fromAccountField = page.locator('select[id="from-account"]');
+    await fromAccountField.selectOption('2'); // Checking account
+
+    const toAccountField = page.locator('select[id="to-account"]');
+    await toAccountField.selectOption('6'); // Unknown Expense
+
+    const amountField = page.locator('input[id="amount"]');
+    await amountField.fill('42.50');
+
+    const dateField = page.locator('input[id="date"]');
+    // Set a specific date/time
+    await dateField.fill('2024-07-01T10:30');
+
+    // Save the transaction
+    const saveButton = page.locator('.dialog-actions .button--primary');
+    await saveButton.click();
+
+    // Wait for dialog to close with longer timeout
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+    // Wait for the transaction list to refresh
+    await page.waitForTimeout(2000);
+
+    // Reload page to verify data persistence
+    await page.reload();
+    await page.waitForSelector('.transaction-list');
+
+    // Verify new transaction appears in the list after reload
+    const newTransactionCount = await page.locator('.transaction-item').count();
+    expect(newTransactionCount).toBeGreaterThan(initialTransactions);
+
+    // Find the new transaction by searching for our unique test description
+    const testTransactionLocator = page.locator('.transaction-item__description', { hasText: uniqueDescription });
+    await expect(testTransactionLocator).toBeVisible();
+
+    // Find the transaction item that contains our description
+    const testTransaction = page.locator('.transaction-item', { has: testTransactionLocator });
+
+    // Verify the amount
+    const amount = await testTransaction.locator('.transaction-item__amount').textContent();
+    expect(amount).toContain('42.50');
+
+    // Verify it's an expense (negative amount)
+    const amountClass = await testTransaction.locator('.transaction-item__amount').getAttribute('class');
+    expect(amountClass).toContain('transaction-item__amount--negative');
+  });
+
+  test('should edit an existing transaction', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Wait for at least one transaction to be present
+    await page.waitForSelector('.transaction-item');
+
+    // Click on the first transaction to edit it
+    const firstTransaction = page.locator('.transaction-item').first();
+    await firstTransaction.click();
+
+    // Wait for edit dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Verify this is the edit dialog
+    await expect(page.locator('.dialog-title')).toContainText('Edit Transaction');
+
+    // Get the original description for comparison
+    const descriptionField = page.locator('input[id="description"]');
+    const originalDescription = await descriptionField.inputValue();
+
+    // Change the description
+    const newDescription = originalDescription + ' (edited)';
+    await descriptionField.fill(newDescription);
+
+    // Click Save button
+    await page.locator('.dialog-actions .button--primary').click();
+
+    // Wait for dialog to close
+    await expect(dialog).not.toBeVisible({ timeout: 10000 });
+
+    // Wait for the transaction list to refresh
+    await page.waitForTimeout(2000);
+
+    // Reload page to verify data persistence
+    await page.reload();
+    await page.waitForSelector('.transaction-list');
+
+    // Verify the transaction was updated by checking if the new description appears after reload
+    await expect(page.locator('.transaction-item__description').first()).toContainText('(edited)');
+  });
+
 });

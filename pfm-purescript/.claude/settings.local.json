@@ -5,7 +5,10 @@
       "Bash(mkdir:*)",
       "Bash(spago build:*)",
       "Bash(spago install:*)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "Bash(spago test:*)",
+      "Bash(grep:*)",
+      "Bash(npx playwright test:*)"
     ],
     "deny": []
   }

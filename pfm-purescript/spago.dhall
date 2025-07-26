@@ -26,6 +26,7 @@
   , "node-buffer"
   , "node-fs"
   , "node-sqlite3"
+  , "numbers"
   , "parallel"
   , "parsing"
   , "partial"

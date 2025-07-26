@@ -28,3 +28,9 @@ export const formatUnixToDateTimeLocal = (unixTimestamp) => {
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
+
+// Parse datetime-local string (YYYY-MM-DDTHH:mm) to Unix timestamp
+export const parseDateTimeLocal = (dateTimeStr) => {
+    const date = new Date(dateTimeStr);
+    return Math.floor(date.getTime() / 1000); // Convert milliseconds to seconds
+};

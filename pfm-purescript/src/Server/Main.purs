@@ -28,6 +28,7 @@ import HTTPurple
   , response
   , segment
   , serve
+  , toString
   , (/)
   )
 import HTTPurple.Response (Response)
@@ -38,6 +39,7 @@ import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
+import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
 
 data Route
@@ -112,6 +114,7 @@ makeRouter db req =
     Home ->
       case req.method of
         Get -> ok "PFM PureScript Server is running!"
+        Options -> ok ""
         _ -> methodNotAllowed
 
     Categories ->
@@ -119,6 +122,7 @@ makeRouter db req =
         Get -> do
           categories <- Category.getAllCategories db
           ok $ JSON.writeJSON categories
+        Options -> ok ""
         _ -> methodNotAllowed
 
     CategoryById categoryId ->
@@ -128,6 +132,7 @@ makeRouter db req =
           case maybeCategory of
             Just category -> ok $ JSON.writeJSON category
             Nothing -> response 404 $ JSON.writeJSON { error: "Category not found" }
+        Options -> ok ""
         _ -> methodNotAllowed
 
     Accounts ->
@@ -135,6 +140,7 @@ makeRouter db req =
         Get -> do
           accounts <- Account.getAllAccounts db
           ok $ JSON.writeJSON accounts
+        Options -> ok ""
         _ -> methodNotAllowed
 
     AccountBalances ->
@@ -152,6 +158,7 @@ makeRouter db req =
                 Just accountIds -> do
                   balances <- Account.getAccountBalances accountIds db
                   ok $ JSON.writeJSON balances
+        Options -> ok ""
         _ -> methodNotAllowed
 
     AccountLedger accountId ->
@@ -159,6 +166,7 @@ makeRouter db req =
         Get -> do
           ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO accountId db
           ok $ JSON.writeJSON ledgerRows
+        Options -> ok ""
         _ -> methodNotAllowed
 
     Budgets ->
@@ -166,6 +174,7 @@ makeRouter db req =
         Get -> do
           budgets <- BudgetQueries.getAllBudgets db
           ok $ JSON.writeJSON budgets
+        Options -> ok ""
         _ -> methodNotAllowed
 
     BudgetById budgetId ->
@@ -175,6 +184,7 @@ makeRouter db req =
           case maybeBudget of
             Just budget -> ok $ JSON.writeJSON budget
             Nothing -> response 404 $ JSON.writeJSON { error: "Budget not found" }
+        Options -> ok ""
         _ -> methodNotAllowed
 
     Transactions ->
@@ -182,6 +192,35 @@ makeRouter db req =
         Get -> do
           transactions <- TransactionQueries.getAllTransactions db
           ok $ JSON.writeJSON transactions
+        Post -> do
+          -- Parse request body
+          bodyStr <- toString req.body
+          case JSON.readJSON bodyStr of
+            Left err -> response 400 $ JSON.writeJSON { error: "Invalid JSON: " <> show err }
+            Right (TransactionWrite txWrite) -> do
+              -- Get or create budget ID for the transaction date
+              maybeBudgetId <- BudgetQueries.getBudgetIdForDate txWrite.dateUnix db
+              budgetId <- case maybeBudgetId of
+                Nothing -> BudgetQueries.insertBudgetForDate txWrite.dateUnix db
+                Just bid -> pure bid
+
+              -- Create the transaction row
+              let
+                transactionRow = TransactionQueries.TransactionNewRow
+                  { budgetId: Just budgetId
+                  , fromAccountId: txWrite.fromAccountId
+                  , toAccountId: txWrite.toAccountId
+                  , uniqueFitId: Nothing
+                  , dateUnix: txWrite.dateUnix
+                  , descrOrig: txWrite.descr
+                  , descr: txWrite.descr
+                  , cents: txWrite.cents
+                  }
+
+              -- Insert the transaction
+              TransactionQueries.insertTransaction transactionRow db
+              response 201 ""
+        Options -> ok ""
         _ -> methodNotAllowed
 
     TransactionById transactionId ->
@@ -191,7 +230,30 @@ makeRouter db req =
           case maybeTransaction of
             Just transaction -> ok $ JSON.writeJSON transaction
             Nothing -> response 404 $ JSON.writeJSON { error: "Transaction not found" }
+        Put -> do
+          -- Parse request body
+          bodyStr <- toString req.body
+          case JSON.readJSON bodyStr of
+            Left err -> response 400 $ JSON.writeJSON { error: "Invalid JSON: " <> show err }
+            Right (TransactionWrite txWrite) -> do
+              -- Create the transaction row (budget ID not needed for update)
+              let
+                transactionRow = TransactionQueries.TransactionNewRow
+                  { budgetId: Nothing
+                  , fromAccountId: txWrite.fromAccountId
+                  , toAccountId: txWrite.toAccountId
+                  , uniqueFitId: Nothing
+                  , dateUnix: txWrite.dateUnix
+                  , descrOrig: txWrite.descr
+                  , descr: txWrite.descr
+                  , cents: txWrite.cents
+                  }
+
+              -- Update the transaction
+              TransactionQueries.updateTransaction transactionId transactionRow db
+              response 204 ""
         Delete -> do
           TransactionQueries.deleteTransaction transactionId db
           ok "Transaction deleted"
+        Options -> ok ""
         _ -> methodNotAllowed

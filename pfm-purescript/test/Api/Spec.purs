@@ -3,9 +3,11 @@ module Test.Api.Spec where
 import Prelude
 
 import Affjax.Node as AX
+import Affjax.RequestBody as RequestBody
+import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
-import Data.Array (length, head)
+import Data.Array (length, head, find) as Array
 import Data.Either (Either(..))
 import Data.String (contains, Pattern(..))
 import Data.HTTP.Method (Method(..))
@@ -13,7 +15,7 @@ import Data.Maybe (Maybe(..))
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
-import Shared.Types (AccountBalanceRead(..), LedgerViewRow, Transaction, User(..))
+import Shared.Types (AccountBalanceRead(..), LedgerViewRow(..), Transaction, User(..))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.JSON as JSON
@@ -41,9 +43,9 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (categories :: Array CategoryDB) -> do
-                length categories `shouldEqual` 4
+                Array.length categories `shouldEqual` 4
                 -- Validate JSON structure of first category
-                case head categories of
+                case Array.head categories of
                   Just (CategoryDB cat) -> do
                     cat.categoryId `shouldSatisfy` (_ > 0)
                     cat.name `shouldSatisfy` (_ /= "")
@@ -91,9 +93,9 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (accounts :: Array AccountDB) -> do
-                length accounts `shouldSatisfy` (_ >= 13)
+                Array.length accounts `shouldSatisfy` (_ >= 13)
                 -- Validate JSON structure of first account
-                case head accounts of
+                case Array.head accounts of
                   Just (AccountDB acc) -> do
                     acc.accountId `shouldSatisfy` (_ > 0)
                     acc.categoryId `shouldSatisfy` (_ > 0)
@@ -114,7 +116,7 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (ledgerRows :: Array LedgerViewRow) ->
-                length ledgerRows `shouldSatisfy` (_ >= 0) -- May be empty initially
+                Array.length ledgerRows `shouldSatisfy` (_ >= 0) -- May be empty initially
 
     describe "Account Balances Endpoint" do
       it "should get account balances with valid accountIds" do
@@ -129,9 +131,9 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (balances :: Array AccountBalanceRead) -> do
-                length balances `shouldSatisfy` (_ >= 2) -- Should have at least 2 balances
+                Array.length balances `shouldSatisfy` (_ >= 2) -- Should have at least 2 balances
                 -- Validate JSON structure of first balance
-                case head balances of
+                case Array.head balances of
                   Just (AccountBalanceRead balance) -> do
                     balance.accountId `shouldSatisfy` (\id -> id == 2 || id == 3)
                     balance.categoryId `shouldEqual` 2 -- Assets category
@@ -194,7 +196,7 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (balances :: Array AccountBalanceRead) ->
-                length balances `shouldEqual` 0
+                Array.length balances `shouldEqual` 0
 
     describe "Budgets Endpoints" do
       it "should get all budgets" do
@@ -206,7 +208,7 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (budgets :: Array BudgetDB) ->
-                length budgets `shouldSatisfy` (_ >= 0)
+                Array.length budgets `shouldSatisfy` (_ >= 0)
 
       it "should get budget by ID when exists" do
         -- First get all budgets to find an existing one
@@ -217,7 +219,7 @@ spec port = do
             case JSON.readJSON budgetsResponse.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (budgets :: Array BudgetDB) -> do
-                case head budgets of
+                case Array.head budgets of
                   Just (BudgetDB budget) -> do
                     result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets/" <> show budget.budgetId)
                     case result of
@@ -244,7 +246,7 @@ spec port = do
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
               Right (transactions :: Array Transaction) ->
-                length transactions `shouldSatisfy` (_ >= 0)
+                Array.length transactions `shouldSatisfy` (_ >= 0)
 
       it "should return 404 for non-existent transaction" do
         result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/transactions/999")
@@ -272,3 +274,123 @@ spec port = do
           Right response -> do
             shouldEqual (StatusCode 200) response.status
             response.body `shouldEqual` "Transaction deleted"
+
+      it "should create a new transaction" do
+        -- Create transaction data
+        let
+          transactionData =
+            { budgetId: Nothing :: Maybe Int
+            , fromAccountId: 2 -- Checking account
+            , toAccountId: 6 -- Unknown expense
+            , dateUnix: 1719792000 -- 2024-07-01
+            , descr: "Test transaction from API"
+            , cents: 4250 -- $42.50
+            }
+
+        -- Send POST request
+        result <- AX.request AX.defaultRequest
+          { method = Left POST
+          , url = "http://localhost:" <> show port <> "/transactions"
+          , responseFormat = ResponseFormat.string
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
+          }
+
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 201) response.status
+            response.body `shouldEqual` ""
+
+        -- Verify the transaction was created by fetching it
+        ledgerResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+        case ledgerResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (transactions :: Array LedgerViewRow) -> do
+                -- Find our new transaction
+                let newTransaction = Array.find (\(LedgerViewRow row) -> row.descr == "Test transaction from API") transactions
+                case newTransaction of
+                  Nothing -> shouldEqual "Transaction found" "Transaction not found"
+                  Just (LedgerViewRow txn) -> do
+                    txn.descr `shouldEqual` "Test transaction from API"
+                    txn.flowCents `shouldEqual` (-4250)
+                    txn.fromAccountId `shouldEqual` 2
+                    txn.toAccountId `shouldEqual` 6
+
+      it "should update an existing transaction" do
+        -- First create a transaction
+        let
+          createData =
+            { budgetId: Nothing :: Maybe Int
+            , fromAccountId: 2
+            , toAccountId: 6
+            , dateUnix: 1719792000
+            , descr: "Original transaction"
+            , cents: 1000
+            }
+
+        createResult <- AX.request AX.defaultRequest
+          { method = Left POST
+          , url = "http://localhost:" <> show port <> "/transactions"
+          , responseFormat = ResponseFormat.string
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.string $ JSON.writeJSON createData
+          }
+
+        case createResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right _ -> pure unit
+
+        -- Get the transaction ID
+        ledgerResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+        case ledgerResult of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (transactions :: Array LedgerViewRow) -> do
+                let originalTxn = Array.find (\(LedgerViewRow row) -> row.descr == "Original transaction") transactions
+                case originalTxn of
+                  Nothing -> shouldEqual "Transaction found" "Transaction not found"
+                  Just (LedgerViewRow txn) -> do
+                    -- Update the transaction
+                    let
+                      updateData =
+                        { budgetId: Nothing :: Maybe Int
+                        , fromAccountId: 2
+                        , toAccountId: 7 -- Changed to Groceries
+                        , dateUnix: 1719878400 -- Changed date
+                        , descr: "Updated transaction"
+                        , cents: 2500 -- Changed amount
+                        }
+
+                    updateResult <- AX.request AX.defaultRequest
+                      { method = Left PUT
+                      , url = "http://localhost:" <> show port <> "/transactions/" <> show txn.transactionId
+                      , responseFormat = ResponseFormat.string
+                      , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+                      , content = Just $ RequestBody.string $ JSON.writeJSON updateData
+                      }
+
+                    case updateResult of
+                      Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+                      Right response -> shouldEqual (StatusCode 204) response.status
+
+                    -- Verify the update
+                    verifyResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger")
+                    case verifyResult of
+                      Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+                      Right response -> do
+                        case JSON.readJSON response.body of
+                          Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+                          Right (updatedTransactions :: Array LedgerViewRow) -> do
+                            let updatedTxn = Array.find (\(LedgerViewRow row) -> row.transactionId == txn.transactionId) updatedTransactions
+                            case updatedTxn of
+                              Nothing -> shouldEqual "Transaction found" "Transaction not found"
+                              Just (LedgerViewRow updated) -> do
+                                updated.descr `shouldEqual` "Updated transaction"
+                                updated.flowCents `shouldEqual` (-2500)
+                                updated.toAccountId `shouldEqual` 7
