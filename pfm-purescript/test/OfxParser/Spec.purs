@@ -158,28 +158,28 @@ spec = do
         case parseOfx content of
           Left err -> fail $ "Parser failed: " <> err
           Right batch -> do
-            batch.accountNumber `shouldEqual` "04112816394"
-            batch.transactions `shouldSatisfy` \txs -> length txs == 10
+            batch.accountNumber `shouldEqual` "123456789"
+            batch.transactions `shouldSatisfy` \txs -> length txs == 8
 
-            -- Check first transaction
+            -- Check first transaction (salary)
             case batch.transactions !! 0 of
               Nothing -> fail "No first transaction found"
               Just txn -> do
-                txn.posted `shouldEqual` ShortDate (mkDate 2016 4 13)
-                txn.amount `shouldEqual` mkDecimal "4000.00"
-                txn.fitId `shouldEqual` "9947030000068"
-                txn.name `shouldEqual` "A client"
-                txn.memo `shouldEqual` "Transfer in your favor"
+                txn.posted `shouldEqual` ShortDate (mkDate 2024 9 30)
+                txn.amount `shouldEqual` mkDecimal "2500.00"
+                txn.fitId `shouldEqual` "TXN001"
+                txn.name `shouldEqual` "Monthly Income"
+                txn.memo `shouldEqual` "September salary payment"
 
-            -- Check a negative transaction
+            -- Check a negative transaction (rent)
             case batch.transactions !! 1 of
               Nothing -> fail "No second transaction found"
               Just txn -> do
-                txn.posted `shouldEqual` ShortDate (mkDate 2016 4 11)
-                txn.amount `shouldEqual` mkDecimal "-31.20"
-                txn.fitId `shouldEqual` "9944290089129"
-                txn.name `shouldEqual` "A Book publisher 10/04"
-                txn.memo `shouldEqual` "Payment by card"
+                txn.posted `shouldEqual` ShortDate (mkDate 2024 9 25)
+                txn.amount `shouldEqual` mkDecimal "-800.00"
+                txn.fitId `shouldEqual` "TXN002"
+                txn.name `shouldEqual` "Rent Payment"
+                txn.memo `shouldEqual` "Monthly rent"
 
       it "should handle amounts without explicit sign" do
         let

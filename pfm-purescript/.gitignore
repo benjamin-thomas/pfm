@@ -6,6 +6,8 @@
 /dist/
 /db.sqlite
 /db.e2e-test.sqlite
+/db.e2e-test.sqlite-shm
+/db.e2e-test.sqlite-wal
 /db.integration-test-*.sqlite
 /.spec-results
 /test-results
