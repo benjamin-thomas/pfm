@@ -516,13 +516,14 @@ handleAction action = case Debug.spy "action" action of
     liftEffect $ toggleTheme unit
 
   OpenCreateDialog -> do
+    currentDateTime <- liftEffect getCurrentDateTimeLocal
     let
       initialState =
         { description: ""
         , fromAccountId: ""
         , toAccountId: ""
         , amount: ""
-        , date: ""
+        , date: currentDateTime
         }
     H.modify_ \s -> s { dialog = Just (CreateDialog initialState) }
     liftEffect $ dialogShow "transaction-dialog"
@@ -767,6 +768,9 @@ foreign import formatUnixToDateTimeLocal :: Int -> String
 
 -- Foreign import for native confirmation dialog
 foreign import confirmDialog :: String -> Effect Boolean
+
+-- Foreign import for getting current datetime
+foreign import getCurrentDateTimeLocal :: Effect String
 
 type InitArgs = { isDarkMode :: Boolean }
 

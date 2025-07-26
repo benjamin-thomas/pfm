@@ -328,6 +328,46 @@ test.describe('PFM PureScript App', () => {
     await expect(page.locator('.transaction-item__description').first()).toContainText('(edited)');
   });
 
+  test('should populate create dialog date field with current time', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Get current time before opening dialog (with some tolerance)
+    const beforeTime = new Date();
+
+    // Open create dialog
+    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
+    await createButton.click();
+
+    // Wait for dialog to be visible
+    const dialog = page.locator('#transaction-dialog');
+    await expect(dialog).toBeVisible();
+
+    // Check that dialog title is correct
+    await expect(page.locator('.dialog-title')).toContainText('Create Transaction');
+
+    // Get the date field value
+    const dateField = page.locator('input[id="date"]');
+    const dateValue = await dateField.inputValue();
+
+    // Parse the datetime-local value
+    const dialogDate = new Date(dateValue);
+    const afterTime = new Date();
+
+    // The dialog date should be between beforeTime and afterTime (allowing 1 minute tolerance)
+    expect(dialogDate.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime() - 60000);
+    expect(dialogDate.getTime()).toBeLessThanOrEqual(afterTime.getTime() + 60000);
+
+    // Verify the format is datetime-local (YYYY-MM-DDTHH:mm)
+    const dateTimeLocalPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+    expect(dateValue).toMatch(dateTimeLocalPattern);
+
+    // Close dialog
+    await page.locator('.dialog-actions .button').first().click();
+  });
+
   test('should delete a transaction with confirmation', async ({ page }) => {
     await page.goto('/');
 
