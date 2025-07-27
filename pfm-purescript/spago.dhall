@@ -33,11 +33,16 @@
   , "parsing"
   , "partial"
   , "prelude"
+  , "refs"
   , "spec"
   , "spec-node"
   , "strings"
   , "transformers"
   , "tuples"
+  , "web-dom"
+  , "web-events"
+  , "web-html"
+  , "web-uievents"
   , "yoga-json"
   ]
 , packages = ./packages.dhall
