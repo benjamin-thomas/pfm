@@ -115,6 +115,7 @@ type FilterState =
   , minAmount :: String
   , maxAmount :: String
   , unknownExpensesOnly :: Boolean
+  , soundexDescr :: String
   }
 
 data FilterAction
@@ -183,6 +184,7 @@ component = H.mkComponent
           , minAmount: ""
           , maxAmount: ""
           , unknownExpensesOnly: false
+          , soundexDescr: ""
           }
       , debounceTimerId: Nothing
       }
@@ -907,6 +909,7 @@ updateFilterState action state =
       , minAmount: ""
       , maxAmount: ""
       , unknownExpensesOnly: false
+      , soundexDescr: ""
       }
 
 -- baseUrl is now passed as apiBaseUrl in state
@@ -1019,6 +1022,7 @@ buildQueryParams fsUntrimmed =
       , minAmount = String.trim fsUntrimmed.minAmount
       , maxAmount = String.trim fsUntrimmed.maxAmount
       , unknownExpensesOnly = fsUntrimmed.unknownExpensesOnly
+      , soundexDescr = String.trim fsUntrimmed.soundexDescr
       }
     whenStr str encoded = if str /= "" then Just encoded else Nothing
     whenBool bool encoded = if bool then Just encoded else Nothing
@@ -1030,6 +1034,7 @@ buildQueryParams fsUntrimmed =
     params =
       Array.catMaybes
         [ whenStr fs.description $ "description=" <> fs.description
+        , whenStr fs.soundexDescr $ "soundexDescr=" <> fs.soundexDescr
         , map (\cents -> "minAmount=" <> show cents) minAmountCents
         , map (\cents -> "maxAmount=" <> show cents) maxAmountCents
         , whenBool fs.unknownExpensesOnly "unknownExpensesOnly=1"

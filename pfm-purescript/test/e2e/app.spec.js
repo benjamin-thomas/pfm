@@ -449,7 +449,7 @@ test.describe('PFM PureScript App', () => {
     // Check that min/max amount filters are present
     const minAmountFilter = page.locator('input#search-amount-min');
     await expect(minAmountFilter).toBeVisible();
-    
+
     const maxAmountFilter = page.locator('input#search-amount-max');
     await expect(maxAmountFilter).toBeVisible();
 
@@ -471,7 +471,7 @@ test.describe('PFM PureScript App', () => {
 
     // Get initial transaction count
     const initialCount = await page.locator('.transaction-item').count();
-    
+
     // Add a test transaction with known description
     const createButton = page.locator('.transaction-list__header-buttons .button--primary');
     await createButton.click();
@@ -500,7 +500,7 @@ test.describe('PFM PureScript App', () => {
     // Check that only transactions with "GROCERY" in description are shown
     const filteredTransactions = await page.locator('.transaction-item').count();
     const visibleDescriptions = await page.locator('.transaction-item__description').allTextContents();
-    
+
     // All visible descriptions should contain "GROCERY" (case insensitive)
     for (const desc of visibleDescriptions) {
       expect(desc.toLowerCase()).toContain('grocery');
@@ -665,12 +665,12 @@ test.describe('PFM PureScript App', () => {
       for (let i = 0; i < visibleTransactions; i++) {
         // Check description contains "MULTI"
         expect(descriptions[i].toLowerCase()).toContain('multi');
-        
+
         // Check amount is between 70.00 and 80.00
         const amount = parseFloat(amounts[i].replace(/[^0-9.-]/g, ''));
         expect(Math.abs(amount)).toBeGreaterThanOrEqual(70.0);
         expect(Math.abs(amount)).toBeLessThanOrEqual(80.0);
-        
+
         // Check it's an unknown expense
         expect(accounts[i]).toContain('Unknown_EXPENSE');
       }
@@ -697,7 +697,7 @@ test.describe('PFM PureScript App', () => {
     // Get initial count text
     const countElement = page.locator('.transaction-count');
     await expect(countElement).toBeVisible();
-    
+
     const initialCountText = await countElement.textContent();
     expect(initialCountText).toMatch(/\d+ transactions?/);
 

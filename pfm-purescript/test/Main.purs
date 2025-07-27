@@ -4,12 +4,10 @@ import Prelude
 
 import Data.Either (Either(..))
 import Effect (Effect)
-import Effect.Aff (Aff, runAff_)
+import Effect.Aff (runAff_)
 import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (throw)
-import SQLite3 (DBConnection)
-import SQLite3 as SQLite3
 import Server.Database (initDatabase, createSchema)
 import Server.Main (startServer)
 import Test.Api.Spec as ApiSpec
@@ -17,7 +15,8 @@ import Test.Database.Spec as DatabaseSpec
 import Test.Database.TestUtils (setupTestFixtures)
 import Test.OfxParser.Spec as OfxParserSpec
 import Test.Spec.Reporter.Console (consoleReporter)
-import Test.Spec.Runner.Node (runSpecAndExitProcess)
+import Test.Spec.Runner.Node (runSpecAndExitProcess')
+import Test.Spec.Runner.Node.Config (defaultConfig)
 
 foreign import removeFile :: String -> Effect Unit
 foreign import getRandomPort :: Effect Int
@@ -54,8 +53,27 @@ main = do
                   liftEffect $ log $ "Starting test server on port: " <> show port
                   liftEffect $ void $ startServer port db
                   liftEffect $ log "Test server started successfully"
-                  liftEffect $ runSpecAndExitProcess [ consoleReporter ] do
-                    OfxParserSpec.spec
-                    DatabaseSpec.spec db
-                    ApiSpec.spec port
+                  let testConfig = defaultConfig -- { failFast = true }
+
+                  {-
+
+
+                  spago test --exec-args --help
+                  spago test --exec-args --only-failures
+                  spago test --exec-args --fail-fast
+
+                  # Or combines both
+                  spago test --exec-args --next-failure
+
+
+                   -}
+                  liftEffect $ runSpecAndExitProcess'
+                    { defaultConfig: testConfig
+                    , parseCLIOptions: true -- Allow CLI to override failFast
+                    }
+                    [ consoleReporter ]
+                    do
+                      OfxParserSpec.spec
+                      DatabaseSpec.spec db
+                      ApiSpec.spec port
 

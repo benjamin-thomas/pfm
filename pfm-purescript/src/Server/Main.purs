@@ -298,7 +298,7 @@ makeRouter db req =
 parseFilters :: FO.Object String -> LedgerViewFilters
 parseFilters query =
   { description: FO.lookup "description" query
-  , soundex: FO.lookup "soundex" query
+  , soundexDescr: FO.lookup "soundexDescr" query
   , minAmount: FO.lookup "minAmount" query >>= fromString
   , maxAmount: FO.lookup "maxAmount" query >>= fromString
   , unknownExpensesOnly: (_ == "1") <$> FO.lookup "unknownExpensesOnly" query

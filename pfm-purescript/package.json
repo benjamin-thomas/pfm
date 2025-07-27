@@ -15,7 +15,9 @@
     "test:all": "npm run test && npm run test:e2e",
     "test:all:watch": "rg --files ./test/ ./src/ | entr -rc npm run test:all",
     "test": "spago test",
-    "test:watch": "rg --files ./test/ ./src/ | entr -rc spago test",
+    "test:next-failure": "spago test --exec-args --next-failure",
+    "test:fast": "spago test --exec-args --fail-fast",
+    "test:watch": "rg --files ./test/ ./src/ | entr -rc spago test --exec-args --fail-fast",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "clean": "rm -rf output .spago dist .parcel-cache"

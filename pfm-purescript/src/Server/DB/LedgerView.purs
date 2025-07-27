@@ -21,7 +21,7 @@ import Yoga.JSON as JSON
 -- | Filter parameters for ledger view queries
 type LedgerViewFilters =
   { description :: Maybe String -- Filter by description (case insensitive LIKE)
-  , soundex :: Maybe String -- Filter by soundex similarity  
+  , soundexDescr :: Maybe String -- Filter by soundex similarity  
   , minAmount :: Maybe Int -- Minimum amount in cents
   , maxAmount :: Maybe Int -- Maximum amount in cents
   , unknownExpensesOnly :: Maybe Boolean -- Show only unknown expenses
@@ -31,6 +31,7 @@ type LedgerViewFilters =
 type LedgerViewQueryParams =
   { "$accountId" :: Int
   , "$descriptionFilter" :: Nullable String
+  , "$soundexDescr" :: Nullable String
   , "$minAmountCents" :: Nullable Int
   , "$maxAmountCents" :: Nullable Int
   , "$unknownExpensesOnly" :: Boolean
@@ -134,6 +135,7 @@ getLedgerViewRows accountId filters db = do
     params =
       { "$accountId": accountId
       , "$descriptionFilter": toNullable filters.description
+      , "$soundexDescr": toNullable filters.soundexDescr
       , "$minAmountCents": toNullable filters.minAmount
       , "$maxAmountCents": toNullable filters.maxAmount
       , "$unknownExpensesOnly": fromMaybe false filters.unknownExpensesOnly

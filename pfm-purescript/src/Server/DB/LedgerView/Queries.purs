@@ -17,7 +17,7 @@ import Shared.Types (LedgerViewRow)
 emptyFilters :: LedgerViewFilters
 emptyFilters =
   { description: Nothing
-  , soundex: Nothing
+  , soundexDescr: Nothing
   , minAmount: Nothing
   , maxAmount: Nothing
   , unknownExpensesOnly: Nothing

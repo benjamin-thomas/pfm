@@ -178,6 +178,21 @@ spec port = do
                   Nothing -> pure unit -- All good, all results match filter
                   Just _ -> shouldEqual "All results are unknown expenses" "Some results are not unknown expenses"
 
+      it "should filter ledger view by soundex similarity" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?soundexDescr=G626")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (ledgerRows :: Array LedgerViewRow) -> do
+                -- All returned rows should have soundex "G626" (for "Grocery" variants)
+                let allMatch = Array.find (\(LedgerViewRow row) -> row.soundexDescr /= "G626") ledgerRows
+                case allMatch of
+                  Nothing -> pure unit -- All good, all results match filter
+                  Just _ -> shouldEqual "All results match soundex filter" "Some results don't match soundex filter"
+
     describe "Account Balances Endpoint" do
       it "should get account balances with valid accountIds" do
         result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/balances?accountIds=2,3")

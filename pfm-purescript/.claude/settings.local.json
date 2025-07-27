@@ -12,7 +12,8 @@
       "WebFetch(domain:github.com)",
       "Bash(find:*)",
       "Bash(rg:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:pursuit.purescript.org)"
     ],
     "deny": []
   }

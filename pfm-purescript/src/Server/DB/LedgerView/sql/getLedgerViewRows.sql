@@ -46,6 +46,7 @@ FROM (
 
         WHERE (t.to_account_id = $accountId OR t.from_account_id = $accountId)
           AND (CASE WHEN $descriptionFilter IS NOT NULL AND TRIM($descriptionFilter) <> "" THEN t.descr LIKE '%' || $descriptionFilter || '%' ELSE 1 END)
+          AND (CASE WHEN $soundexDescr IS NOT NULL AND TRIM($soundexDescr) <> "" THEN SOUNDEX(t.descr) = $soundexDescr ELSE 1 END)
           AND (CASE WHEN $minAmountCents IS NOT NULL THEN ABS(t.cents) >= $minAmountCents ELSE 1 END)
           AND (CASE WHEN $maxAmountCents IS NOT NULL THEN ABS(t.cents) <= $maxAmountCents ELSE 1 END)
           AND (CASE WHEN $unknownExpensesOnly = 1 THEN t.to_account_id = 6 ELSE 1 END)
