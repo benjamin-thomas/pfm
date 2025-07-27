@@ -49,7 +49,7 @@ FROM (
           AND (CASE WHEN $soundexDescr IS NOT NULL AND TRIM($soundexDescr) <> "" THEN SOUNDEX(t.descr) = $soundexDescr ELSE 1 END)
           AND (CASE WHEN $minAmountCents IS NOT NULL THEN ABS(t.cents) >= $minAmountCents ELSE 1 END)
           AND (CASE WHEN $maxAmountCents IS NOT NULL THEN ABS(t.cents) <= $maxAmountCents ELSE 1 END)
-          AND (CASE WHEN $unknownExpensesOnly = 1 THEN t.to_account_id = 6 ELSE 1 END)
+          AND (CASE WHEN $filterUnknownExpenses = 1 THEN t.to_account_id = 6 ELSE 1 END)
         )x
 )y
 

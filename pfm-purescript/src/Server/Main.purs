@@ -301,5 +301,5 @@ parseFilters query =
   , soundexDescr: FO.lookup "soundexDescr" query
   , minAmount: FO.lookup "minAmount" query >>= fromString
   , maxAmount: FO.lookup "maxAmount" query >>= fromString
-  , unknownExpensesOnly: (_ == "1") <$> FO.lookup "unknownExpensesOnly" query
+  , filterUnknownExpenses: (_ == "1") <$> FO.lookup "filterUnknownExpenses" query
   }

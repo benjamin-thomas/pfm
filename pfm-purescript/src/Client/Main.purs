@@ -2,13 +2,14 @@ module Client.Main (main) where
 
 import Prelude
 
+import Effect.Class.Console as Console
 import Data.HTTP.Method (Method(..))
 import Affjax.RequestBody as RequestBody
 import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
-import Data.Array (length, reverse, uncons, zip, (:))
+import Data.Array (catMaybes, length, reverse, uncons, zip, (:))
 import Data.Array as Array
 import Data.String as String
 import Data.Either (Either(..))
@@ -31,6 +32,13 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.VDom.Driver (runUI)
+import Web.UIEvent.MouseEvent as MouseEvent
+import Web.Event.Event (Event, EventType(..))
+import Web.Event.Event as Event
+import Web.HTML (window)
+import Web.HTML.Window as Window
+import Halogen.Query.Event as HQE
+import Data.Int (toNumber)
 import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User)
 import Yoga.JSON as JSON
 
@@ -110,12 +118,23 @@ data EditDialogAction
   | EditAmountChanged String
   | EditDateChanged String
 
-type FilterState =
-  { description :: String
+data SearchBy
+  = ByDescr String
+  | BySimilarTo ContextMenuData
+
+type SearchForm =
+  { searchBy :: SearchBy
   , minAmount :: String
   , maxAmount :: String
-  , unknownExpensesOnly :: Boolean
+  , filterUnknownExpenses :: Boolean
+  }
+
+type ContextMenuData =
+  { transactionId :: Int
+  , x :: Number
+  , y :: Number
   , soundexDescr :: String
+  , descr :: String
   }
 
 data FilterAction
@@ -130,8 +149,10 @@ type State =
   , isDarkMode :: Boolean
   , dialog :: Maybe Dialog
   , apiBaseUrl :: ApiBaseUrl
-  , filterState :: FilterState
+  , searchForm :: SearchForm
   , debounceTimerId :: Maybe H.ForkId
+  , contextMenu :: Maybe ContextMenuData
+  , globalClickSubscription :: Maybe H.SubscriptionId
   }
 
 data Action
@@ -148,14 +169,17 @@ data Action
   | EditDialogChanged EditDialogAction
   | FilterChanged FilterAction
   | DebouncedFilterUpdate
+  | ShowContextMenu Event { soundexDescr :: String, descr :: String }
+  | HideContextMenu
+  | ContextMenuAction String
 
 -- Parallel data fetching function
-fetchAllData :: ApiBaseUrl -> FilterState -> Aff (Either String AppData)
-fetchAllData apiBaseUrl filterState = do
+fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
+fetchAllData apiBaseUrl searchForm = do
   results <- sequential $
     { users: _, ledgerRows: _, accounts: _, balances: _ }
       <$> parallel fetchUsers
-      <*> parallel (fetchLedgerView apiBaseUrl filterState)
+      <*> parallel (fetchLedgerView apiBaseUrl searchForm)
       <*> parallel (fetchAccounts apiBaseUrl)
       <*> parallel (fetchBalances apiBaseUrl)
 
@@ -179,14 +203,15 @@ component = H.mkComponent
       , isDarkMode
       , dialog: Nothing
       , apiBaseUrl: mkApiBaseUrl apiBaseUrl
-      , filterState:
-          { description: ""
+      , searchForm:
+          { searchBy: ByDescr ""
           , minAmount: ""
           , maxAmount: ""
-          , unknownExpensesOnly: false
-          , soundexDescr: ""
+          , filterUnknownExpenses: false
           }
       , debounceTimerId: Nothing
+      , contextMenu: Nothing
+      , globalClickSubscription: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -237,6 +262,9 @@ render state =
               [ renderLedgerView appData ]
           , case state.dialog of
               Just dialog -> renderDialog dialog appData
+              Nothing -> HH.text ""
+          , case state.contextMenu of
+              Just contextData -> renderContextMenu contextData
               Nothing -> HH.text ""
           ]
     ]
@@ -306,13 +334,13 @@ render state =
                   [ HH.text "Add Transaction" ]
               ]
           ]
-      , renderFilterForm state.filterState
+      , renderSearchForm state.searchForm
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
           (map renderLedgerRowWithBalance (reverse $ attachPriorBalance appData.ledgerRows))
       ]
 
-  renderFilterForm :: FilterState -> H.ComponentHTML Action () m
-  renderFilterForm filterState =
+  renderSearchForm :: SearchForm -> H.ComponentHTML Action () m
+  renderSearchForm searchForm =
     HH.div [ HP.class_ (HH.ClassName "transaction-search") ]
       [ HH.div [ HP.class_ (HH.ClassName "transaction-search__row") ]
           [ HH.div [ HP.class_ (HH.ClassName "transaction-search__field") ]
@@ -321,7 +349,9 @@ render state =
                   [ HP.type_ HP.InputText
                   , HP.id "search-description"
                   , HE.onValueInput (\str -> FilterChanged (FilterDescriptionChanged str))
-                  , HP.value filterState.description
+                  , HP.value (case searchForm.searchBy of
+                      ByDescr desc -> desc
+                      BySimilarTo _ -> "")
                   , HP.placeholder "Search by description"
                   , HP.autocomplete HP.AutocompleteOff
                   , HP.class_ (HH.ClassName "transaction-search__input")
@@ -335,7 +365,7 @@ render state =
                   , HP.placeholder "40.00"
                   , HP.min 0.0
                   , HE.onValueInput (\str -> FilterChanged (FilterMinAmountChanged str))
-                  , HP.value filterState.minAmount
+                  , HP.value searchForm.minAmount
                   , HP.class_ (HH.ClassName "transaction-search__input")
                   ]
               ]
@@ -347,7 +377,7 @@ render state =
                   , HP.placeholder "100.00"
                   , HP.min 0.0
                   , HE.onValueInput (\str -> FilterChanged (FilterMaxAmountChanged str))
-                  , HP.value filterState.maxAmount
+                  , HP.value searchForm.maxAmount
                   , HP.class_ (HH.ClassName "transaction-search__input")
                   ]
               ]
@@ -357,7 +387,7 @@ render state =
               [ HH.label [ HP.class_ (HH.ClassName "checkbox-container") ]
                   [ HH.input
                       [ HP.type_ HP.InputCheckbox
-                      , HP.checked filterState.unknownExpensesOnly
+                      , HP.checked searchForm.filterUnknownExpenses
                       , HE.onClick \_ -> FilterChanged FilterUnknownExpensesToggled
                       ]
                   , HH.span
@@ -377,6 +407,15 @@ render state =
                   [ HH.text "Clear" ]
               ]
           ]
+      , case searchForm.searchBy of
+          BySimilarTo contextMenuData ->
+            HH.div [ HP.class_ (HH.ClassName "similar-transactions-info") ]
+              [ HH.span [ HP.class_ (HH.ClassName "similar-transactions-label") ] 
+                  [ HH.text "Displaying transactions similar to:" ]
+              , HH.span [ HP.class_ (HH.ClassName "similar-transactions-value") ] 
+                  [ HH.text contextMenuData.descr ]
+              ]
+          ByDescr _ -> HH.text ""
       ]
 
   renderLedgerRowWithBalance :: { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
@@ -396,6 +435,8 @@ render state =
       HH.li
         [ HP.class_ (HH.ClassName "transaction-item")
         , HE.onClick \_ -> OpenEditDialog row.transactionId
+        , HE.handler (EventType "contextmenu") \event -> do
+            (ShowContextMenu event { soundexDescr: row.soundexDescr, descr: row.descr })
         ]
         [ HH.div [ HP.class_ (HH.ClassName "transaction-item__row") ]
             [ HH.div [ HP.class_ (HH.ClassName "transaction-item__main-content") ]
@@ -644,26 +685,57 @@ render state =
       [ HP.value (show account.accountId) ]
       [ HH.text account.name ]
 
+  renderContextMenu :: ContextMenuData -> H.ComponentHTML Action () m
+  renderContextMenu { x, y, soundexDescr } =
+    HH.div
+      [ HP.class_ (HH.ClassName "context-menu")
+      , HP.style $ "position: absolute; left: " <> show x <> "px; top: " <> show y <> "px; z-index: 1000;"
+      ]
+      [ HH.div
+          [ HP.class_ (HH.ClassName "context-menu-debug") ]
+          [ HH.text $ "SOUNDEX: " <> soundexDescr ]
+      , HH.ul_
+          [ HH.li
+              [ HE.onClick \_ -> ContextMenuAction "Find similar transactions" ]
+              [ HH.text "Find similar transactions" ]
+          , HH.li
+              [ HE.onClick \_ -> ContextMenuAction "Something else..." ]
+              [ HH.text "Something else..." ]
+          ]
+      ]
+
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
 handleAction action = case Debug.spy "action" action of
   Initialize -> do
-    -- Load all data in parallel on startup
+    win <- H.liftEffect window
+
+    -- Set up global click handler to close menu
+    globalClickSub <- H.subscribe $ HQE.eventListener
+      (Event.EventType "click")
+      (Window.toEventTarget win)
+      (const $ Just HideContextMenu)
+
+    -- Store the global click subscription
+    H.modify_ \s -> s { globalClickSubscription = Just globalClickSub }
+
+    -- Load all data
     handleAction LoadAllData
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
     state <- H.get
-    result <- H.liftAff $ fetchAllData state.apiBaseUrl state.filterState
+    result <- H.liftAff $ fetchAllData state.apiBaseUrl state.searchForm
     case result of
       Left err -> H.modify_ \s -> s { data = Failed err }
-      Right appData -> H.modify_ \s -> s { data = Loaded appData }
+      Right appData -> do
+        H.modify_ \s -> s { data = Loaded appData }
   LoadLedgerView -> do
     state <- H.get
     case state.data of
       Loaded appData -> do
-        result <- H.liftAff $ fetchLedgerView state.apiBaseUrl state.filterState
+        result <- H.liftAff $ fetchLedgerView state.apiBaseUrl state.searchForm
         case result of
           Left err -> H.modify_ \s -> s { data = Failed err }
-          Right ledgerRows ->
+          Right ledgerRows -> do
             H.modify_ \s -> s { data = Loaded (appData { ledgerRows = ledgerRows }) }
       _ -> pure unit -- Only update if data is already loaded
   ToggleDarkMode -> do
@@ -830,8 +902,8 @@ handleAction action = case Debug.spy "action" action of
 
   FilterChanged filterAction -> do
     state <- H.get
-    let newFilterState = updateFilterState filterAction state.filterState
-    H.modify_ \s -> s { filterState = newFilterState }
+    let newSearchForm = updateSearchForm filterAction state.searchForm
+    H.modify_ \s -> s { searchForm = newSearchForm }
 
     -- Cancel existing timer if any
     case state.debounceTimerId of
@@ -851,6 +923,42 @@ handleAction action = case Debug.spy "action" action of
     H.modify_ \s -> s { debounceTimerId = Nothing }
     -- Now actually load the filtered data
     handleAction LoadLedgerView
+
+  ShowContextMenu evt { soundexDescr, descr } -> do
+    H.liftEffect $ Event.preventDefault evt
+    case MouseEvent.fromEvent evt of
+      Just mouseEvent -> do
+        let x = toNumber $ MouseEvent.pageX mouseEvent
+        let y = toNumber $ MouseEvent.pageY mouseEvent
+        let contextMenuData = { transactionId: 0, x, y, soundexDescr, descr }
+        H.liftEffect $ Console.log $ "ShowContextMenu: " <> show { x, y }
+        H.modify_ \s -> s { contextMenu = Just contextMenuData }
+      Nothing -> do
+        pure unit
+
+  HideContextMenu -> do
+    H.modify_ \s -> s { contextMenu = Nothing }
+
+  ContextMenuAction menuAction -> do
+    state <- H.get
+    case menuAction of
+      "Find similar transactions" -> do
+        -- Get the soundexDescr from the context menu data
+        case state.contextMenu of
+          Just contextMenuData -> do
+            -- Update the filter state with the soundexDescr
+            let newSearchForm = state.searchForm { searchBy = BySimilarTo contextMenuData }
+            H.modify_ \s -> s
+              { searchForm = newSearchForm
+              , contextMenu = Nothing
+              }
+            -- Trigger the filtered data load
+            handleAction LoadLedgerView
+          Nothing ->
+            H.modify_ \s -> s { contextMenu = Nothing }
+      _ -> do
+        -- For other actions, just hide the context menu for now
+        H.modify_ \s -> s { contextMenu = Nothing }
 
 -- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
 attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
@@ -897,27 +1005,26 @@ updateEditState action state =
     EditAmountChanged amount -> state { amount = amount }
     EditDateChanged date -> state { date = date }
 
-updateFilterState :: FilterAction -> FilterState -> FilterState
-updateFilterState action state =
+updateSearchForm :: FilterAction -> SearchForm -> SearchForm
+updateSearchForm action state =
   case action of
-    FilterDescriptionChanged desc -> state { description = desc }
+    FilterDescriptionChanged desc -> state { searchBy = ByDescr desc }
     FilterMinAmountChanged minAmount -> state { minAmount = minAmount }
     FilterMaxAmountChanged maxAmount -> state { maxAmount = maxAmount }
-    FilterUnknownExpensesToggled -> state { unknownExpensesOnly = not state.unknownExpensesOnly }
+    FilterUnknownExpensesToggled -> state { filterUnknownExpenses = not state.filterUnknownExpenses }
     ClearFilters ->
-      { description: ""
+      { searchBy: ByDescr ""
       , minAmount: ""
       , maxAmount: ""
-      , unknownExpensesOnly: false
-      , soundexDescr: ""
+      , filterUnknownExpenses: false
       }
 
 -- baseUrl is now passed as apiBaseUrl in state
 
-fetchLedgerView :: ApiBaseUrl -> FilterState -> Aff (Either String (Array LedgerViewRow))
-fetchLedgerView apiBaseUrl filterState = do
-  -- Build query parameters from filter state
-  let queryParams = buildQueryParams filterState
+fetchLedgerView :: ApiBaseUrl -> SearchForm -> Aff (Either String (Array LedgerViewRow))
+fetchLedgerView apiBaseUrl searchForm = do
+  -- Build query parameters from search form
+  let queryParams = buildQueryParams searchForm
   let url = unApiBaseUrl $ appendPath apiBaseUrl ("/accounts/2/ledger" <> queryParams)
   -- Fetch ledger view for checking account (ID = 2) from the API
   result <- AX.get ResponseFormat.string url
@@ -1013,16 +1120,14 @@ eurosToCents euroStr = do
   euros <- Number.fromString euroStr
   pure $ Int.round $ euros * 100.0
 
--- Build query parameters from filter state
-buildQueryParams :: FilterState -> String
+-- Build query parameters from search form
+buildQueryParams :: SearchForm -> String
 buildQueryParams fsUntrimmed =
   let
     fs = fsUntrimmed
-      { description = String.trim fsUntrimmed.description
-      , minAmount = String.trim fsUntrimmed.minAmount
+      { minAmount = String.trim fsUntrimmed.minAmount
       , maxAmount = String.trim fsUntrimmed.maxAmount
-      , unknownExpensesOnly = fsUntrimmed.unknownExpensesOnly
-      , soundexDescr = String.trim fsUntrimmed.soundexDescr
+      , filterUnknownExpenses = fsUntrimmed.filterUnknownExpenses
       }
     whenStr str encoded = if str /= "" then Just encoded else Nothing
     whenBool bool encoded = if bool then Just encoded else Nothing
@@ -1031,13 +1136,22 @@ buildQueryParams fsUntrimmed =
     minAmountCents = if fs.minAmount == "" then Nothing else eurosToCents fs.minAmount
     maxAmountCents = if fs.maxAmount == "" then Nothing else eurosToCents fs.maxAmount
 
+    -- Flatten SearchBy into query parameters for backend
+    descriptionParam = case fs.searchBy of
+      ByDescr desc -> whenStr (String.trim desc) ("description=" <> String.trim desc)
+      BySimilarTo _ -> Nothing
+    
+    soundexParam = case fs.searchBy of
+      ByDescr _ -> Nothing
+      BySimilarTo contextMenuData -> whenStr (String.trim contextMenuData.soundexDescr) ("soundexDescr=" <> String.trim contextMenuData.soundexDescr)
+
     params =
       Array.catMaybes
-        [ whenStr fs.description $ "description=" <> fs.description
-        , whenStr fs.soundexDescr $ "soundexDescr=" <> fs.soundexDescr
+        [ descriptionParam
+        , soundexParam
         , map (\cents -> "minAmount=" <> show cents) minAmountCents
         , map (\cents -> "maxAmount=" <> show cents) maxAmountCents
-        , whenBool fs.unknownExpensesOnly "unknownExpensesOnly=1"
+        , whenBool fs.filterUnknownExpenses "filterUnknownExpenses=1"
         ]
   in
     case params of

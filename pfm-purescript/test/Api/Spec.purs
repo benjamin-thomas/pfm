@@ -9,9 +9,10 @@ import Affjax.ResponseFormat as ResponseFormat
 import Affjax.StatusCode (StatusCode(..))
 import Data.Array (length, head, find) as Array
 import Data.Either (Either(..))
-import Data.String (contains, Pattern(..), toLower)
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..))
+import Data.String (contains, Pattern(..), toLower)
+import Effect.Class.Console as Console
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
@@ -164,7 +165,7 @@ spec port = do
                   Just _ -> shouldEqual "All results match max amount filter" "Some results don't match maximum amount filter"
 
       it "should filter ledger view for unknown expenses only" do
-        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?unknownExpensesOnly=1")
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/accounts/2/ledger?filterUnknownExpenses=1")
         case result of
           Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
           Right response -> do

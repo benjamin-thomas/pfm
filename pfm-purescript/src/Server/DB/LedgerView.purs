@@ -24,7 +24,7 @@ type LedgerViewFilters =
   , soundexDescr :: Maybe String -- Filter by soundex similarity  
   , minAmount :: Maybe Int -- Minimum amount in cents
   , maxAmount :: Maybe Int -- Maximum amount in cents
-  , unknownExpensesOnly :: Maybe Boolean -- Show only unknown expenses
+  , filterUnknownExpenses :: Maybe Boolean -- Show only unknown expenses
   }
 
 -- | Query parameters for SQL named parameters
@@ -34,7 +34,7 @@ type LedgerViewQueryParams =
   , "$soundexDescr" :: Nullable String
   , "$minAmountCents" :: Nullable Int
   , "$maxAmountCents" :: Nullable Int
-  , "$unknownExpensesOnly" :: Boolean
+  , "$filterUnknownExpenses" :: Boolean
   }
 
 -- | Database row type matching SQL column names
@@ -138,7 +138,7 @@ getLedgerViewRows accountId filters db = do
       , "$soundexDescr": toNullable filters.soundexDescr
       , "$minAmountCents": toNullable filters.minAmount
       , "$maxAmountCents": toNullable filters.maxAmount
-      , "$unknownExpensesOnly": fromMaybe false filters.unknownExpensesOnly
+      , "$filterUnknownExpenses": fromMaybe false filters.filterUnknownExpenses
       }
   rows <- queryObjectDB db sql params
   fromDbRows "ledger_view" rowToLedgerViewRowDB rows

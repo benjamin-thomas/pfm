@@ -352,7 +352,7 @@ spec db = do
         TransactionQueries.insertTransaction testTxn2 db
 
         -- Get ledger view for checking account (ID = 2)
-        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Nothing }
         ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 emptyFilters db
         length ledgerRows `shouldSatisfy` (_ >= 2)
 
@@ -376,7 +376,7 @@ spec db = do
 
       it "should calculate running balance correctly" do
         -- Get ledger view again to test running balance calculation
-        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Nothing }
         ledgerRows <- LedgerViewQueries.getLedgerViewRowsAsDTO 2 emptyFilters db
 
         -- Look for our specific test transactions
@@ -402,7 +402,7 @@ spec db = do
       it "should filter by description" do
         -- Test description filter with existing data
         let
-          filters = { description: Just "Grocery", soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+          filters = { description: Just "Grocery", soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Nothing }
 
         filteredRows <- LedgerView.getLedgerViewRows 2 filters db
 
@@ -415,7 +415,7 @@ spec db = do
       it "should filter by minimum amount" do
         -- Test minimum amount filter (filter for amounts >= $100 = 10000 cents)
         let
-          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Just 10000, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Just 10000, maxAmount: Nothing, filterUnknownExpenses: Nothing }
 
         filteredRows <- LedgerView.getLedgerViewRows 2 filters db
 
@@ -430,7 +430,7 @@ spec db = do
       it "should filter by maximum amount" do
         -- Test maximum amount filter (filter for amounts <= $100 = 10000 cents)
         let
-          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Just 10000, unknownExpensesOnly: Nothing }
+          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Just 10000, filterUnknownExpenses: Nothing }
 
         filteredRows <- LedgerView.getLedgerViewRows 2 filters db
 
@@ -445,7 +445,7 @@ spec db = do
       it "should filter by unknown expenses only" do
         -- Test unknown expenses filter - only show expenses going to "Unknown expense" account (ID=6)
         let
-          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Just true }
+          filters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Just true }
 
         filteredRows <- LedgerView.getLedgerViewRows 2 filters db
 
@@ -460,17 +460,17 @@ spec db = do
 
       it "should filter by soundex similarity" do
         -- First verify we have multiple rows before filtering
-        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+        let emptyFilters = { description: Nothing, soundexDescr: Nothing, minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Nothing }
         allRows <- LedgerView.getLedgerViewRows 2 emptyFilters db
         length allRows `shouldSatisfy` (_ > 1)
 
         -- Test soundex filter - SOUNDEX("Grocery Store") = "G626"
         let
-          filters = { description: Nothing, soundexDescr: Just "G626", minAmount: Nothing, maxAmount: Nothing, unknownExpensesOnly: Nothing }
+          filters = { description: Nothing, soundexDescr: Just "G626", minAmount: Nothing, maxAmount: Nothing, filterUnknownExpenses: Nothing }
 
         filteredRows <- LedgerView.getLedgerViewRows 2 filters db
 
         -- Map to descriptions for cleaner assertion
         let descriptions = map (\(LedgerViewRowDB row) -> row.descr) filteredRows
-        descriptions `shouldEqual` ["Grocery Store"]
+        descriptions `shouldEqual` [ "Grocery Store" ]
 

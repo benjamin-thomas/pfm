@@ -688,6 +688,185 @@ test.describe('PFM PureScript App', () => {
     await expect(unknownExpensesCheckbox).not.toBeChecked();
   });
 
+  test('should show context menu on right-click transaction', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Wait for at least one transaction to be present
+    await page.waitForSelector('.transaction-item');
+
+    // Get the first transaction item
+    const firstTransaction = page.locator('.transaction-item').first();
+    await expect(firstTransaction).toBeVisible();
+
+    // Verify context menu is not visible initially
+    const contextMenu = page.locator('.context-menu');
+    await expect(contextMenu).not.toBeVisible();
+
+    // Right-click on the transaction
+    await firstTransaction.click({ button: 'right' });
+
+    // Verify context menu appears
+    await expect(contextMenu).toBeVisible();
+
+    // Verify context menu contains expected options including Find similar transactions
+    await expect(page.locator('.context-menu li', { hasText: 'Find similar transactions' })).toBeVisible();
+
+    // Click elsewhere to close context menu
+    await page.locator('body').click({ position: { x: 0, y: 0 } });
+
+    // Verify context menu is hidden
+    await expect(contextMenu).not.toBeVisible();
+  });
+
+  test('should filter transactions when clicking Find similar transactions', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // Get initial transaction count
+    const initialCount = await page.locator('.transaction-item').count();
+    expect(initialCount).toBeGreaterThan(5); // Ensure we have enough transactions to test filtering
+
+    // Find a transaction with a specific description that likely has similar transactions
+    // Look for something like "GROCERY" or similar common descriptions
+    const transactions = await page.locator('.transaction-item').all();
+    let targetTransaction = null;
+    let targetDescription = null;
+
+    for (const transaction of transactions) {
+      const description = await transaction.locator('.transaction-item__description').textContent();
+      // Find a transaction with a description that likely has similar ones
+      if (description && (description.includes('GROCERY') || description.includes('MARKET') || description.includes('STORE'))) {
+        targetTransaction = transaction;
+        targetDescription = description;
+        break;
+      }
+    }
+
+    if (!targetTransaction) {
+      // If no specific transaction found, just use the first one
+      targetTransaction = page.locator('.transaction-item').first();
+      targetDescription = await targetTransaction.locator('.transaction-item__description').textContent();
+    }
+
+    // Right-click on the target transaction
+    await targetTransaction.click({ button: 'right' });
+
+    // Wait for context menu to appear
+    const contextMenu = page.locator('.context-menu');
+    await expect(contextMenu).toBeVisible();
+
+    // Verify the soundex header is present
+    const soundexHeader = page.locator('.context-menu-debug');
+    await expect(soundexHeader).toBeVisible();
+    const soundexText = await soundexHeader.textContent();
+    expect(soundexText).toContain('SOUNDEX:');
+
+    // Click "Find similar transactions"
+    const findSimilarButton = page.locator('.context-menu li', { hasText: 'Find similar transactions' });
+    await findSimilarButton.click();
+
+    // Wait for context menu to disappear
+    await expect(contextMenu).not.toBeVisible();
+
+    // Wait for the transaction list to be filtered (give time for API call)
+    await page.waitForTimeout(1000);
+
+    // Get the new transaction count
+    const filteredCount = await page.locator('.transaction-item').count();
+    
+    // The filtered count should be less than the initial count
+    expect(filteredCount).toBeLessThan(initialCount);
+    expect(filteredCount).toBeGreaterThan(0); // Should have at least one similar transaction
+
+    // Check that the similarity filter message is displayed
+    const similarityMessage = page.locator('.similar-transactions-info');
+    await expect(similarityMessage).toBeVisible();
+    await expect(similarityMessage).toContainText('Displaying transactions similar to:');
+    await expect(similarityMessage).toContainText(targetDescription);
+
+    // Verify all visible transactions have similar soundex values
+    // This is implicit in the filtering, but we can check the descriptions are somewhat similar
+
+    // Verify the filter state shows we're filtering by similarity
+    // Check if there's any UI indication of the active filter (this depends on implementation)
+  });
+
+  test('should show correct soundex value after filtering', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for transaction list to load
+    await page.waitForSelector('.transaction-list');
+
+    // First, let's see what transactions we have
+    const allDescriptions = await page.locator('.transaction-item__description').allTextContents();
+    console.log('All transaction descriptions:', allDescriptions);
+
+    // Get info about the first transaction before filtering
+    const firstTransactionBeforeFilter = page.locator('.transaction-item').first();
+    const firstDescriptionBefore = await firstTransactionBeforeFilter.locator('.transaction-item__description').textContent();
+    
+    // Right-click to see its soundex
+    await firstTransactionBeforeFilter.click({ button: 'right' });
+    const contextMenuBefore = page.locator('.context-menu');
+    await expect(contextMenuBefore).toBeVisible();
+    const soundexBefore = await page.locator('.context-menu-debug').textContent();
+    console.log('First transaction before filter:', firstDescriptionBefore, soundexBefore);
+    
+    // Close context menu
+    await page.locator('body').click({ position: { x: 0, y: 0 } });
+    await expect(contextMenuBefore).not.toBeVisible();
+
+    // Apply a filter that will definitely change which transaction is first
+    // Let's search for something specific that's NOT the first transaction
+    const descriptionFilter = page.locator('input#search-description');
+    
+    // Find a description that's different from the first one
+    let searchTerm = '';
+    for (const desc of allDescriptions) {
+      if (desc !== firstDescriptionBefore && desc.length > 3) {
+        // Use the first few characters of a different transaction
+        searchTerm = desc.substring(0, 5);
+        break;
+      }
+    }
+    
+    if (!searchTerm) {
+      // If we can't find a different one, skip the test
+      console.log('Could not find a suitable search term, skipping test');
+      return;
+    }
+
+    console.log('Searching for:', searchTerm);
+    await descriptionFilter.fill(searchTerm);
+    await page.waitForTimeout(1000);
+
+    // Get info about the first transaction after filtering
+    const firstTransactionAfterFilter = page.locator('.transaction-item').first();
+    const firstDescriptionAfter = await firstTransactionAfterFilter.locator('.transaction-item__description').textContent();
+    
+    // This should be a different transaction
+    expect(firstDescriptionAfter).not.toBe(firstDescriptionBefore);
+    
+    // Right-click to see its soundex
+    await firstTransactionAfterFilter.click({ button: 'right' });
+    const contextMenuAfter = page.locator('.context-menu');
+    await expect(contextMenuAfter).toBeVisible();
+    const soundexAfter = await page.locator('.context-menu-debug').textContent();
+    console.log('First transaction after filter:', firstDescriptionAfter, soundexAfter);
+    
+    // The soundex should be different since it's a different transaction
+    expect(soundexAfter).not.toBe(soundexBefore);
+    
+    // Also verify the soundex value is reasonable (not empty or undefined)
+    expect(soundexAfter).toContain('SOUNDEX:');
+    expect(soundexAfter.length).toBeGreaterThan(9); // "SOUNDEX: " + at least 1 char
+  });
+
   test('should update transaction count text when filtering', async ({ page }) => {
     await page.goto('/');
 

@@ -20,7 +20,7 @@ emptyFilters =
   , soundexDescr: Nothing
   , minAmount: Nothing
   , maxAmount: Nothing
-  , unknownExpensesOnly: Nothing
+  , filterUnknownExpenses: Nothing
   }
 
 -- | Get ledger view rows for a specific account ID (returns DB types)
