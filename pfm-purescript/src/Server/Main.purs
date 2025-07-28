@@ -42,7 +42,9 @@ import Server.DB.Category as Category
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.LedgerView (LedgerViewFilters)
 import Server.DB.Transactions.Queries as TransactionQueries
+import Server.DB.Suggestions.Queries as SuggestionQueries
 import Server.Types.TransactionWrite (TransactionWrite(..))
+import Shared.Types (Suggestion)
 import Yoga.JSON as JSON
 
 -- Server configuration types
@@ -59,6 +61,7 @@ data Route
   | BudgetById Int
   | Transactions
   | TransactionById Int
+  | TransactionSuggestions
 
 derive instance Generic Route _
 
@@ -76,6 +79,7 @@ route = mkRoute
   , "BudgetById": "budgets" / int segment
   , "Transactions": "transactions" / noArgs
   , "TransactionById": "transactions" / int segment
+  , "TransactionSuggestions": "transactions" / "suggestions" / noArgs
   }
 
 main :: Effect Unit
@@ -290,6 +294,21 @@ makeRouter db req =
           TransactionQueries.deleteTransaction transactionId db
           ok "Transaction deleted"
         Options -> ok ""
+        _ -> methodNotAllowed
+
+    TransactionSuggestions ->
+      case req.method of
+        Get -> do
+          let fromAccountIdParam = FO.lookup "fromAccountId" req.query
+          let toAccountIdParam = FO.lookup "toAccountId" req.query
+          case fromAccountIdParam, toAccountIdParam of
+            Just fromIdStr, Just toIdStr -> do
+              case fromString fromIdStr, fromString toIdStr of
+                Just fromAccountId, Just toAccountId -> do
+                  suggestions <- SuggestionQueries.getSuggestions fromAccountId toAccountId db
+                  ok $ JSON.writeJSON suggestions
+                _, _ -> response 400 $ JSON.writeJSON { error: "Invalid account IDs" }
+            _, _ -> response 400 $ JSON.writeJSON { error: "Missing fromAccountId or toAccountId parameter" }
         _ -> methodNotAllowed
 
 -- Helper functions for query parameter parsing

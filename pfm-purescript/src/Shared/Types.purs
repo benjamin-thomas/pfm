@@ -93,3 +93,25 @@ derive newtype instance Show AccountBalanceRead
 derive newtype instance Eq AccountBalanceRead
 derive newtype instance ReadForeign AccountBalanceRead
 derive newtype instance WriteForeign AccountBalanceRead
+
+newtype SuggestedAccount = SuggestedAccount
+  { accountId :: Int
+  , accountName :: String
+  }
+
+derive instance Generic SuggestedAccount _
+derive newtype instance Show SuggestedAccount
+derive newtype instance Eq SuggestedAccount
+derive newtype instance ReadForeign SuggestedAccount
+derive newtype instance WriteForeign SuggestedAccount
+
+newtype Suggestion = Suggestion
+  { soundexDescr :: String
+  , suggestedAccounts :: Array SuggestedAccount
+  }
+
+derive instance Generic Suggestion _
+derive newtype instance Show Suggestion
+derive newtype instance Eq Suggestion
+derive newtype instance ReadForeign Suggestion
+derive newtype instance WriteForeign Suggestion

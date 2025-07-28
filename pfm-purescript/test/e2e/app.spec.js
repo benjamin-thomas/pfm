@@ -918,3 +918,22 @@ test.describe('Transaction Filter UI Integration', () => {
     await expect(addButton).toContainText('Add Transaction');
   });
 });
+
+test.describe('Transaction Suggestions', () => {
+  test('should display at least one suggestion', async ({ page }) => {
+    await page.goto('/');
+
+    // Wait for app to load
+    await page.waitForSelector('.transaction-list');
+
+    // Verify at least one suggestion is displayed within transaction rows
+    const suggestions = page.locator('.suggestion-container');
+    const suggestionCount = await suggestions.count();
+    expect(suggestionCount).toBeGreaterThan(0);
+
+    // Verify the first suggestion has required elements
+    const firstSuggestion = suggestions.first();
+    await expect(firstSuggestion.locator('.suggestion-text')).toBeVisible();
+    await expect(firstSuggestion.locator('.suggestion-actions')).toBeVisible();
+  });
+});

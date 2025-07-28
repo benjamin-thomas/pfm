@@ -12,11 +12,16 @@ import Data.Either (Either(..))
 import Data.HTTP.Method (Method(..))
 import Data.Maybe (Maybe(..))
 import Data.String (contains, Pattern(..), toLower)
-import Effect.Class.Console as Console
+import Data.Traversable (traverse)
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
-import Shared.Types (AccountBalanceRead(..), LedgerViewRow(..), Transaction, User(..))
+import Shared.Types
+  ( AccountBalanceRead(..)
+  , LedgerViewRow(..)
+  , Suggestion(..)
+  , Transaction
+  )
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.JSON as JSON
@@ -572,3 +577,65 @@ spec port = do
                   Just (AccountBalanceRead balance) ->
                     balance.accountBalance `shouldEqual` initialBalance
                   Nothing -> shouldEqual "Balance found" "No balance found"
+
+      it "should return suggestions for transactions" do
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/transactions/suggestions?fromAccountId=2&toAccountId=6")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (_ :: Array Suggestion) -> pure unit
+
+      it "should return actual suggestions based on similar transactions" do
+        -- This test sets up transactions with similar descriptions and expects suggestions
+        -- for unknown expense transactions based on soundex matching
+
+        -- First, create some known transactions with similar descriptions that go to known accounts
+        let
+          groceryTransaction1 = { budgetId: Nothing :: Maybe Int, fromAccountId: 2, toAccountId: 7, dateUnix: 1719792000, descr: "GROCERY STORE ALPHA", cents: 3000 }
+          groceryTransaction2 = { budgetId: Nothing :: Maybe Int, fromAccountId: 2, toAccountId: 7, dateUnix: 1719792100, descr: "GROCERY MART BETA", cents: 2500 }
+          groceryTransaction3 = { budgetId: Nothing :: Maybe Int, fromAccountId: 2, toAccountId: 7, dateUnix: 1719792200, descr: "GROCERY SHOP GAMMA", cents: 4000 }
+
+        -- Create these transactions
+        _ <- traverse
+          ( \txData -> AX.request AX.defaultRequest
+              { method = Left POST
+              , url = "http://localhost:" <> show port <> "/transactions"
+              , responseFormat = ResponseFormat.string
+              , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+              , content = Just $ RequestBody.string $ JSON.writeJSON txData
+              }
+          )
+          [ groceryTransaction1, groceryTransaction2, groceryTransaction3 ]
+
+        -- Now create an unknown expense transaction with similar description
+        let unknownGroceryTx = { budgetId: Nothing :: Maybe Int, fromAccountId: 2, toAccountId: 6, dateUnix: 1719792300, descr: "GROCERY PLACE DELTA", cents: 3500 }
+
+        _ <- AX.request AX.defaultRequest
+          { method = Left POST
+          , url = "http://localhost:" <> show port <> "/transactions"
+          , responseFormat = ResponseFormat.string
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.string $ JSON.writeJSON unknownGroceryTx
+          }
+
+        -- Now call suggestions API
+        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/transactions/suggestions?fromAccountId=2&toAccountId=6")
+        case result of
+          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+          Right response -> do
+            shouldEqual (StatusCode 200) response.status
+            case JSON.readJSON response.body of
+              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+              Right (suggestions :: Array Suggestion) -> do
+                -- Should have at least one suggestion
+                Array.length suggestions `shouldSatisfy` (_ > 0)
+                -- The suggestion should be for "GROCERY" related transactions (soundex G626)
+                case Array.head suggestions of
+                  Nothing -> shouldEqual "Expected at least one suggestion" "No suggestions found"
+                  Just (Suggestion suggestion) -> do
+                    suggestion.soundexDescr `shouldEqual` "G626" -- Soundex for "GROCERY"
+                    -- Should suggest account 7 (Groceries) as the most common destination
+                    Array.length suggestion.suggestedAccounts `shouldSatisfy` (_ > 0)

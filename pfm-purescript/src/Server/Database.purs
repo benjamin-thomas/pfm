@@ -239,6 +239,9 @@ seedFromOfx ofxFilePath db = do
       processTransactions db batch.accountNumber reversedTransactions
 
       liftEffect $ log "=== Transactions inserted ==="
+      liftEffect $ log "=== Categorizing some transactions for demo purposes ==="
+      categorizeTransactionsForDemo db
+      liftEffect $ log "=== Transaction categorization complete ==="
   where
   processTransactions :: SQLite3.DBConnection -> String -> Array StatementTransaction -> Aff Unit
   processTransactions dbConn accountNumber txns = do
@@ -262,4 +265,30 @@ seedFromOfx ofxFilePath db = do
 
         -- Process remaining transactions
         processTransactions dbConn accountNumber rest
+
+-- | Add one properly categorized grocery transaction for demo purposes
+categorizeTransactionsForDemo :: SQLite3.DBConnection -> Aff Unit
+categorizeTransactionsForDemo db = do
+  -- Get or create a budget for the demo transaction date (slightly earlier than fixture data)
+  let demoDateUnix = 1725062400 -- Aug 31, 2024
+  maybeBudgetId <- BudgetQueries.getBudgetIdForDate demoDateUnix db
+  budgetId <- case maybeBudgetId of
+    Just bid -> pure bid
+    Nothing -> BudgetQueries.insertBudgetForDate demoDateUnix db
+
+  -- Insert a grocery transaction that goes to the Groceries account (account 7)
+  let
+    demoTransaction = TransactionQueries.TransactionNewRow
+      { budgetId: Just budgetId
+      , fromAccountId: 2 -- Checking account
+      , toAccountId: 7 -- Groceries account
+      , uniqueFitId: Nothing
+      , dateUnix: demoDateUnix
+      , descrOrig: "GROCERY SUPERMARKET"
+      , descr: "GROCERY SUPERMARKET"
+      , cents: 8500 -- 85.00 euros
+      }
+
+  TransactionQueries.insertTransaction demoTransaction db
+  pure unit
 

@@ -9,7 +9,7 @@ import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
-import Data.Array (catMaybes, length, reverse, uncons, zip, (:))
+import Data.Array ((:))
 import Data.Array as Array
 import Data.String as String
 import Data.Either (Either(..))
@@ -19,7 +19,6 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Number as Number
 import Data.Tuple (Tuple(..))
-import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
@@ -39,7 +38,14 @@ import Web.HTML (window)
 import Web.HTML.Window as Window
 import Halogen.Query.Event as HQE
 import Data.Int (toNumber)
-import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User)
+import Shared.Types
+  ( Account(..)
+  , AccountBalanceRead(..)
+  , LedgerViewRow(LedgerViewRow)
+  , User
+  , Suggestion(..)
+  , SuggestedAccount(..)
+  )
 import Yoga.JSON as JSON
 
 -- Type-safe wrapper for API base URL
@@ -47,11 +53,10 @@ newtype ApiBaseUrl = ApiBaseUrl String
 
 derive instance newtypeApiBaseUrl :: Newtype ApiBaseUrl _
 
--- Make ApiBaseUrl concatenatable with strings
 instance semigroupApiBaseUrl :: Semigroup ApiBaseUrl where
   append (ApiBaseUrl a) (ApiBaseUrl b) = ApiBaseUrl (a <> b)
 
--- Helper to create ApiBaseUrl from String  
+-- Helper to create ApiBaseUrl from String
 mkApiBaseUrl :: String -> ApiBaseUrl
 mkApiBaseUrl = ApiBaseUrl
 
@@ -80,6 +85,7 @@ type AppData =
   , ledgerRows :: Array LedgerViewRow
   , accounts :: Array Account
   , balances :: Array AccountBalanceRead
+  , suggestions :: Array Suggestion
   }
 
 -- Dialog state types
@@ -153,6 +159,7 @@ type State =
   , debounceTimerId :: Maybe H.ForkId
   , contextMenu :: Maybe ContextMenuData
   , globalClickSubscription :: Maybe H.SubscriptionId
+  , scrollY :: Maybe Number
   }
 
 data Action
@@ -172,23 +179,35 @@ data Action
   | ShowContextMenu Event { soundexDescr :: String, descr :: String }
   | HideContextMenu
   | ContextMenuAction String
+  | ApplySuggestionItem Event
+      { transaction :: -- TODO: pass the LedgerViewRow type all through out
+          { transactionId :: Int
+          , fromAccountId :: Int
+          , dateUnix :: Int
+          , descr :: String
+          , flowCents :: Int
+          }
+      , accountId :: Int
+      }
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
 fetchAllData apiBaseUrl searchForm = do
   results <- sequential $
-    { users: _, ledgerRows: _, accounts: _, balances: _ }
+    { users: _, ledgerRows: _, accounts: _, balances: _, suggestions: _ }
       <$> parallel fetchUsers
       <*> parallel (fetchLedgerView apiBaseUrl searchForm)
       <*> parallel (fetchAccounts apiBaseUrl)
       <*> parallel (fetchBalances apiBaseUrl)
+      <*> parallel (fetchSuggestions apiBaseUrl)
 
   pure $ do
     users <- results.users
     ledgerRows <- results.ledgerRows
     accounts <- results.accounts
     balances <- results.balances
-    pure { users, ledgerRows, accounts, balances }
+    suggestions <- results.suggestions
+    pure { users, ledgerRows, accounts, balances, suggestions }
 
 -- Individual fetch functions
 fetchUsers :: Aff (Either String (Array User))
@@ -212,6 +231,7 @@ component = H.mkComponent
       , debounceTimerId: Nothing
       , contextMenu: Nothing
       , globalClickSubscription: Nothing
+      , scrollY: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -324,10 +344,15 @@ render state =
           [ HH.div [ HP.class_ (HH.ClassName "transaction-list__header-title") ]
               [ HH.h3_ [ HH.text "Transactions" ]
               , HH.span [ HP.class_ (HH.ClassName "transaction-count") ]
-                  [ HH.text $ show (length appData.ledgerRows) <> " transactions" ]
+                  [ HH.text $ show (Array.length appData.ledgerRows) <> " transactions" ]
               ]
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
               [ HH.button
+                  [ HP.class_ (HH.ClassName "button button--secondary")
+                  , HE.onClick \_ -> OpenCreateDialog -- TODO: Implement ApplyAllSuggestions action
+                  ]
+                  [ HH.text "💡 Apply All Suggestions" ]
+              , HH.button
                   [ HP.class_ (HH.ClassName "button button--primary")
                   , HE.onClick \_ -> OpenCreateDialog
                   ]
@@ -336,7 +361,7 @@ render state =
           ]
       , renderSearchForm state.searchForm
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
-          (map renderLedgerRowWithBalance (reverse $ attachPriorBalance appData.ledgerRows))
+          (map (renderLedgerRowWithBalance appData.suggestions) (Array.reverse $ attachPriorBalance appData.ledgerRows))
       ]
 
   renderSearchForm :: SearchForm -> H.ComponentHTML Action () m
@@ -349,9 +374,11 @@ render state =
                   [ HP.type_ HP.InputText
                   , HP.id "search-description"
                   , HE.onValueInput (\str -> FilterChanged (FilterDescriptionChanged str))
-                  , HP.value (case searchForm.searchBy of
-                      ByDescr desc -> desc
-                      BySimilarTo _ -> "")
+                  , HP.value
+                      ( case searchForm.searchBy of
+                          ByDescr desc -> desc
+                          BySimilarTo _ -> ""
+                      )
                   , HP.placeholder "Search by description"
                   , HP.autocomplete HP.AutocompleteOff
                   , HP.class_ (HH.ClassName "transaction-search__input")
@@ -410,19 +437,19 @@ render state =
       , case searchForm.searchBy of
           BySimilarTo contextMenuData ->
             HH.div [ HP.class_ (HH.ClassName "similar-transactions-info") ]
-              [ HH.span [ HP.class_ (HH.ClassName "similar-transactions-label") ] 
+              [ HH.span [ HP.class_ (HH.ClassName "similar-transactions-label") ]
                   [ HH.text "Displaying transactions similar to:" ]
-              , HH.span [ HP.class_ (HH.ClassName "similar-transactions-value") ] 
+              , HH.span [ HP.class_ (HH.ClassName "similar-transactions-value") ]
                   [ HH.text contextMenuData.descr ]
               ]
           ByDescr _ -> HH.text ""
       ]
 
-  renderLedgerRowWithBalance :: { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
-  renderLedgerRowWithBalance { transaction, priorBalance } = renderLedgerRow transaction priorBalance
+  renderLedgerRowWithBalance :: Array Suggestion -> { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
+  renderLedgerRowWithBalance suggestions { transaction, priorBalance } = renderLedgerRow suggestions transaction priorBalance
 
-  renderLedgerRow :: LedgerViewRow -> String -> H.ComponentHTML Action () m
-  renderLedgerRow (LedgerViewRow row) priorBalance =
+  renderLedgerRow :: Array Suggestion -> LedgerViewRow -> String -> H.ComponentHTML Action () m
+  renderLedgerRow suggestions (LedgerViewRow row) priorBalance =
     let
       isPositive = row.flowCents > 0
       amountClass =
@@ -431,6 +458,10 @@ render state =
         else
           "transaction-item__amount transaction-item__amount--negative"
       amountSign = if isPositive then "+" else ""
+
+      -- Find suggestion for this transaction
+      maybeSuggestion = findSuggestionForTransaction row.soundexDescr suggestions
+
     in
       HH.li
         [ HP.class_ (HH.ClassName "transaction-item")
@@ -462,7 +493,55 @@ render state =
                     ]
                 ]
             ]
+        -- Render suggestion if available and transaction goes to Unknown_EXPENSE
+        , case maybeSuggestion of
+            Just suggestion | row.toAccountName == "Unknown_EXPENSE" ->
+              renderTransactionSuggestion
+                { transactionId: row.transactionId
+                , fromAccountId: row.fromAccountId
+                , dateUnix: row.dateUnix
+                , descr: row.descr
+                , flowCents: row.flowCents
+                }
+                suggestion
+            _ -> HH.text ""
         ]
+
+  -- Helper function to find suggestion for a transaction based on soundex
+  findSuggestionForTransaction :: String -> Array Suggestion -> Maybe Suggestion
+  findSuggestionForTransaction soundexDescr suggestions =
+    Array.find (\(Suggestion s) -> s.soundexDescr == soundexDescr) suggestions
+
+  -- Render the yellow suggestion bar for a transaction
+  renderTransactionSuggestion :: { transactionId :: Int, fromAccountId :: Int, dateUnix :: Int, descr :: String, flowCents :: Int } -> Suggestion -> H.ComponentHTML Action () m
+  renderTransactionSuggestion txnRow (Suggestion suggestion) =
+    case Array.head suggestion.suggestedAccounts of
+      Nothing -> HH.text ""
+      Just (SuggestedAccount account) ->
+        HH.div
+          [ HP.class_ (HH.ClassName "suggestion-container") ]
+          [ HH.div [ HP.class_ (HH.ClassName "suggestion-text") ]
+              [ HH.span [ HP.class_ (HH.ClassName "suggestion-icon") ] [ HH.text "💡" ]
+              , HH.span []
+                  [ HH.text "Suggested category: "
+                  , HH.strong [] [ HH.text account.accountName ]
+                  ]
+              ]
+          , HH.div [ HP.class_ (HH.ClassName "suggestion-actions") ]
+              [ HH.button
+                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-apply")
+                  , HE.handler (EventType "click") \event -> do
+                      ApplySuggestionItem event { transaction: txnRow, accountId: account.accountId }
+                  ]
+                  [ HH.text "Apply" ]
+              , HH.button
+                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ignore") ]
+                  [ HH.text "Ignore" ]
+              , HH.button
+                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ai") ]
+                  [ HH.text "Ask AI ✨" ]
+              ]
+          ]
 
   renderDialog :: Dialog -> AppData -> H.ComponentHTML Action () m
   renderDialog dialog appData =
@@ -705,7 +784,8 @@ render state =
       ]
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
-handleAction action = case Debug.spy "action" action of
+-- handleAction action = case Debug.spy "action" action of
+handleAction = case _ of
   Initialize -> do
     win <- H.liftEffect window
 
@@ -737,6 +817,12 @@ handleAction action = case Debug.spy "action" action of
           Left err -> H.modify_ \s -> s { data = Failed err }
           Right ledgerRows -> do
             H.modify_ \s -> s { data = Loaded (appData { ledgerRows = ledgerRows }) }
+            -- Restore scroll position if we have one saved
+            case state.scrollY of
+              Just scrollY -> do
+                H.liftEffect $ restoreScrollY scrollY
+                H.modify_ \s -> s { scrollY = Nothing } -- Clear the saved position
+              Nothing -> pure unit
       _ -> pure unit -- Only update if data is already loaded
   ToggleDarkMode -> do
     state <- H.get
@@ -960,15 +1046,53 @@ handleAction action = case Debug.spy "action" action of
         -- For other actions, just hide the context menu for now
         H.modify_ \s -> s { contextMenu = Nothing }
 
+  ApplySuggestionItem event { transaction, accountId } -> do
+    -- Prevent the event from propagating to the transaction row (which would open the edit dialog)
+    H.liftEffect $ Event.preventDefault event
+    H.liftEffect $ Event.stopPropagation event
+
+    -- Capture current scroll position before applying suggestion
+    scrollY <- H.liftEffect getScrollY
+    H.modify_ \s -> s { scrollY = Just scrollY }
+
+    -- Apply the suggestion by updating the transaction's toAccountId
+    state <- H.get
+    let
+      transactionData =
+        { budgetId: (Nothing :: Maybe Int)
+        , fromAccountId: transaction.fromAccountId
+        , toAccountId: accountId -- This is the suggested account ID
+        , dateUnix: transaction.dateUnix
+        , descr: transaction.descr
+        , cents: if transaction.flowCents < 0 then (-transaction.flowCents) else transaction.flowCents -- Ensure positive value
+        }
+    liftEffect $ log $ "Applying suggestion: updating transaction " <> show transaction.transactionId <> " to account " <> show accountId
+
+    -- Send PUT request to update the transaction
+    result <- H.liftAff $ AX.request
+      AX.defaultRequest
+        { method = Left PUT
+        , url = unApiBaseUrl $ appendPath state.apiBaseUrl ("/transactions/" <> show transaction.transactionId)
+        , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+        , content = Just $ RequestBody.string $ JSON.writeJSON transactionData
+        , responseFormat = ResponseFormat.string
+        }
+    case result of
+      Left err -> liftEffect $ log $ "Error applying suggestion: " <> AX.printError err
+      Right response -> do
+        liftEffect $ log $ "Suggestion applied successfully. Status: " <> show response.status
+        -- Refresh only the ledger view to show the updated transaction
+        handleAction LoadLedgerView
+
 -- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
 attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
 attachPriorBalance transactions =
-  case uncons transactions of
+  case Array.uncons transactions of
     Nothing -> []
     Just { head: first, tail: rest } ->
       let
         firstWithPrior = { transaction: first, priorBalance: "0.00" }
-        restWithPrior = zip rest transactions
+        restWithPrior = Array.zip rest transactions
           # map \(Tuple current previous) ->
               let
                 (LedgerViewRow prevRow) = previous
@@ -979,7 +1103,7 @@ attachPriorBalance transactions =
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
-  case uncons rows of
+  case Array.uncons rows of
     Nothing -> Nothing
     Just { head: row, tail: rest } ->
       case row of
@@ -1061,6 +1185,19 @@ fetchBalances apiBaseUrl = do
         Right (balances :: Array AccountBalanceRead) ->
           pure $ Right balances
 
+fetchSuggestions :: ApiBaseUrl -> Aff (Either String (Array Suggestion))
+fetchSuggestions apiBaseUrl = do
+  -- Fetch suggestions from the API
+  -- Use typical account IDs: fromAccountId=2 (checking), toAccountId=6 (unknown expenses)
+  result <- AX.get ResponseFormat.string (unApiBaseUrl $ appendPath apiBaseUrl "/transactions/suggestions?fromAccountId=2&toAccountId=6")
+  case result of
+    Left err -> pure $ Left $ "Network error: " <> AX.printError err
+    Right response ->
+      case JSON.readJSON response.body of
+        Left err -> pure $ Left $ "JSON decode error: " <> show err
+        Right (suggestions :: Array Suggestion) ->
+          pure $ Right suggestions
+
 -- Foreign import to call JavaScript theme toggle
 foreign import toggleTheme :: Unit -> Effect Unit
 
@@ -1076,6 +1213,10 @@ foreign import confirmDialog :: String -> Effect Boolean
 
 -- Foreign import for getting current datetime
 foreign import getCurrentDateTimeLocal :: Effect String
+
+-- Foreign imports for scroll position management
+foreign import getScrollY :: Effect Number
+foreign import restoreScrollY :: Number -> Effect Unit
 
 type InitArgs = { isDarkMode :: Boolean, apiBaseUrl :: String }
 
@@ -1140,7 +1281,7 @@ buildQueryParams fsUntrimmed =
     descriptionParam = case fs.searchBy of
       ByDescr desc -> whenStr (String.trim desc) ("description=" <> String.trim desc)
       BySimilarTo _ -> Nothing
-    
+
     soundexParam = case fs.searchBy of
       ByDescr _ -> Nothing
       BySimilarTo contextMenuData -> whenStr (String.trim contextMenuData.soundexDescr) ("soundexDescr=" <> String.trim contextMenuData.soundexDescr)

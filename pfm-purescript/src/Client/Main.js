@@ -50,3 +50,13 @@ export const getCurrentDateTimeLocal = () => {
     const minutes = String(now.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
 };
+
+export const getScrollY = () => window.scrollY;
+
+// Restore scroll Y position
+export const restoreScrollY = (scrollY) => () => {
+    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+    requestAnimationFrame(() => {
+        window.scrollTo(0, scrollY);
+    });
+};
