@@ -290,5 +290,20 @@ categorizeTransactionsForDemo db = do
       }
 
   TransactionQueries.insertTransaction demoTransaction db
+
+  -- Add another uncategorized grocery transaction for batch suggestion testing
+  let
+    demoTransaction2 = TransactionQueries.TransactionNewRow
+      { budgetId: Just budgetId
+      , fromAccountId: 2 -- Checking account
+      , toAccountId: 6   -- Unknown_EXPENSE account (uncategorized)
+      , uniqueFitId: Nothing
+      , dateUnix: demoDateUnix - 86400 -- One day earlier
+      , descrOrig: "GROCERY STORE DOWNTOWN"
+      , descr: "GROCERY STORE DOWNTOWN"
+      , cents: 4250 -- 42.50 euros
+      }
+
+  TransactionQueries.insertTransaction demoTransaction2 db
   pure unit
 

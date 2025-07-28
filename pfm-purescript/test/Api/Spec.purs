@@ -292,27 +292,46 @@ spec port = do
                 Array.length budgets `shouldSatisfy` (_ >= 0)
 
       it "should get budget by ID when exists" do
-        -- First get all budgets to find an existing one
-        budgetsResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets")
-        case budgetsResult of
-          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
-          Right budgetsResponse -> do
-            case JSON.readJSON budgetsResponse.body of
-              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (budgets :: Array BudgetDB) -> do
-                case Array.head budgets of
-                  Just (BudgetDB budget) -> do
-                    result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets/" <> show budget.budgetId)
-                    case result of
-                      Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
-                      Right response -> do
-                        shouldEqual (StatusCode 200) response.status
-                        case JSON.readJSON response.body of
-                          Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-                          Right (foundBudget :: BudgetDB) -> do
-                            let (BudgetDB foundData) = foundBudget
-                            foundData.budgetId `shouldEqual` budget.budgetId
-                  Nothing -> shouldEqual "Expected at least one budget" "No budgets found"
+        -- First create a transaction which will create a budget
+        let testTransaction = 
+              { budgetId: Nothing :: Maybe Int
+              , fromAccountId: 2
+              , toAccountId: 6
+              , dateUnix: 1719792000
+              , descr: "Test transaction to create budget"
+              , cents: 1000
+              }
+              
+        createResult <- AX.request (AX.defaultRequest
+          { method = Left POST
+          , url = "http://localhost:" <> show port <> "/transactions"
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.String $ JSON.writeJSON testTransaction
+          })
+        case createResult of
+          Left err -> shouldEqual "Expected success creating transaction" $ "Got error: " <> AX.printError err
+          Right _ -> do
+            -- Now get all budgets to find the created one
+            budgetsResult <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets")
+            case budgetsResult of
+              Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+              Right budgetsResponse -> do
+                case JSON.readJSON budgetsResponse.body of
+                  Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+                  Right (budgets :: Array BudgetDB) -> do
+                    case Array.head budgets of
+                      Just (BudgetDB budget) -> do
+                        result <- AX.get ResponseFormat.string ("http://localhost:" <> show port <> "/budgets/" <> show budget.budgetId)
+                        case result of
+                          Left err -> shouldEqual "Expected success" $ "Got error: " <> AX.printError err
+                          Right response -> do
+                            shouldEqual (StatusCode 200) response.status
+                            case JSON.readJSON response.body of
+                              Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
+                              Right (foundBudget :: BudgetDB) -> do
+                                let (BudgetDB foundData) = foundBudget
+                                foundData.budgetId `shouldEqual` budget.budgetId
+                      Nothing -> shouldEqual "Expected at least one budget" "No budgets found"
 
     describe "Transactions Endpoints" do
       it "should get all transactions" do
