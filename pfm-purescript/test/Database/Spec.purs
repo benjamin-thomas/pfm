@@ -6,8 +6,6 @@ import Prelude
 
 import Data.Array (length, filter, (!!), head)
 import Data.Maybe (Maybe(Just, Nothing))
-import Effect.Class (liftEffect)
-import Effect.Exception (throw)
 import SQLite3 as SQLite3
 import Server.DB.Account as Account
 import Server.DB.Account (AccountDB(..), AccountBalanceDB(..))
@@ -20,10 +18,11 @@ import Server.DB.Category as Category
 import Server.DB.Category (CategoryDB(..))
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.DB.Transactions.Queries (TransactionNewRow(..))
+import Server.DB.Suggestions.Queries as SuggestionQueries
 import Shared.Types (LedgerViewRow(..), Transaction(..))
 import Test.Database.TestUtils (withTestTransaction)
 import Test.Spec (Spec, describe, it)
-import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
+import Test.Spec.Assertions (shouldEqual, shouldSatisfy, fail)
 
 spec :: SQLite3.DBConnection -> Spec Unit
 spec db = do
@@ -56,7 +55,7 @@ spec db = do
             Just (CategoryDB cat) -> do
               cat.categoryId `shouldEqual` 1
               cat.name `shouldEqual` "Equity"
-            Nothing -> liftEffect $ throw "First category not found"
+            Nothing -> fail "First category not found"
 
       it "should get category by ID" do
         withTestTransaction db do
@@ -65,7 +64,7 @@ spec db = do
             Just (CategoryDB cat) -> do
               cat.categoryId `shouldEqual` 2
               cat.name `shouldEqual` "Assets"
-            Nothing -> liftEffect $ throw "Category 2 not found"
+            Nothing -> fail "Category 2 not found"
 
     describe "Account Operations" do
       it "should get all accounts" do
@@ -92,7 +91,7 @@ spec db = do
               balance.categoryName `shouldEqual` "Assets"
               balance.accountName `shouldSatisfy` (\name -> name == "Checking account" || name == "Savings account")
               balance.accountBalance `shouldEqual` 0 -- Should be 0 initially with no transactions
-            Nothing -> liftEffect $ throw "Expected at least one balance"
+            Nothing -> fail "Expected at least one balance"
 
       it "should return empty array for empty account IDs" do
         withTestTransaction db do
@@ -149,7 +148,7 @@ spec db = do
               balance.accountName `shouldEqual` "Checking account"
               -- Balance should be -100.00 + 250.00 = 150.00 (15000 cents)
               balance.accountBalance `shouldEqual` 15000
-            Nothing -> liftEffect $ throw "Expected balance for checking account"
+            Nothing -> fail "Expected balance for checking account"
 
     describe "Budget Operations" do
       it "should get all budgets after seeding" do
@@ -170,7 +169,7 @@ spec db = do
           case maybeBudget of
             Just (BudgetDB budget) -> do
               budget.budgetId `shouldEqual` budgetId
-            Nothing -> liftEffect $ throw "Budget not found after creation"
+            Nothing -> fail "Budget not found after creation"
 
     describe "Transaction Operations" do
       it "should insert and get transactions" do
@@ -201,7 +200,7 @@ spec db = do
             Just (Transaction txn) -> do
               txn.id `shouldSatisfy` (_ > 0)
               txn.amount `shouldSatisfy` (_ > 0.0)
-            Nothing -> liftEffect $ throw "No transactions found"
+            Nothing -> fail "No transactions found"
 
       it "should get transaction by ID" do
         withTestTransaction db do
@@ -230,7 +229,7 @@ spec db = do
               -- Now test getting it by ID
               maybeTransaction <- TransactionQueries.getTransactionById txn.id db
               maybeTransaction `shouldEqual` Just (Transaction txn)
-            Nothing -> liftEffect $ throw "No transactions found after creation"
+            Nothing -> fail "No transactions found after creation"
 
       it "should update a transaction" do
         withTestTransaction db do
@@ -277,8 +276,8 @@ spec db = do
                 Just (Transaction updated) -> do
                   updated.description `shouldEqual` "Updated Description"
                   updated.amount `shouldEqual` 99.99
-                Nothing -> liftEffect $ throw "Updated transaction not found"
-            Nothing -> liftEffect $ throw "No transactions found after creation"
+                Nothing -> fail "Updated transaction not found"
+            Nothing -> fail "No transactions found after creation"
 
       it "should delete a transaction" do
         withTestTransaction db do
@@ -317,22 +316,80 @@ spec db = do
               -- Verify count decreased
               transactions2 <- TransactionQueries.getAllTransactions db
               length transactions2 `shouldEqual` (initialCount - 1)
-            Nothing -> liftEffect $ throw "No transactions found after creation"
+            Nothing -> fail "No transactions found after creation"
 
-    -- describe "Batch Suggestion Operations" do
-    --   it "should work with test setup" do
-    --     withTestTransaction db do
-    --       -- Create a budget for test transactions
-    --       _ <- Budget.insertBudgetForDate 1719792000 db
+    describe "Batch Suggestion Operations" do
+      it "should apply suggestions to multiple transactions" do
+        withTestTransaction db do
+          -- Create a budget for test transactions
+          budgetId <- Budget.insertBudgetForDate 1719792000 db
 
-    --       -- For now, let's verify that the test is set up correctly
-    --       -- by checking we can retrieve all transactions
-    --       allTransactions <- TransactionQueries.getAllTransactions db
-    --       length allTransactions `shouldEqual` 0
+          -- Create a categorized grocery transaction (establishes the pattern)
+          let
+            categorizedTxn = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account
+              , toAccountId: 7 -- Groceries account (categorized)
+              , uniqueFitId: Just "CATEGORIZED-1"
+              , dateUnix: 1719792000
+              , descrOrig: "GROCERY MART"
+              , descr: "GROCERY MART"
+              , cents: 5000
+              }
+          TransactionQueries.insertTransaction categorizedTxn db
 
-    --       -- This assertion will fail once we implement batchApplySuggestions
-    --       -- After implementation, both uncategorized transactions should move to account 7
-    --       liftEffect $ throw "TODO: Implement batchApplySuggestions to make this test pass"
+          -- Create two uncategorized grocery transactions
+          let
+            uncategorized1 = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account
+              , toAccountId: 6 -- Unknown expense (uncategorized)
+              , uniqueFitId: Just "UNCATEGORIZED-1"
+              , dateUnix: 1719792100
+              , descrOrig: "GROCERY STORE"
+              , descr: "GROCERY STORE"
+              , cents: 3000
+              }
+          TransactionQueries.insertTransaction uncategorized1 db
+
+          let
+            uncategorized2 = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account
+              , toAccountId: 6 -- Unknown expense (uncategorized)
+              , uniqueFitId: Just "UNCATEGORIZED-2"
+              , dateUnix: 1719792200
+              , descrOrig: "GROCERY PLAZA"
+              , descr: "GROCERY PLAZA"
+              , cents: 4000
+              }
+          TransactionQueries.insertTransaction uncategorized2 db
+
+          -- Get all transactions to find the IDs of uncategorized ones
+          allTransactions <- TransactionQueries.getAllTransactions db
+          length allTransactions `shouldEqual` 3
+
+          -- Find the uncategorized transactions
+          let uncategorizedTxns = filter (\(Transaction t) -> t.toAccountId == 6) allTransactions
+          length uncategorizedTxns `shouldEqual` 2
+
+          -- Create suggestion updates for both uncategorized transactions
+          let
+            suggestions = map
+              ( \(Transaction t) ->
+                  { transactionId: t.id
+                  , toAccountId: 7 -- Move to Groceries account
+                  }
+              )
+              uncategorizedTxns
+
+          -- Apply batch suggestions
+          SuggestionQueries.batchApplySuggestions suggestions db
+
+          -- Verify all transactions now go to account 7
+          updatedTransactions <- TransactionQueries.getAllTransactions db
+          let groceryTransactions = filter (\(Transaction t) -> t.toAccountId == 7) updatedTransactions
+          length groceryTransactions `shouldEqual` 3 -- All 3 should now be categorized
 
     describe "Ledger View Operations" do
       it "should get ledger view for checking account" do
@@ -388,7 +445,7 @@ spec db = do
 
               -- Second transaction: money coming into checking account (positive flow)
               row2.flowCents `shouldSatisfy` (_ > 0)
-            _ -> liftEffect $ throw "Expected exactly 2 test ledger rows"
+            _ -> fail "Expected exactly 2 test ledger rows"
 
       it "should calculate running balance correctly" do
         withTestTransaction db do
@@ -444,7 +501,7 @@ spec db = do
 
             -- Running balance calculation depends on previous transactions
             -- So we can only verify the flow amounts are correct
-            _ -> liftEffect $ throw "Expected exactly 2 test ledger rows for balance test"
+            _ -> fail "Expected exactly 2 test ledger rows for balance test"
 
       it "should filter by description" do
         withTestTransaction db do
@@ -488,7 +545,7 @@ spec db = do
           length filteredRows `shouldEqual` 1
           case head filteredRows of
             Just (LedgerViewRowDB row) -> row.descr `shouldEqual` "Grocery Store"
-            Nothing -> liftEffect $ throw "Expected one filtered row"
+            Nothing -> fail "Expected one filtered row"
 
       it "should filter by minimum amount" do
         withTestTransaction db do
@@ -534,7 +591,7 @@ spec db = do
             Just (LedgerViewRowDB row) -> do
               row.descr `shouldEqual` "Salary"
               row.flowCents `shouldEqual` 200000
-            Nothing -> liftEffect $ throw "Expected one filtered row"
+            Nothing -> fail "Expected one filtered row"
 
       it "should filter by maximum amount" do
         withTestTransaction db do
@@ -580,7 +637,7 @@ spec db = do
             Just (LedgerViewRowDB row) -> do
               row.descr `shouldEqual` "Grocery Store"
               row.flowCents `shouldEqual` (-5000) -- Note: negative because money going out
-            Nothing -> liftEffect $ throw "Expected one filtered row"
+            Nothing -> fail "Expected one filtered row"
 
       it "should filter by unknown expenses only" do
         withTestTransaction db do
@@ -627,7 +684,7 @@ spec db = do
             Just (LedgerViewRowDB row) -> do
               row.descr `shouldEqual` "Grocery Store"
               row.toAccountId `shouldEqual` 6 -- Unknown expense account
-            Nothing -> liftEffect $ throw "Expected one filtered row"
+            Nothing -> fail "Expected one filtered row"
 
       it "should filter by soundex similarity" do
         withTestTransaction db do
@@ -675,4 +732,3 @@ spec db = do
           -- Map to descriptions for cleaner assertion
           let descriptions = map (\(LedgerViewRowDB row) -> row.descr) filteredRows
           descriptions `shouldEqual` [ "Grocery Store" ]
-

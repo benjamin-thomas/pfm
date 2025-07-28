@@ -309,6 +309,15 @@ makeRouter db req =
                   ok $ JSON.writeJSON suggestions
                 _, _ -> response 400 $ JSON.writeJSON { error: "Invalid account IDs" }
             _, _ -> response 400 $ JSON.writeJSON { error: "Missing fromAccountId or toAccountId parameter" }
+        Post -> do
+          -- Apply batch suggestions
+          bodyStr <- toString req.body
+          case JSON.readJSON bodyStr of
+            Left err -> response 400 $ JSON.writeJSON { error: "Invalid JSON: " <> show err }
+            Right (suggestions :: Array SuggestionQueries.SuggestionInsert) -> do
+              SuggestionQueries.batchApplySuggestions suggestions db
+              ok ""
+        Options -> ok ""
         _ -> methodNotAllowed
 
 -- Helper functions for query parameter parsing

@@ -189,6 +189,7 @@ data Action
           }
       , accountId :: Int
       }
+  | ApplyAllSuggestions (Array { transactionId :: Int, accountId :: Int })
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
@@ -239,6 +240,28 @@ component = H.mkComponent
       , initialize = Just Initialize
       }
   }
+
+-- | Collect all available suggestions from ledger rows and suggestions data
+-- | Returns an array of { transactionId, accountId } pairs for batch updating
+collectAllSuggestions :: Array LedgerViewRow -> Array Suggestion -> Array { transactionId :: Int, accountId :: Int }
+collectAllSuggestions ledgerRows suggestions =
+  Array.mapMaybe extractSuggestion ledgerRows
+  where
+  extractSuggestion :: LedgerViewRow -> Maybe { transactionId :: Int, accountId :: Int }
+  extractSuggestion (LedgerViewRow row) = do
+    -- Only suggest for transactions going to Unknown_EXPENSE (account 6)
+    if row.toAccountId == 6 then do
+      -- Find matching suggestion by soundex
+      suggestion <- Array.find (\(Suggestion s) -> s.soundexDescr == row.soundexDescr) suggestions
+      case suggestion of
+        Suggestion s -> do
+          -- Get the first (most likely) suggested account
+          firstSuggestion <- Array.head s.suggestedAccounts
+          case firstSuggestion of
+            SuggestedAccount account ->
+              Just { transactionId: row.transactionId, accountId: account.accountId }
+    else
+      Nothing
 
 render :: forall m. State -> H.ComponentHTML Action () m
 render state =
@@ -349,7 +372,7 @@ render state =
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
               [ HH.button
                   [ HP.class_ (HH.ClassName "button button--secondary")
-                  , HE.onClick \_ -> OpenCreateDialog -- TODO: Implement ApplyAllSuggestions action
+                  , HE.onClick \_ -> ApplyAllSuggestions (collectAllSuggestions appData.ledgerRows appData.suggestions)
                   ]
                   [ HH.text "💡 Apply All Suggestions" ]
               , HH.button
@@ -1083,6 +1106,36 @@ handleAction = case _ of
         liftEffect $ log $ "Suggestion applied successfully. Status: " <> show response.status
         -- Refresh only the ledger view to show the updated transaction
         handleAction LoadLedgerView
+
+  ApplyAllSuggestions suggestions -> do
+    -- Apply all suggestions using the batch endpoint
+    state <- H.get
+
+    if Array.length suggestions == 0 then do
+      liftEffect $ log "No suggestions to apply"
+    else do
+      liftEffect $ log $ "Applying " <> show (Array.length suggestions) <> " suggestions in batch"
+
+      -- Convert to the format expected by batchApplySuggestions
+      let suggestionInserts = map (\s -> { transactionId: s.transactionId, toAccountId: s.accountId }) suggestions
+
+      -- Call the batch suggestions endpoint
+      result <- H.liftAff $ AX.request
+        AX.defaultRequest
+          { method = Left POST
+          , url = unApiBaseUrl $ appendPath state.apiBaseUrl "/transactions/suggestions"
+          , headers = [ RequestHeader.RequestHeader "Content-Type" "application/json" ]
+          , content = Just $ RequestBody.string $ JSON.writeJSON suggestionInserts
+          , responseFormat = ResponseFormat.string
+          }
+
+      case result of
+        Right response -> do
+          liftEffect $ log $ "All suggestions applied successfully. Status: " <> show response.status
+          -- Refresh the ledger view to show the updated transactions
+          handleAction LoadLedgerView
+        Left err -> do
+          liftEffect $ log $ "Failed to apply batch suggestions: " <> AX.printError err
 
 -- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
 attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
