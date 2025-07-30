@@ -440,11 +440,12 @@ spec db = do
 
           case testRows of
             [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
-              -- First transaction: money going out from checking account (negative flow)
-              row1.flowCents `shouldSatisfy` (_ < 0)
+              -- With DESC order, Salary (newer) comes first, then Grocery Store (older)
+              -- Salary: money coming into checking account (positive flow)
+              row1.flowCents `shouldSatisfy` (_ > 0)
 
-              -- Second transaction: money coming into checking account (positive flow)
-              row2.flowCents `shouldSatisfy` (_ > 0)
+              -- Grocery Store: money going out from checking account (negative flow)
+              row2.flowCents `shouldSatisfy` (_ < 0)
             _ -> fail "Expected exactly 2 test ledger rows"
 
       it "should calculate running balance correctly" do
@@ -493,11 +494,12 @@ spec db = do
 
           case testRows of
             [ LedgerViewRow row1, LedgerViewRow row2 ] -> do
-              -- First row: -$50.00
-              row1.flowCents `shouldEqual` (-5000)
+              -- With DESC order, Salary comes first, then Grocery Store
+              -- Salary: +$2000.00
+              row1.flowCents `shouldEqual` 200000
 
-              -- Second row: +$2000.00
-              row2.flowCents `shouldEqual` 200000
+              -- Grocery Store: -$50.00
+              row2.flowCents `shouldEqual` (-5000)
 
             -- Running balance calculation depends on previous transactions
             -- So we can only verify the flow amounts are correct
@@ -732,3 +734,76 @@ spec db = do
           -- Map to descriptions for cleaner assertion
           let descriptions = map (\(LedgerViewRowDB row) -> row.descr) filteredRows
           descriptions `shouldEqual` [ "Grocery Store" ]
+
+      it "should calculate prior balance correctly with filtered transactions" do
+        withTestTransaction db do
+          -- Create a budget first
+          budgetId <- Budget.insertBudgetForDate 1719792000 db
+
+          -- Insert multiple transactions with different amounts
+          let
+            -- First transaction: $100 expense
+            testTxn1 = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account (money going out)
+              , toAccountId: 6 -- Unknown expense
+              , uniqueFitId: Just "PRIOR-BAL-1"
+              , dateUnix: 1719792000
+              , descrOrig: "Expense 1"
+              , descr: "Expense 1"
+              , cents: 10000 -- $100.00
+              }
+
+            -- Second transaction: $50 expense (will be filtered out)
+            testTxn2 = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account (money going out)
+              , toAccountId: 6 -- Unknown expense
+              , uniqueFitId: Just "PRIOR-BAL-2"
+              , dateUnix: 1719792100
+              , descrOrig: "Small Expense"
+              , descr: "Small Expense"
+              , cents: 5000 -- $50.00
+              }
+
+            -- Third transaction: $150 expense
+            testTxn3 = TransactionNewRow
+              { budgetId: Just budgetId
+              , fromAccountId: 2 -- Checking account (money going out)
+              , toAccountId: 6 -- Unknown expense
+              , uniqueFitId: Just "PRIOR-BAL-3"
+              , dateUnix: 1719792200
+              , descrOrig: "Expense 3"
+              , descr: "Expense 3"
+              , cents: 15000 -- $150.00
+              }
+
+          -- Insert all transactions
+          TransactionQueries.insertTransaction testTxn1 db
+          TransactionQueries.insertTransaction testTxn2 db
+          TransactionQueries.insertTransaction testTxn3 db
+
+          -- Get ledger view with filter that excludes the middle transaction
+          let filterLarge = { description: Nothing, soundexDescr: Nothing, minAmount: Just 10000, maxAmount: Nothing, filterUnknownExpenses: Nothing }
+          filteredRows <- LedgerView.getLedgerViewRows 2 filterLarge db
+
+          -- We should only get two transactions (100 and 150)
+          let
+            ourRows = filter
+              (\(LedgerViewRowDB r) -> r.descr == "Expense 1" || r.descr == "Expense 3")
+              filteredRows
+
+          case ourRows of
+            [ LedgerViewRowDB row3, LedgerViewRowDB row1 ] -> do
+              -- With DESC order, Expense 3 (newest) comes first
+              -- Third transaction: prior balance should include ALL previous transactions
+              -- even the filtered out one (0 - 100 - 50 = -150)
+              row3.descr `shouldEqual` "Expense 3"
+              row3.priorBalance `shouldEqual` "-150.00" -- This is the key test!
+              row3.runningBalance `shouldEqual` "-300.00" -- -150 - 150 = -300
+
+              -- First transaction (shown last due to DESC order): prior balance should be 0
+              row1.descr `shouldEqual` "Expense 1"
+              row1.priorBalance `shouldEqual` "0.00"
+              row1.runningBalance `shouldEqual` "-100.00"
+            _ -> fail "Expected exactly 2 filtered transactions"

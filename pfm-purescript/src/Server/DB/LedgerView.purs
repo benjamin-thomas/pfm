@@ -53,6 +53,8 @@ newtype LedgerViewRow = MkLedgerViewRow
   , flow :: String -- Formatted as decimal string
   , running_balance_cents :: Int -- Running balance in cents
   , running_balance :: String -- Formatted as decimal string
+  , prior_balance_cents :: Int -- Prior balance in cents (using LAG window function)
+  , prior_balance :: String -- Prior balance formatted as decimal string
   , created_at_unix :: Int
   , created_at_utc :: String
   , created_at_tz :: String
@@ -80,6 +82,8 @@ newtype LedgerViewRowDB = LedgerViewRowDB
   , flow :: String -- Formatted as decimal string
   , runningBalanceCents :: Int -- Running balance in cents
   , runningBalance :: String -- Formatted as decimal string
+  , priorBalanceCents :: Int
+  , priorBalance :: String
   , createdAtUnix :: Int
   , createdAtUtc :: String
   , createdAtTz :: String
@@ -118,6 +122,8 @@ rowToLedgerViewRowDB (MkLedgerViewRow row) = LedgerViewRowDB
   , flow: row.flow
   , runningBalanceCents: row.running_balance_cents
   , runningBalance: row.running_balance
+  , priorBalanceCents: row.prior_balance_cents
+  , priorBalance: row.prior_balance
   , createdAtUnix: row.created_at_unix
   , createdAtUtc: row.created_at_utc
   , createdAtTz: row.created_at_tz

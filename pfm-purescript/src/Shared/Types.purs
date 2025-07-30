@@ -66,6 +66,8 @@ newtype LedgerViewRow = LedgerViewRow
   , flow :: String -- Formatted as decimal string
   , runningBalanceCents :: Int
   , runningBalance :: String -- Formatted as decimal string
+  , priorBalanceCents :: Int
+  , priorBalance :: String -- Formatted as decimal string
   , createdAtUnix :: Int
   , createdAtUtc :: String
   , createdAtTz :: String

@@ -9,7 +9,6 @@ import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
-import Data.Array ((:))
 import Data.Array as Array
 import Data.String as String
 import Data.Either (Either(..))
@@ -18,7 +17,6 @@ import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype)
 import Data.Number as Number
-import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
@@ -384,7 +382,7 @@ render state =
           ]
       , renderSearchForm state.searchForm
       , HH.ul [ HP.class_ (HH.ClassName "transaction-list__items") ]
-          (map (renderLedgerRowWithBalance appData.suggestions) (Array.reverse $ attachPriorBalance appData.ledgerRows))
+          (map (renderLedgerRow appData.suggestions) appData.ledgerRows)
       ]
 
   renderSearchForm :: SearchForm -> H.ComponentHTML Action () m
@@ -468,11 +466,8 @@ render state =
           ByDescr _ -> HH.text ""
       ]
 
-  renderLedgerRowWithBalance :: Array Suggestion -> { transaction :: LedgerViewRow, priorBalance :: String } -> H.ComponentHTML Action () m
-  renderLedgerRowWithBalance suggestions { transaction, priorBalance } = renderLedgerRow suggestions transaction priorBalance
-
-  renderLedgerRow :: Array Suggestion -> LedgerViewRow -> String -> H.ComponentHTML Action () m
-  renderLedgerRow suggestions (LedgerViewRow row) priorBalance =
+  renderLedgerRow :: Array Suggestion -> LedgerViewRow -> H.ComponentHTML Action () m
+  renderLedgerRow suggestions (LedgerViewRow row) =
     let
       isPositive = row.flowCents > 0
       amountClass =
@@ -508,7 +503,7 @@ render state =
             , HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-column") ]
                 [ HH.div [ HP.class_ (HH.ClassName "transaction-item__balance-movement") ]
                     [ HH.span [ HP.class_ (HH.ClassName "balance-before") ]
-                        [ HH.text $ priorBalance <> " €" ]
+                        [ HH.text $ row.priorBalance <> " €" ]
                     , HH.span [ HP.class_ (HH.ClassName "arrow-icon") ]
                         [ HH.text " → " ]
                     , HH.span [ HP.class_ (HH.ClassName "balance-after") ]
@@ -1136,23 +1131,6 @@ handleAction = case _ of
           handleAction LoadLedgerView
         Left err -> do
           liftEffect $ log $ "Failed to apply batch suggestions: " <> AX.printError err
-
--- | Attach prior balance to each transaction, similar to Elm's attachPriorBalance
-attachPriorBalance :: Array LedgerViewRow -> Array { transaction :: LedgerViewRow, priorBalance :: String }
-attachPriorBalance transactions =
-  case Array.uncons transactions of
-    Nothing -> []
-    Just { head: first, tail: rest } ->
-      let
-        firstWithPrior = { transaction: first, priorBalance: "0.00" }
-        restWithPrior = Array.zip rest transactions
-          # map \(Tuple current previous) ->
-              let
-                (LedgerViewRow prevRow) = previous
-              in
-                { transaction: current, priorBalance: prevRow.runningBalance }
-      in
-        firstWithPrior : restWithPrior
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =

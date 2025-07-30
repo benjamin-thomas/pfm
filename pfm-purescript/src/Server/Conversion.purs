@@ -25,6 +25,8 @@ dbLedgerViewRowToLedgerViewRow (LedgerViewRowDB dbRow) =
     , flow: dbRow.flow
     , runningBalanceCents: dbRow.runningBalanceCents
     , runningBalance: dbRow.runningBalance
+    , priorBalanceCents: dbRow.priorBalanceCents
+    , priorBalance: dbRow.priorBalance
     , createdAtUnix: dbRow.createdAtUnix
     , createdAtUtc: dbRow.createdAtUtc
     , createdAtTz: dbRow.createdAtTz
