@@ -425,7 +425,7 @@ a:hover {
     font-size: 10px;
 }
 
-.balance-after {
+.balance-before {
     font-weight: 500;
     color: var(--color-text-tertiary);
 }

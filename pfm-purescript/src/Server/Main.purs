@@ -1,54 +1,57 @@
-module Server.Main (main, startServer) where
+module Server.Main (main, startServer, AppEnv(..)) where
 
 import Prelude hiding ((/))
 
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
+import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), split)
-import Data.Int (fromString)
 import Data.Traversable (traverse)
-import Foreign.Object as FO
 import Effect (Effect)
 import Effect.Aff (runAff_)
+import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throw)
-import Node.Process (lookupEnv)
-import HTTPurple
-  ( class Generic
-  , Method(..)
-  , Request
-  , ResponseM
-  , RouteDuplex'
-  , ServerM
-  , header
-  , int
-  , methodNotAllowed
-  , mkRoute
-  , noArgs
-  , ok
-  , response
-  , segment
-  , serve
-  , toString
-  , (/)
-  )
+import Foreign.Object as FO
+import HTTPurple (class Generic, Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, segment, serve, toString, (/))
 import HTTPurple.Response (Response)
+import Node.Process (lookupEnv)
 import SQLite3 (DBConnection)
-import Server.Database as DB
 import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
-import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.LedgerView (LedgerViewFilters)
-import Server.DB.Transactions.Queries as TransactionQueries
+import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Suggestions.Queries as SuggestionQueries
+import Server.DB.Transactions.Queries as TransactionQueries
+import Server.Database as DB
 import Server.Types.TransactionWrite (TransactionWrite(..))
-import Shared.Types (Suggestion)
 import Yoga.JSON as JSON
 
--- Server configuration types
-data Environment = Dev | Test
+data AppEnv
+  = DevEnv
+  | TestEnv
+
+derive instance Eq AppEnv
+derive instance Ord AppEnv
+
+instance Bounded AppEnv where
+  bottom = DevEnv
+  top = TestEnv
+
+instance Show AppEnv where
+  show DevEnv = "dev"
+  show TestEnv = "test"
+
+allAppEnvs :: Array String
+allAppEnvs = show <$> ([ bottom, top ] :: Array AppEnv)
+
+parseAppEnv :: Maybe String -> Effect AppEnv
+parseAppEnv = case _ of
+  Just "dev" -> pure DevEnv
+  Just "test" -> pure TestEnv
+  _ -> throw $ "Invalid or missing APP_ENV, must be one of: " <> show allAppEnvs
 
 data Route
   = Home
@@ -62,14 +65,13 @@ data Route
   | Transactions
   | TransactionById Int
   | TransactionSuggestions
+  | TestEnvResetDb
 
 derive instance Generic Route _
 
 route :: RouteDuplex' Route
 route = mkRoute
   { "Home": noArgs
-  , "Users": "users" / noArgs
-  , "UserById": "users" / int segment
   , "Categories": "categories" / noArgs
   , "CategoryById": "categories" / int segment
   , "Accounts": "accounts" / noArgs
@@ -80,6 +82,7 @@ route = mkRoute
   , "Transactions": "transactions" / noArgs
   , "TransactionById": "transactions" / int segment
   , "TransactionSuggestions": "transactions" / "suggestions" / noArgs
+  , "TestEnvResetDb": "test" / "reset-db" / noArgs
   }
 
 main :: Effect Unit
@@ -87,19 +90,18 @@ main = do
   log "[SERVER] Booting up..."
 
   -- Require mandatory APP_ENV environment variable
-  appEnv <- lookupEnv "APP_ENV"
+  appEnvStrMay <- lookupEnv "APP_ENV"
+  appEnv <- parseAppEnv appEnvStrMay
   case appEnv of
-    Nothing -> throw "APP_ENV environment variable is required (dev|test)"
-    Just "dev" -> do
+    DevEnv -> do
       log "[SERVER] Starting in development mode"
-      startAppWithConfig { port: 8081, dbPath: "./db.sqlite", shouldResetSchema: false }
-    Just "test" -> do
+      startAppWithConfig { appEnv, port: 8081, dbPath: "./db.sqlite" }
+    TestEnv -> do
       log "[SERVER] Starting in e2e-test mode"
-      startAppWithConfig { port: 8082, dbPath: "./db.e2e-test.sqlite", shouldResetSchema: true }
-    Just other -> throw $ "Invalid APP_ENV: " <> other <> " (must be dev|test)"
+      startAppWithConfig { appEnv, port: 8082, dbPath: "./db.e2e-test.sqlite" }
 
-startAppWithConfig :: { port :: Int, dbPath :: String, shouldResetSchema :: Boolean } -> Effect Unit
-startAppWithConfig { port, dbPath, shouldResetSchema } = do
+startAppWithConfig :: { appEnv :: AppEnv, port :: Int, dbPath :: String } -> Effect Unit
+startAppWithConfig { appEnv, port, dbPath } = do
   log $ "[SERVER] Using database: " <> dbPath
   log $ "[SERVER] Starting server on port: " <> show port
   DB.initDatabase dbPath # runAff_
@@ -107,27 +109,28 @@ startAppWithConfig { port, dbPath, shouldResetSchema } = do
       Left err -> log $ "Failed to initialize database: " <> show err
       Right db -> do
         log "Database initialized successfully"
-        if shouldResetSchema then do
-          log "[SERVER] Resetting database schema and seeding with fixtures (test mode)"
-          DB.seedFromOfx "test/OfxParser/fixture.ofx" db # runAff_
-            case _ of
-              Left seedErr -> log $ "Failed to seed database: " <> show seedErr
-              Right _ -> do
-                log "Database schema ready and seeded with test fixtures"
-                void $ startServer port db
-        else do
-          log "[SERVER] Using existing database schema (dev mode)"
-          void $ startServer port db
+        case appEnv of
+          TestEnv -> do
+            log "[SERVER] Resetting database schema and seeding with fixtures (test mode)"
+            DB.seedFromOfx "test/OfxParser/fixture.ofx" db # runAff_
+              case _ of
+                Left seedErr -> log $ "Failed to seed database: " <> show seedErr
+                Right _ -> do
+                  log "Database schema ready and seeded with test fixtures"
+                  void $ startServer port appEnv db
+          DevEnv -> do
+            log "[SERVER] Using existing database schema (dev mode)"
+            void $ startServer port appEnv db
 
-startServer :: Int -> DBConnection -> ServerM
-startServer port db =
+startServer :: Int -> AppEnv -> DBConnection -> ServerM
+startServer port appEnv db =
   serve { port } { route, router }
   where
   router :: Request Route -> ResponseM
   router =
     corsMiddleware
       $ jsonMiddleware
-      $ makeRouter db
+      $ makeRouter appEnv db
 
 corsMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
 corsMiddleware route' request = do
@@ -145,8 +148,8 @@ jsonMiddleware route' request = do
   response <- route' request
   pure $ response { headers = header "Content-Type" "application/json" <> response.headers }
 
-makeRouter :: DBConnection -> Request Route -> ResponseM
-makeRouter db req =
+makeRouter :: AppEnv -> DBConnection -> Request Route -> ResponseM
+makeRouter appEnv db req =
   case req.route of
     Home ->
       case req.method of
@@ -319,6 +322,17 @@ makeRouter db req =
               ok ""
         Options -> ok ""
         _ -> methodNotAllowed
+
+    TestEnvResetDb ->
+      case appEnv, req.method of
+        TestEnv, Post -> do
+          -- Reset database by reseeding from OFX fixture
+          liftEffect $ log "[SERVER] Test environment database reset requested"
+          DB.seedFromOfx "test/OfxParser/fixture.ofx" db
+          ok $ JSON.writeJSON { message: "Database reset successful" }
+        TestEnv, Options -> ok ""
+        TestEnv, _ -> methodNotAllowed
+        DevEnv, _ -> response 404 $ JSON.writeJSON { error: "Endpoint only available in test environment" }
 
 -- Helper functions for query parameter parsing
 

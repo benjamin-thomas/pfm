@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
 
+// Reset the test database before each test
+test.beforeEach(async ({ request }) => {
+  const backendURL = process.env.BACKEND_URL || 'http://localhost:8082';
+  await request.post(`${backendURL}/test/reset-db`);
+});
+
 test.describe('PFM PureScript App', () => {
   test('should display ledger view and allow dark mode toggle', async ({ page }) => {
     // Navigate to the app
@@ -778,7 +784,7 @@ test.describe('PFM PureScript App', () => {
 
     // Get the new transaction count
     const filteredCount = await page.locator('.transaction-item').count();
-    
+
     // The filtered count should be less than the initial count
     expect(filteredCount).toBeLessThan(initialCount);
     expect(filteredCount).toBeGreaterThan(0); // Should have at least one similar transaction
@@ -809,14 +815,14 @@ test.describe('PFM PureScript App', () => {
     // Get info about the first transaction before filtering
     const firstTransactionBeforeFilter = page.locator('.transaction-item').first();
     const firstDescriptionBefore = await firstTransactionBeforeFilter.locator('.transaction-item__description').textContent();
-    
+
     // Right-click to see its soundex
     await firstTransactionBeforeFilter.click({ button: 'right' });
     const contextMenuBefore = page.locator('.context-menu');
     await expect(contextMenuBefore).toBeVisible();
     const soundexBefore = await page.locator('.context-menu-debug').textContent();
     console.log('First transaction before filter:', firstDescriptionBefore, soundexBefore);
-    
+
     // Close context menu
     await page.locator('body').click({ position: { x: 0, y: 0 } });
     await expect(contextMenuBefore).not.toBeVisible();
@@ -824,7 +830,7 @@ test.describe('PFM PureScript App', () => {
     // Apply a filter that will definitely change which transaction is first
     // Let's search for something specific that's NOT the first transaction
     const descriptionFilter = page.locator('input#search-description');
-    
+
     // Find a description that's different from the first one
     let searchTerm = '';
     for (const desc of allDescriptions) {
@@ -834,7 +840,7 @@ test.describe('PFM PureScript App', () => {
         break;
       }
     }
-    
+
     if (!searchTerm) {
       // If we can't find a different one, skip the test
       console.log('Could not find a suitable search term, skipping test');
@@ -848,20 +854,20 @@ test.describe('PFM PureScript App', () => {
     // Get info about the first transaction after filtering
     const firstTransactionAfterFilter = page.locator('.transaction-item').first();
     const firstDescriptionAfter = await firstTransactionAfterFilter.locator('.transaction-item__description').textContent();
-    
+
     // This should be a different transaction
     expect(firstDescriptionAfter).not.toBe(firstDescriptionBefore);
-    
+
     // Right-click to see its soundex
     await firstTransactionAfterFilter.click({ button: 'right' });
     const contextMenuAfter = page.locator('.context-menu');
     await expect(contextMenuAfter).toBeVisible();
     const soundexAfter = await page.locator('.context-menu-debug').textContent();
     console.log('First transaction after filter:', firstDescriptionAfter, soundexAfter);
-    
+
     // The soundex should be different since it's a different transaction
     expect(soundexAfter).not.toBe(soundexBefore);
-    
+
     // Also verify the soundex value is reasonable (not empty or undefined)
     expect(soundexAfter).toContain('SOUNDEX:');
     expect(soundexAfter.length).toBeGreaterThan(9); // "SOUNDEX: " + at least 1 char
@@ -921,9 +927,10 @@ test.describe('Transaction Filter UI Integration', () => {
 
 test.describe('Transaction Suggestions', () => {
   test('should display at least one suggestion', async ({ page }) => {
+    // await page.request.post('/test/reset-db');
     await page.goto('/');
 
-    // Wait for app to load
+    // Wait for app to load and suggestions to appear
     await page.waitForSelector('.transaction-list');
 
     // Verify at least one suggestion is displayed within transaction rows

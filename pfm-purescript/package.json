@@ -20,6 +20,7 @@
     "test:watch": "rg --files ./test/ ./src/ | entr -rc spago test --exec-args --fail-fast",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
     "clean": "rm -rf output .spago dist .parcel-cache"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 export default {
   testDir: './test/e2e',
-  timeout: 30000,
+  timeout: 10000,
   retries: 2,
   use: {
     baseURL: 'http://localhost:4002', // Test client port
@@ -8,12 +8,19 @@ export default {
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
   },
+  // Set environment variables for tests
+  env: {
+    BACKEND_URL: 'http://localhost:8082',
+  },
   projects: [
     {
       name: 'chromium',
       use: {
         channel: 'chrome',
-        viewport: { width: 1280, height: 720 }
+        viewport: null, // Use full screen
+        launchOptions: {
+          args: ['--start-maximized']
+        }
       },
     },
   ],

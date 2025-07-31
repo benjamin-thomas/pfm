@@ -9,7 +9,7 @@ import Effect.Class (liftEffect)
 import Effect.Class.Console (log)
 import Effect.Exception (throw)
 import Server.Database (initDatabase, createSchema)
-import Server.Main (startServer)
+import Server.Main (startServer, AppEnv(..))
 import Test.Api.Spec as ApiSpec
 import Test.Database.Spec as DatabaseSpec
 import Test.Database.TestUtils (setupTestFixtures)
@@ -51,7 +51,7 @@ main = do
                 Right _ -> do
                   port <- liftEffect getRandomPort
                   liftEffect $ log $ "Starting test server on port: " <> show port
-                  liftEffect $ void $ startServer port db
+                  liftEffect $ void $ startServer port TestEnv db
                   liftEffect $ log "Test server started successfully"
                   let testConfig = defaultConfig -- { failFast = true }
 
