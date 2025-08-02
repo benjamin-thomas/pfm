@@ -2,3 +2,4 @@
 *.iml
 /.nrepl-port
 /.cpcache
+/db.test.sqlite
