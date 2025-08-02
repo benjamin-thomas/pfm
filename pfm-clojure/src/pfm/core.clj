@@ -31,15 +31,27 @@
     
     (with-redefs [db/db-spec {:dbtype "sqlite" :dbname db-name}]
       (db/create-transactions-table!)
-      (println "Database migrations completed."))))
+      (println "Database migrations completed.")
+      
+      ;; Insert fixture data for test environment
+      (when (= "test" app-env)
+        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee Shop', 4.50, 1234567890)")
+        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Grocery Store', 23.45, 1234567891)")
+        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Gas Station', 45.00, 1234567892)")
+        (println "Test fixture data inserted.")))))
 
 (defn -main [& args]
-  (let [port (Integer/parseInt (get-env! "PORT"))]
+  (let [port (Integer/parseInt (get-env! "PORT"))
+        db-name (get-db-name)]
     (println (str "Starting PFM server on port " port "..."))
     (println (str "Environment: " (get-env! "APP_ENV")))
     
     ;; Setup database based on environment
     (setup-database!)
+    
+    ;; Permanently set the database spec for the server
+    (alter-var-root #'db/db-spec (constantly {:dbtype "sqlite" :dbname db-name}))
+    (println (str "Server using database: " db-name))
     
     ;; Start server
     (jetty/run-jetty handler/app {:port port :join? true})

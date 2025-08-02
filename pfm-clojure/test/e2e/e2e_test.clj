@@ -21,29 +21,31 @@
                                 (or (System/getProperty key)
                                     (throw (ex-info (str "Missing required environment variable: " key)
                                                     {:missing-env-var key}))))]
-    ;; Setup database first and maintain the redefinition for the entire test
-    (let [test-db-spec {:dbtype "sqlite" :dbname "pfm.test.db"}]
-      (with-redefs [db/db-spec test-db-spec]
-        ;; Setup database
-        (core/setup-database!)
-        
-        ;; Insert fixture data for E2E tests
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee Shop', 4.50, 1234567890)")
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Grocery Store', 23.45, 1234567891)")
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Gas Station', 45.00, 1234567892)")
-        
-        ;; Start server - this now runs inside the with-redefs scope
-        (let [server (jetty/run-jetty handler/app {:port 9001 :join? false})]
-          (try
-            ;; Give server a moment to start
-            (Thread/sleep 500)
-            (binding [*server* server]
-              (test-fn))
-            (finally
-              (.stop server)
-              ;; Clean up system properties
-              (System/clearProperty "PORT")
-              (System/clearProperty "APP_ENV"))))))))
+    ;; Setup database for E2E tests
+    (let [test-db-name "pfm.test.db"]
+      ;; Clean slate - delete existing test database
+      (let [db-file (clojure.java.io/file test-db-name)]
+        (when (.exists db-file)
+          (.delete db-file)))
+      
+      ;; Set up database and insert fixtures
+      (alter-var-root #'db/db-spec (constantly {:dbtype "sqlite" :dbname test-db-name}))
+      (db/create-transactions-table!)
+      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee Shop', 4.50, 1234567890)")
+      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Grocery Store', 23.45, 1234567891)")
+      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Gas Station', 45.00, 1234567892)")
+      
+      (let [server (jetty/run-jetty handler/app {:port 9001 :join? false})]
+        (try
+          ;; Give server a moment to start
+          (Thread/sleep 500)
+          (binding [*server* server]
+            (test-fn))
+          (finally
+            (.stop server)
+            ;; Clean up system properties
+            (System/clearProperty "PORT")
+            (System/clearProperty "APP_ENV")))))))
 
 (use-fixtures :once with-test-server)
 
