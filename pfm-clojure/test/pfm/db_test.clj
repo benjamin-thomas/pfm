@@ -3,6 +3,7 @@
             [pfm.db :as db]
             [clojure.java.io :as io]))
 
+
 ;; *earmuffs* = convention for dynamic vars (can be rebound in different threads)
 ;; ^:dynamic = metadata telling Clojure this var can be rebound
 (def ^:dynamic *test-db-file* nil)
@@ -47,3 +48,4 @@
   (testing "can create transactions table"
     (db/create-transactions-table!)
     (is true)))
+

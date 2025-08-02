@@ -2,4 +2,6 @@
 {:tests [{:id :unit
           :test-paths ["test"]
           :source-paths ["src"]
-          :kaocha.testable/parallel? true}]}
+          :kaocha.testable/parallel? true
+          :kaocha.testable/parallelism 4}]
+ :capture-output? true}
