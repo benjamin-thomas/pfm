@@ -24,6 +24,15 @@ We're following strict TDD:
 - Test: `my-func-test`
 This enables Ctrl+Shift+T toggling between function and test.
 
+**Test Organization**: Use multiple `testing` blocks within a single `deftest` to keep related tests together while maintaining the toggle functionality:
+```clojure
+(deftest my-func-test
+  (testing "basic scenario"
+    (is ...))
+  (testing "advanced scenario"
+    (is ...)))
+```
+
 ## Project Structure
 ```
 src/pfm/

@@ -1,9 +1,12 @@
-; clojure -M:test --watch
-; clojure -M:test --reporter kaocha.report/documentation
 (ns pfm.handler-test
   (:require [clojure.test :refer :all]
             [ring.mock.request :as mock]
-            [pfm.handler :as handler]))
+            [pfm.handler :as handler]
+            [pfm.db :as db]
+            [pfm.test-helpers :as helpers]))
+
+(use-fixtures :once helpers/with-test-db-suite)
+(use-fixtures :each helpers/with-transaction-rollback)
 
 (deftest health-check-test
   (testing "GET /health should return OK"
@@ -23,4 +26,17 @@
     (let [response (handler/get-transactions {})]
       (is (= 200 (:status response)))
       (is (= "application/json" (get-in response [:headers "Content-Type"])))
-      (is (= [] (:body response))))))
+      (is (= [] (:body response)))))
+  
+  (testing "GET /api/transactions returns actual transaction data"
+    ;; Insert test data
+    (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee', 4.50, 1234567890)")
+    (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Lunch', 12.75, 1234567891)")
+    
+    (let [response (handler/get-transactions {})
+          body (:body response)]
+      (is (= 200 (:status response)))
+      (is (= 2 (count body)))
+      (is (= "Coffee" (:description (first body))))
+      (is (= 4.50 (:amount (first body))))
+      (is (= "Lunch" (:description (second body)))))))
