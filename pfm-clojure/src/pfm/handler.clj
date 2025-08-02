@@ -1,5 +1,6 @@
 (ns pfm.handler
-  (:require [pfm.db :as db]))
+  (:require [pfm.db :as db]
+            [clojure.data.json :as json]))
 
 (defn health-check [request]
   {:status 200
@@ -8,7 +9,7 @@
 (defn get-transactions [request]
   {:status 200
    :headers {"Content-Type" "application/json"}
-   :body (db/get-all-transactions)})
+   :body (json/write-str (db/get-all-transactions))})
 
 (defn app [request]
   (case (:uri request)

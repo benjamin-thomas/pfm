@@ -3,7 +3,8 @@
             [ring.mock.request :as mock]
             [pfm.handler :as handler]
             [pfm.db :as db]
-            [pfm.test-helpers :as helpers]))
+            [pfm.test-helpers :as helpers]
+            [clojure.data.json :as json]))
 
 (use-fixtures :once helpers/with-test-db-suite)
 (use-fixtures :each helpers/with-transaction-rollback)
@@ -23,10 +24,11 @@
 
 (deftest get-transactions-test
   (testing "GET /api/transactions returns JSON"
-    (let [response (handler/get-transactions {})]
+    (let [response (handler/get-transactions {})
+          parsed-body (json/read-str (:body response))]
       (is (= 200 (:status response)))
       (is (= "application/json" (get-in response [:headers "Content-Type"])))
-      (is (= [] (:body response)))))
+      (is (= [] parsed-body))))
   
   (testing "GET /api/transactions returns actual transaction data"
     ;; Insert test data
@@ -34,9 +36,9 @@
     (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Lunch', 12.75, 1234567891)")
     
     (let [response (handler/get-transactions {})
-          body (:body response)]
+          parsed-body (json/read-str (:body response) :key-fn keyword)]
       (is (= 200 (:status response)))
-      (is (= 2 (count body)))
-      (is (= "Coffee" (:transactions/description (first body))))
-      (is (= 4.5 (:transactions/amount (first body))))
-      (is (= "Lunch" (:transactions/description (second body)))))))
+      (is (= 2 (count parsed-body)))
+      (is (= "Coffee" (:description (first parsed-body))))
+      (is (= 4.5 (:amount (first parsed-body))))
+      (is (= "Lunch" (:description (second parsed-body)))))))

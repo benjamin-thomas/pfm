@@ -3,3 +3,5 @@
 /.nrepl-port
 /.cpcache
 /db.test.sqlite
+/pfm.test.db
+/pfm.dev.db
