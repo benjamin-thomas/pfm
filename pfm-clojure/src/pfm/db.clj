@@ -15,3 +15,6 @@
         sql-files (sort (.list migrations-dir))
         sql (slurp (io/file migrations-dir (first sql-files)))]
     (jdbc/execute! (get-connection) [sql])))
+
+(defn get-all-transactions []
+  (jdbc/execute! (get-connection) ["SELECT * FROM transactions ORDER BY created_at_unix"]))

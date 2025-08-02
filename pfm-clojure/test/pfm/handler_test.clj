@@ -37,6 +37,6 @@
           body (:body response)]
       (is (= 200 (:status response)))
       (is (= 2 (count body)))
-      (is (= "Coffee" (:description (first body))))
-      (is (= 4.50 (:amount (first body))))
-      (is (= "Lunch" (:description (second body)))))))
+      (is (= "Coffee" (:transactions/description (first body))))
+      (is (= 4.5 (:transactions/amount (first body))))
+      (is (= "Lunch" (:transactions/description (second body)))))))

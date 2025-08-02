@@ -1,4 +1,5 @@
-(ns pfm.handler)
+(ns pfm.handler
+  (:require [pfm.db :as db]))
 
 (defn health-check [request]
   {:status 200
@@ -7,7 +8,7 @@
 (defn get-transactions [request]
   {:status 200
    :headers {"Content-Type" "application/json"}
-   :body []})
+   :body (db/get-all-transactions)})
 
 (defn app [request]
   (case (:uri request)
