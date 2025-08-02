@@ -50,9 +50,11 @@ test/pfm/
 - Command line: `clojure -M:test`
 - Watch mode: `clojure -M:test --watch`
 - IntelliJ: Right-click function → "Run test" (fastest feedback)
+- **Parallel execution**: Enabled via `kaocha.testable/parallel? true` in tests.edn
 
 ## Database
-- **Test DB**: `db.test.sqlite` (isolated for tests)
-- **Dev DB**: `db.test` (for development)
+- **Test DB**: Unique per test (e.g., `db.test.1234567-8901.sqlite`)
+- **Dev DB**: `db.dev.sqlite` (for development)
 - Uses next.jdbc for queries
-- **IMPORTANT**: Test and dev databases must be separate to avoid test pollution
+- **Database isolation**: Each test gets its own database file with automatic cleanup
+- **Parallel-safe**: Unique database files prevent conflicts between parallel tests
