@@ -1,7 +1,9 @@
 (ns pfm.test-helpers
   (:require [pfm.db :as db]
+            [pfm.db.transaction :as db.tx]
+            [pfm.db.migrations :as migrations]
             [clojure.java.io :as io]
-            [next.jdbc :as jdbc]))
+            [clojure.java.jdbc :as jdbc]))
 
 (def ^:dynamic *test-db-file* nil)
 (def ^:dynamic *test-connection* nil)
@@ -15,7 +17,7 @@
     (alter-var-root #'*test-db-file* (constantly db-file))
     ;; Setup database with migrations
     (with-redefs [db/db-spec {:dbtype "sqlite" :dbname db-file}]
-      (db/create-transactions-table!))
+      (migrations/run-migrations))
     db-file))
 
 (defn cleanup-test-db
@@ -39,6 +41,6 @@
 (defn with-transaction-rollback
   "Fixture to wrap each test in a transaction that gets rolled back"
   [test-fn]
-  (jdbc/with-transaction [tx (db/get-connection) {:rollback-only true}]
-    (with-redefs [db/get-connection (constantly tx)]
+  (jdbc/with-db-transaction [tx db/db-spec {:rollback-only true}]
+    (with-redefs [db/db-spec tx]
       (test-fn))))

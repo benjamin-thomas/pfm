@@ -5,7 +5,9 @@
             [ring.adapter.jetty :as jetty]
             [pfm.handler :as handler]
             [pfm.core :as core]
-            [pfm.db :as db]))
+            [pfm.db :as db]
+            [pfm.db.transaction :as tx]
+            [pfm.db.migrations :as migrations]))
 
 (def ^:dynamic *base-url* nil)
 (def ^:dynamic *server* nil)
@@ -31,10 +33,11 @@
       
       ;; Set up database and insert fixtures
       (alter-var-root #'db/db-spec (constantly {:dbtype "sqlite" :dbname test-db-name}))
-      (db/create-transactions-table!)
-      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee Shop', 4.50, 1234567890)")
-      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Grocery Store', 23.45, 1234567891)")
-      (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Gas Station', 45.00, 1234567892)")
+      (migrations/run-migrations)
+      (tx/insert-transaction! db/db-spec {:description "Coffee Shop" :amount 4.50 :created_at_unix 1234567890})
+      (tx/insert-transaction! db/db-spec {:description "Grocery Store" :amount 23.45 :created_at_unix 1234567891})
+      (tx/insert-transaction! db/db-spec {:description "Gas Station" :amount 45.00 :created_at_unix 1234567892})
+      
       
       ;; Start server on system-assigned port (port 0 = any available port)
       (let [server (jetty/run-jetty handler/app {:port 0 :join? false})

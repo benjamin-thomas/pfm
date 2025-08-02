@@ -1,7 +1,9 @@
 (ns pfm.core
   (:require [ring.adapter.jetty :as jetty]
             [pfm.handler :as handler]
-            [pfm.db :as db])
+            [pfm.db :as db]
+            [pfm.db.transaction :as tx]
+            [pfm.db.migrations :as migrations])
   (:gen-class))
 
 (defn get-env! 
@@ -30,14 +32,14 @@
           (println "Deleted existing test database"))))
     
     (with-redefs [db/db-spec {:dbtype "sqlite" :dbname db-name}]
-      (db/create-transactions-table!)
-      (println "Database migrations completed.")
+      ;; Run database migrations
+      (migrations/run-migrations)
       
       ;; Insert fixture data for test environment
       (when (= "test" app-env)
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Coffee Shop', 4.50, 1234567890)")
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Grocery Store', 23.45, 1234567891)")
-        (db/query "INSERT INTO transactions (description, amount, created_at_unix) VALUES ('Gas Station', 45.00, 1234567892)")
+        (tx/insert-transaction! db/db-spec {:description "Coffee Shop" :amount 4.50 :created_at_unix 1234567890})
+        (tx/insert-transaction! db/db-spec {:description "Grocery Store" :amount 23.45 :created_at_unix 1234567891})
+        (tx/insert-transaction! db/db-spec {:description "Gas Station" :amount 45.00 :created_at_unix 1234567892})
         (println "Test fixture data inserted.")))))
 
 (defn -main [& args]
