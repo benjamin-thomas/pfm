@@ -156,7 +156,6 @@ type State =
   , searchForm :: SearchForm
   , debounceTimerId :: Maybe H.ForkId
   , contextMenu :: Maybe ContextMenuData
-  , globalClickSubscription :: Maybe H.SubscriptionId
   , scrollY :: Maybe Number
   }
 
@@ -229,7 +228,6 @@ component = H.mkComponent
           }
       , debounceTimerId: Nothing
       , contextMenu: Nothing
-      , globalClickSubscription: Nothing
       , scrollY: Nothing
       }
   , render
@@ -805,18 +803,6 @@ handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o
 -- handleAction action = case Debug.spy "action" action of
 handleAction = case _ of
   Initialize -> do
-    win <- H.liftEffect window
-
-    -- Set up global click handler to close menu
-    globalClickSub <- H.subscribe $ HQE.eventListener
-      (Event.EventType "click")
-      (Window.toEventTarget win)
-      (const $ Just HideContextMenu)
-
-    -- Store the global click subscription
-    H.modify_ \s -> s { globalClickSubscription = Just globalClickSub }
-
-    -- Load all data
     handleAction LoadAllData
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
