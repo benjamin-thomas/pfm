@@ -1,0 +1,4 @@
+#!/bin/bash
+
+
+sqlc generate && templ generate && go build -o /tmp/pfm-go ./cmd/server

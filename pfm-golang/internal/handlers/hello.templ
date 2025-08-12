@@ -1,0 +1,42 @@
+package handlers
+
+import "fmt"
+
+templ hello(name string) {
+	<div style="border:1px solid red">Hello { name }</div>
+}
+
+// Ordinary Go code that we can use in our Component.
+var greeting = "Welcome!"
+
+// templ Component
+templ headerTemplate(name string) {
+	<header>
+		<h1>{ name }</h1>
+		<h2>"{ greeting }" comes from ordinary Go code!</h2>
+	</header>
+	<p data-testid="paragraph">Text 1!</p>
+	<p data-testid={ testID(true) }>Text 2!</p>
+	<p data-testid={ testID(false) }>Text 3!</p>
+	<p data-testid={ testID2(true) }>Text 4!</p>
+	<p data-testid={ testID2(false) }>Text 5!</p>
+	@button("Jane", "Call me!")
+}
+
+templ button(name string, content string) {
+	<button class="button" value={ name }>{ content }</button>
+}
+
+func testID(isTrue bool) string {
+	if isTrue {
+		return "testid-123"
+	}
+	return "testid-456"
+}
+
+func testID2(isTrue bool) (string, error) {
+	if isTrue {
+		return "testid-123", nil
+	}
+	return "", fmt.Errorf("isTrue is false")
+}

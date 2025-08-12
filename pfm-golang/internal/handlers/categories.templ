@@ -1,0 +1,11 @@
+package handlers
+
+import "pfm/queries"
+
+templ listCategoriesTemplate(categories []queries.Category) {
+	<ul>
+		for _, category := range categories {
+			<li>{ category.Name }</li>
+		}
+	</ul>
+}
