@@ -2,48 +2,40 @@ module Client.Main (main) where
 
 import Prelude
 
-import Effect.Class.Console as Console
-import Data.HTTP.Method (Method(..))
 import Affjax.RequestBody as RequestBody
 import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
 import Data.Array as Array
-import Data.String as String
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
+import Data.HTTP.Method (Method(..))
+import Data.Int (toNumber)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Number as Number
+import Data.String as String
+import Data.Time.Duration (Milliseconds(..))
+import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
+import Effect.Class.Console as Console
 import Effect.Console (log)
-import Data.Time.Duration (Milliseconds(..))
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
-import Web.UIEvent.MouseEvent as MouseEvent
+import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User, Suggestion(..), SuggestedAccount(..))
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
-import Web.HTML (window)
-import Web.HTML.Window as Window
-import Halogen.Query.Event as HQE
-import Data.Int (toNumber)
-import Shared.Types
-  ( Account(..)
-  , AccountBalanceRead(..)
-  , LedgerViewRow(LedgerViewRow)
-  , User
-  , Suggestion(..)
-  , SuggestedAccount(..)
-  )
+import Web.UIEvent.MouseEvent as MouseEvent
 import Yoga.JSON as JSON
 
 -- Type-safe wrapper for API base URL
@@ -157,6 +149,7 @@ type State =
   , debounceTimerId :: Maybe H.ForkId
   , contextMenu :: Maybe ContextMenuData
   , scrollY :: Maybe Number
+  , last_SSE_Message :: Maybe String
   }
 
 data Action
@@ -187,6 +180,25 @@ data Action
       , accountId :: Int
       }
   | ApplyAllSuggestions (Array { transactionId :: Int, accountId :: Int })
+
+  {-
+
+The String param is the value of "data":
+
+$ curl -N http://localhost:8082/events
+event: connected
+data: {"message": "Pure PureScript SSE established"}
+
+event: ping
+data: {"time:"(Instant (Milliseconds 1755250926712.0))}
+
+event: ping
+data: {"time:"(Instant (Milliseconds 1755250928712.0))}
+
+I'm not differentiating any event types currently.
+
+   -}
+  | GotSSE_Message String
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
@@ -229,6 +241,7 @@ component = H.mkComponent
       , debounceTimerId: Nothing
       , contextMenu: Nothing
       , scrollY: Nothing
+      , last_SSE_Message: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -265,6 +278,8 @@ render state =
     [ HP.class_ (HH.ClassName "container") ]
     [ HH.h1_ [ HH.text "PFM - PureScript" ]
 
+    , HH.pre_
+        [ HH.text $ fromMaybe "No SSE message received yet" state.last_SSE_Message ]
     -- Dark mode toggle button
     , HH.button
         [ HP.class_ (HH.ClassName "theme-toggle")
@@ -800,9 +815,15 @@ render state =
       ]
 
 handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
--- handleAction action = case Debug.spy "action" action of
-handleAction = case _ of
+handleAction action = case Debug.spy "action" action of
+  -- handleAction = case _ of
   Initialize -> do
+    -- Set up SSE subscription
+    state <- H.get
+    sseEmitter <- createSSEEmitter (unwrap state.apiBaseUrl)
+    _ <- H.subscribe sseEmitter
+    liftEffect $ log "[SSE] Subscription established"
+
     handleAction LoadAllData
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
@@ -1118,6 +1139,9 @@ handleAction = case _ of
         Left err -> do
           liftEffect $ log $ "Failed to apply batch suggestions: " <> AX.printError err
 
+  GotSSE_Message message -> do
+    H.modify_ \s -> s { last_SSE_Message = Just message }
+
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
   case Array.uncons rows of
@@ -1245,6 +1269,20 @@ main initArgs = do
     body <- HA.awaitBody
     runUI component initArgs body
 
+-- | Create an SSE subscription emitter
+createSSEEmitter :: forall m. MonadAff m => String -> m (HS.Emitter Action)
+createSSEEmitter apiBaseUrl = do
+  { emitter, listener } <- H.liftEffect HS.create
+
+  -- Set up SSE connection and notify listener with actions
+  _ <- H.liftEffect $ setupSSEConnection apiBaseUrl \message -> do
+    HS.notify listener (GotSSE_Message message)
+
+  pure emitter
+
+-- | Set up EventSource connection from PureScript
+foreign import setupSSEConnection :: String -> (String -> Effect Unit) -> Effect Unit
+
 -- Helper functions for transaction creation
 
 -- Convert datetime-local string (YYYY-MM-DDTHH:mm) to Unix timestamp
@@ -1315,4 +1353,3 @@ buildQueryParams fsUntrimmed =
     case params of
       [] -> ""
       _ -> "?" <> String.joinWith "&" params
-
