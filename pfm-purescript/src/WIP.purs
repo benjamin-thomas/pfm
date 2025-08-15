@@ -3,10 +3,13 @@ module WIP where
 import Prelude
 
 import Data.Array as Array
+import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_)
+import Effect.Class (liftEffect)
 import Effect.Class.Console (log, logShow)
+import Node.ChildProcess as CP
 import SQLite3 as SQLite3
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
@@ -65,8 +68,15 @@ reset :: Effect Unit
 reset = launchAff_ $ do
   conn <- SQLite3.newDB "./db.e2e-test.sqlite"
   _ <- SQLite3.queryDB conn "PRAGMA foreign_keys = ON" []
+
   seedFromOfx "test/OfxParser/fixture.ofx" conn
   log "Now I should notify the SSE clients that there is new data"
+
+  -- Quick and dirty...
+  liftEffect $ void $ CP.exec' "curl --fail -X POST http://localhost:8082/request-client-reload" identity \result ->
+    case result.error of
+      Nothing -> log "[SSE] Successfully notified clients to reload"
+      Just err -> log $ "[SSE] Failed to notify clients: " <> show err
 
 showTransactions :: Effect Unit
 showTransactions =

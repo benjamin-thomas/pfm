@@ -28,6 +28,7 @@
   , "maybe"
   , "newtype"
   , "node-buffer"
+  , "node-child-process"
   , "node-fs"
   , "node-process"
   , "node-sqlite3"
