@@ -19,3 +19,4 @@ import Data.Traversable (traverse_)
 
 -- The Class.Console is more "general"
 import Effect.Class.Console (log, logShow)
+import Effect.Aff (launchAff_)

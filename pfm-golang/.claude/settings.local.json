@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./manage/compile_all)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
