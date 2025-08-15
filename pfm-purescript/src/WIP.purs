@@ -6,7 +6,7 @@ import Data.Array as Array
 import Data.Traversable (traverse_)
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_)
-import Effect.Class.Console (logShow)
+import Effect.Class.Console (log, logShow)
 import SQLite3 as SQLite3
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
@@ -47,6 +47,8 @@ newConn = do
 
 {-
 
+Reseed the dev env at: Reset the test env at: http://localhost:4001
+
 Via the REPL:
   repl> seed
 
@@ -56,6 +58,15 @@ Run as a script (faster log feedback)
  -}
 seed :: Effect Unit
 seed = launchAff_ $ newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
+
+-- Reset the test env at: http://localhost:4002
+-- node -e "import('./output/WIP/index.js').then(m => m.reset())"
+reset :: Effect Unit
+reset = launchAff_ $ do
+  conn <- SQLite3.newDB "./db.e2e-test.sqlite"
+  _ <- SQLite3.queryDB conn "PRAGMA foreign_keys = ON" []
+  seedFromOfx "test/OfxParser/fixture.ofx" conn
+  log "Now I should notify the SSE clients that there is new data"
 
 showTransactions :: Effect Unit
 showTransactions =

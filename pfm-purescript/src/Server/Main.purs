@@ -14,7 +14,26 @@ import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throw)
 import Foreign.Object as FO
-import HTTPurple (class Generic, Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, segment, serve, toString, (/))
+import HTTPurple
+  ( class Generic
+  , Method(..)
+  , Request
+  , ResponseM
+  , RouteDuplex'
+  , ServerM
+  , header
+  , int
+  , methodNotAllowed
+  , mkRoute
+  , noArgs
+  , ok
+  , response
+  , response'
+  , segment
+  , serve
+  , toString
+  , (/)
+  )
 import HTTPurple.Response (Response)
 import Node.Process (lookupEnv)
 import SQLite3 (DBConnection)
@@ -26,6 +45,7 @@ import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Suggestions.Queries as SuggestionQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Database as DB
+import Server.SSE as SSE
 import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
 
@@ -66,6 +86,7 @@ data Route
   | TransactionById Int
   | TransactionSuggestions
   | TestEnvResetDb
+  | Events
 
 derive instance Generic Route _
 
@@ -83,6 +104,7 @@ route = mkRoute
   , "TransactionById": "transactions" / int segment
   , "TransactionSuggestions": "transactions" / "suggestions" / noArgs
   , "TestEnvResetDb": "test" / "reset-db" / noArgs
+  , "Events": "events" / noArgs
   }
 
 main :: Effect Unit
@@ -333,6 +355,39 @@ makeRouter appEnv db req =
         TestEnv, Options -> ok ""
         TestEnv, _ -> methodNotAllowed
         DevEnv, _ -> response 404 $ JSON.writeJSON { error: "Endpoint only available in test environment" }
+
+    Events ->
+      {-
+        Should be:
+          curl -N -H 'Accept: text/event-stream' http://localhost:8081/events
+
+        But this is okay for now:
+          curl -N http://localhost:8081/events
+     -}
+      case req.method of
+        Get -> do
+          liftEffect $ log "[SSE] Client connected"
+
+          -- Create SSE stream
+          stream <- liftEffect SSE.createSSEStream
+
+          -- Send initial connection message
+          liftEffect $ SSE.sendSSEMessage stream "connected" "{\"message\": \"SSE connection established\"}"
+
+          -- Start ping interval (every 2 seconds)
+          _cleanup <- liftEffect $ SSE.startPingInterval stream 2000
+
+          -- Send SSE headers
+          let
+            sseHeaders = header "Content-Type" "text/event-stream"
+              <> header "Cache-Control" "no-cache"
+              <> header "Connection" "keep-alive"
+              <> header "Access-Control-Allow-Origin" "*"
+
+          -- Return the stream as the response body
+          response' 200 sseHeaders stream
+        Options -> ok ""
+        _ -> methodNotAllowed
 
 -- Helper functions for query parameter parsing
 

@@ -27,6 +27,7 @@
   , "node-fs"
   , "node-process"
   , "node-sqlite3"
+  , "node-streams"
   , "nullable"
   , "numbers"
   , "parallel"
