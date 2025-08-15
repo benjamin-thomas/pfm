@@ -126,6 +126,7 @@ derive newtype instance WriteForeign Suggestion
 data SSE_Event
   = SSE_Connected { message :: String }
   | SSE_Ping { unixTimeMs :: Number }
+  | SSE_ClientShouldRefreshData
 
 derive instance Generic SSE_Event _
 

@@ -286,6 +286,7 @@ render state =
             Nothing -> "No SSE event received yet"
             Just (SSE_Connected r) -> "Connected: " <> r.message
             Just (SSE_Ping r) -> "Ping at: " <> show r.unixTimeMs <> "ms"
+            Just SSE_ClientShouldRefreshData -> "Client should refresh data!"
         ]
     -- Dark mode toggle button
     , HH.button
@@ -1148,6 +1149,11 @@ handleAction action = case Debug.spy "action" action of
 
   GotSSE_Event event -> do
     H.modify_ \s -> s { last_SSE_Event = Just event }
+    case event of
+      SSE_ClientShouldRefreshData -> do
+        liftEffect $ log "[SSE] Refreshing data due to SSE request"
+        handleAction LoadAllData
+      _ -> pure unit
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =

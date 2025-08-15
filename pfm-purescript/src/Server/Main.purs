@@ -80,6 +80,7 @@ data Route
   | TransactionSuggestions
   | TestEnvResetDb
   | Events
+  | RequestClientReload
 
 derive instance Generic Route _
 
@@ -98,6 +99,7 @@ route = mkRoute
   , "TransactionSuggestions": "transactions" / "suggestions" / noArgs
   , "TestEnvResetDb": "test" / "reset-db" / noArgs
   , "Events": "events" / noArgs
+  , "RequestClientReload": "request-client-reload" / noArgs
   }
 
 main :: Effect Unit
@@ -379,10 +381,9 @@ makeRouter appEnv db req =
           response' 200 sseHeaders stream
 
           where
-          -- Helper function to send pings every 2 seconds
           pingLoop :: Stream.Duplex -> Aff Unit
           pingLoop stream = do
-            delay (Milliseconds 2000.0)
+            delay (Milliseconds 10_000.0)
             _ <- liftEffect $ do
               instant <- now
               let Milliseconds unixTimeMs = unInstant instant
@@ -390,6 +391,14 @@ makeRouter appEnv db req =
                 $ sseDataLine
                 $ SSE_Ping { unixTimeMs }
             pingLoop stream
+        Options -> ok ""
+        _ -> methodNotAllowed
+
+    RequestClientReload ->
+      case req.method of
+        Post -> do
+          liftEffect $ log "[RELOAD] Received client reload request"
+          ok "Client reload request received"
         Options -> ok ""
         _ -> methodNotAllowed
 
