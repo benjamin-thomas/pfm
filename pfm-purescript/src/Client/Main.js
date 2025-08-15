@@ -83,3 +83,37 @@ export const setupSSEConnection = (apiBaseUrl) => (callback) => () => {
   return eventSource;
 };
 
+// Reusable debounce utility - prevents a function from being called too frequently
+const debounce = (fn, delayMs) => {
+  let timeoutId = null;
+  
+  return () => {
+    // Cancel any pending execution
+    if (timeoutId !== null) {
+      clearTimeout(timeoutId);
+    }
+    
+    // Schedule the function to run after the delay
+    timeoutId = setTimeout(fn, delayMs);
+  };
+};
+
+// Scroll position tracking with debounced updates
+export const setupScrollTracking = (callback) => () => {
+  // Create a debounced version of our scroll handler
+  const debouncedScrollHandler = debounce(() => {
+    callback(window.scrollY)();
+  }, 100); // Wait 100ms after scrolling stops before updating
+  
+  // Start listening for scroll events
+  window.addEventListener('scroll', debouncedScrollHandler);
+  
+  // Send the initial scroll position immediately
+  callback(window.scrollY)();
+  
+  // Return cleanup function
+  return () => {
+    window.removeEventListener('scroll', debouncedScrollHandler);
+  };
+};
+

@@ -151,7 +151,7 @@ type State =
   , searchForm :: SearchForm
   , debounceTimerId :: Maybe H.ForkId
   , contextMenu :: Maybe ContextMenuData
-  , scrollY :: Maybe Number
+  , scrollY :: Number
   , last_SSE_Event :: Maybe SSE_Event
   }
 
@@ -202,6 +202,7 @@ I'm not differentiating any event types currently.
 
    -}
   | GotSSE_Event SSE_Event
+  | GotScrollY Number
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
@@ -243,7 +244,7 @@ component = H.mkComponent
           }
       , debounceTimerId: Nothing
       , contextMenu: Nothing
-      , scrollY: Nothing
+      , scrollY: 0.0
       , last_SSE_Event: Nothing
       }
   , render
@@ -832,6 +833,11 @@ handleAction action = case Debug.spy "action" action of
     _ <- H.subscribe sseEmitter
     liftEffect $ log "[SSE] Subscription established"
 
+    -- Set up scroll position subscription
+    scrollEmitter <- createScrollEmitter
+    _ <- H.subscribe scrollEmitter
+    liftEffect $ log "[SCROLL] Subscription established"
+
     handleAction LoadAllData
   LoadAllData -> do
     H.modify_ \s -> s { data = Loading }
@@ -840,6 +846,7 @@ handleAction action = case Debug.spy "action" action of
     case result of
       Left err -> H.modify_ \s -> s { data = Failed err }
       Right appData -> do
+        H.liftEffect $ restoreScrollY state.scrollY -- we may receive an SSE event for example
         H.modify_ \s -> s { data = Loaded appData }
   LoadLedgerView -> do
     state <- H.get
@@ -850,12 +857,6 @@ handleAction action = case Debug.spy "action" action of
           Left err -> H.modify_ \s -> s { data = Failed err }
           Right ledgerRows -> do
             H.modify_ \s -> s { data = Loaded (appData { ledgerRows = ledgerRows }) }
-            -- Restore scroll position if we have one saved
-            case state.scrollY of
-              Just scrollY -> do
-                H.liftEffect $ restoreScrollY scrollY
-                H.modify_ \s -> s { scrollY = Nothing } -- Clear the saved position
-              Nothing -> pure unit
       _ -> pure unit -- Only update if data is already loaded
   ToggleDarkMode -> do
     state <- H.get
@@ -1084,9 +1085,7 @@ handleAction action = case Debug.spy "action" action of
     H.liftEffect $ Event.preventDefault event
     H.liftEffect $ Event.stopPropagation event
 
-    -- Capture current scroll position before applying suggestion
-    scrollY <- H.liftEffect getScrollY
-    H.modify_ \s -> s { scrollY = Just scrollY }
+    -- Scroll position is now automatically tracked by subscription
 
     -- Apply the suggestion by updating the transaction's toAccountId
     state <- H.get
@@ -1154,6 +1153,9 @@ handleAction action = case Debug.spy "action" action of
         liftEffect $ log "[SSE] Refreshing data due to SSE request"
         handleAction LoadAllData
       _ -> pure unit
+
+  GotScrollY scrollY -> do
+    H.modify_ \s -> s { scrollY = scrollY }
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
@@ -1290,19 +1292,29 @@ createSSEEmitter apiBaseUrl = do
   -- Set up SSE connection and notify listener with actions
   _ <- H.liftEffect $ setupSSEConnection apiBaseUrl \payload -> do
     case jsonParser payload of
-      Left parseErr -> 
+      Left parseErr ->
         liftEffect $ log $ "[SSE] Failed to parse JSON: " <> parseErr <> "\nPayload: " <> payload
-      Right json -> 
+      Right json ->
         case decodeJson json of
-          Left decodeErr -> 
+          Left decodeErr ->
             liftEffect $ log $ "[SSE] Failed to decode SSE_Event: " <> show decodeErr <> "\nJSON: " <> stringify json
-          Right event -> 
+          Right event ->
             HS.notify listener (GotSSE_Event event)
+
+  pure emitter
+
+createScrollEmitter :: forall m. MonadAff m => m (HS.Emitter Action)
+createScrollEmitter = do
+  { emitter, listener } <- H.liftEffect HS.create
+  _ <- H.liftEffect $ setupScrollTracking $ HS.notify listener <<< GotScrollY
 
   pure emitter
 
 -- | Set up EventSource connection from PureScript
 foreign import setupSSEConnection :: String -> (String -> Effect Unit) -> Effect Unit
+
+-- | Set up scroll position tracking from JavaScript
+foreign import setupScrollTracking :: (Number -> Effect Unit) -> Effect Unit
 
 -- Helper functions for transaction creation
 
