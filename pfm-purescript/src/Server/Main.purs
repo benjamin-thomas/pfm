@@ -3,17 +3,22 @@ module Server.Main (main, startServer, AppEnv(..)) where
 import Prelude hiding ((/))
 
 import Data.Either (Either(..))
-import Data.Foldable (fold, foldl)
+import Data.Foldable (foldl)
 import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), split)
 import Data.Traversable (traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, Milliseconds(..), delay, forkAff, runAff_)
+import Effect.Aff (Aff, delay, forkAff, runAff_)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throw)
 import Effect.Now (now)
+import Data.DateTime.Instant (unInstant)
+import Data.Time.Duration (Milliseconds(..))
+import Data.Argonaut.Core (stringify)
+import Data.Argonaut.Encode (encodeJson)
+import Shared.Types (SSE_Event(..))
 import Foreign.Object as FO
 import HTTPurple (class Generic, Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, response', segment, serve, toString, (/))
 import HTTPurple.Headers (empty)
@@ -32,6 +37,10 @@ import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Database as DB
 import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
+
+-- | Create SSE data line from an SSE_Event
+sseDataLine :: SSE_Event -> String
+sseDataLine event = "data: " <> stringify (encodeJson event) <> "\n\n"
 
 data AppEnv
   = DevEnv
@@ -349,9 +358,11 @@ makeRouter appEnv db req =
           -- Create a PassThrough stream using node-streams
           stream <- liftEffect Stream.newPassThrough
 
-          -- Send initial connection message
-          let initialMsg = "event: connected\ndata: {\"message\": \"Pure PureScript SSE established\"}\n\n"
-          _ <- liftEffect $ Stream.writeString stream UTF8 initialMsg
+          -- Send initial connection message using shared SSE_Event type
+          _ <- liftEffect
+            $ Stream.writeString stream UTF8
+            $ sseDataLine
+            $ SSE_Connected { message: "Pure PureScript SSE established" }
 
           -- Fork a process to send periodic pings
           _ <- forkAff $ pingLoop stream
@@ -374,16 +385,10 @@ makeRouter appEnv db req =
             delay (Milliseconds 2000.0)
             _ <- liftEffect $ do
               instant <- now
-              let quote str = "\"" <> str <> "\""
-              let
-                data' = fold
-                  [ "{"
-                  , quote "time:"
-                  , show instant
-                  , "}"
-                  ]
-              let pingMsg = "event: ping\ndata: " <> data' <> "\n\n"
-              Stream.writeString stream UTF8 pingMsg
+              let Milliseconds unixTimeMs = unInstant instant
+              Stream.writeString stream UTF8
+                $ sseDataLine
+                $ SSE_Ping { unixTimeMs }
             pingLoop stream
         Options -> ok ""
         _ -> methodNotAllowed

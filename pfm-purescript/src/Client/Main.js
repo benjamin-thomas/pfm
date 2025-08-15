@@ -71,26 +71,11 @@ export const setupSSEConnection = (apiBaseUrl) => (callback) => () => {
     console.log('[SSE/JS] Connection opened');
   };
 
-  // Helper function to handle SSE messages
-  const sendSSE_Message = (data) => callback(data)();
-
-
-  // Generic message handler (for messages without explicit event type?)
+  // Handle all SSE messages through onmessage (no specific event types)
   eventSource.onmessage = (event) => {
-    // console.log('[SSE/JS] Received generic message:', event.data);
-    sendSSE_Message(event.data);
+    console.log('[SSE/JS] Received message:', event.data);
+    callback(event.data)();
   };
-
-  // Specific event handlers
-  eventSource.addEventListener('connected', (event) => {
-    // console.log('[SSE/JS] Received connected event:', event.data);
-    sendSSE_Message(event.data);
-  });
-
-  eventSource.addEventListener('ping', (event) => {
-    // console.log('[SSE/JS] Received ping event:', event.data);
-    sendSSE_Message(event.data);
-  });
 
   eventSource.onerror = (error) => console.error('[SSE/JS] Error:', error);
 

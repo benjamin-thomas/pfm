@@ -8,6 +8,9 @@ import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
 import Data.Array as Array
+import Data.Argonaut.Decode (decodeJson)
+import Data.Argonaut.Parser (jsonParser)
+import Data.Argonaut.Core (stringify)
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.HTTP.Method (Method(..))
@@ -32,7 +35,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
-import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User, Suggestion(..), SuggestedAccount(..))
+import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User, Suggestion(..), SuggestedAccount(..), SSE_Event(..))
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
 import Web.UIEvent.MouseEvent as MouseEvent
@@ -149,7 +152,7 @@ type State =
   , debounceTimerId :: Maybe H.ForkId
   , contextMenu :: Maybe ContextMenuData
   , scrollY :: Maybe Number
-  , last_SSE_Message :: Maybe String
+  , last_SSE_Event :: Maybe SSE_Event
   }
 
 data Action
@@ -198,7 +201,7 @@ data: {"time:"(Instant (Milliseconds 1755250928712.0))}
 I'm not differentiating any event types currently.
 
    -}
-  | GotSSE_Message String
+  | GotSSE_Event SSE_Event
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
@@ -241,7 +244,7 @@ component = H.mkComponent
       , debounceTimerId: Nothing
       , contextMenu: Nothing
       , scrollY: Nothing
-      , last_SSE_Message: Nothing
+      , last_SSE_Event: Nothing
       }
   , render
   , eval: H.mkEval $ H.defaultEval
@@ -279,7 +282,11 @@ render state =
     [ HH.h1_ [ HH.text "PFM - PureScript" ]
 
     , HH.pre_
-        [ HH.text $ fromMaybe "No SSE message received yet" state.last_SSE_Message ]
+        [ HH.text $ case state.last_SSE_Event of
+            Nothing -> "No SSE event received yet"
+            Just (SSE_Connected r) -> "Connected: " <> r.message
+            Just (SSE_Ping r) -> "Ping at: " <> show r.unixTimeMs <> "ms"
+        ]
     -- Dark mode toggle button
     , HH.button
         [ HP.class_ (HH.ClassName "theme-toggle")
@@ -1139,8 +1146,8 @@ handleAction action = case Debug.spy "action" action of
         Left err -> do
           liftEffect $ log $ "Failed to apply batch suggestions: " <> AX.printError err
 
-  GotSSE_Message message -> do
-    H.modify_ \s -> s { last_SSE_Message = Just message }
+  GotSSE_Event event -> do
+    H.modify_ \s -> s { last_SSE_Event = Just event }
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
@@ -1275,8 +1282,16 @@ createSSEEmitter apiBaseUrl = do
   { emitter, listener } <- H.liftEffect HS.create
 
   -- Set up SSE connection and notify listener with actions
-  _ <- H.liftEffect $ setupSSEConnection apiBaseUrl \message -> do
-    HS.notify listener (GotSSE_Message message)
+  _ <- H.liftEffect $ setupSSEConnection apiBaseUrl \payload -> do
+    case jsonParser payload of
+      Left parseErr -> 
+        liftEffect $ log $ "[SSE] Failed to parse JSON: " <> parseErr <> "\nPayload: " <> payload
+      Right json -> 
+        case decodeJson json of
+          Left decodeErr -> 
+            liftEffect $ log $ "[SSE] Failed to decode SSE_Event: " <> show decodeErr <> "\nJSON: " <> stringify json
+          Right event -> 
+            HS.notify listener (GotSSE_Event event)
 
   pure emitter
 
