@@ -7,4 +7,10 @@ if [ -z "${APP_ENV:-}" ]; then
     exit 1
 fi
 
-node -e "import('./output/Server.Main/index.js').then(m => m.main())"
+SCRIPT="import('./output/Server.Main/index.js').then(m => m.main())"
+
+if [ "${DEBUG}" = "1" ]; then
+    node --inspect-brk -e "${SCRIPT}"
+else
+    node -e "${SCRIPT}"
+fi

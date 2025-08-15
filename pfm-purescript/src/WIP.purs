@@ -60,7 +60,13 @@ Run as a script (faster log feedback)
 
  -}
 seed :: Effect Unit
-seed = launchAff_ $ newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
+seed = launchAff_ $ do
+  newConn >>= seedFromOfx ".tmp/CA20250630_124433.ofx"
+  -- curl --fail -X POST http://localhost:8081/request-client-reload
+  liftEffect $ void $ CP.exec' "curl --fail -X POST http://localhost:8081/request-client-reload" identity \result ->
+    case result.error of
+      Nothing -> log "[SSE] Successfully notified clients to reload"
+      Just err -> log $ "[SSE] Failed to notify clients: " <> show err
 
 -- Reset the test env at: http://localhost:4002
 -- node -e "import('./output/WIP/index.js').then(m => m.reset())"

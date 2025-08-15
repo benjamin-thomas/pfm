@@ -1148,6 +1148,10 @@ handleAction action = case Debug.spy "action" action of
 
   GotSSE_Event event -> do
     H.modify_ \s -> s { last_SSE_Event = Just event }
+    -- To debug effectively:
+    -- 1. Start the client with `client:*:with-sourcemaps`
+    -- 2. Then press "step" (F9 in Chrome) twice to break into the related PureScript code
+    -- Debug.debugger \_ ->
     case event of
       SSE_ClientShouldRefreshData -> do
         liftEffect $ log "[SSE] Refreshing data due to SSE request"
