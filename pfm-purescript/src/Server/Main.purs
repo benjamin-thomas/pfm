@@ -11,8 +11,10 @@ import Data.Traversable (traverse)
 import Effect (Effect)
 import Effect.Aff (Aff, delay, forkAff, runAff_)
 import Effect.Class (liftEffect)
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Effect.Console (log)
-import Effect.Exception (throw)
+import Effect.Exception (throw, try)
 import Effect.Now (now)
 import Data.DateTime.Instant (unInstant)
 import Data.Time.Duration (Milliseconds(..))
@@ -26,6 +28,7 @@ import HTTPurple.Response (Response)
 import Node.Encoding (Encoding(..))
 import Node.Process (lookupEnv)
 import Node.Stream as Stream
+import Data.Array as Array
 import SQLite3 (DBConnection)
 import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
@@ -41,6 +44,28 @@ import Yoga.JSON as JSON
 -- | Create SSE data line from an SSE_Event
 sseDataLine :: SSE_Event -> String
 sseDataLine event = "data: " <> stringify (encodeJson event) <> "\n\n"
+
+newtype SSE_Client = SSE_Client Stream.Duplex
+
+-- | Broadcast an SSE event to all connected clients
+-- Removes disconnected clients (failed writes) from the ref
+broadcastSSE :: Ref (Array SSE_Client) -> SSE_Event -> Effect Unit
+broadcastSSE sseClientsRef event = do
+  sseClients <- Ref.read sseClientsRef
+  let message = sseDataLine event
+  validClients <- Array.filterA (\client -> tryWrite client message) sseClients
+  Ref.write validClients sseClientsRef
+  log $ "[SSE] Broadcasted to " <> show (Array.length validClients) <> " clients"
+
+  where
+  -- Try to write to stream, return true if successful (client still connected)
+  -- FIXME: I thought I could detect disconnected clients that way, but it doesn't seem to work!
+  tryWrite :: SSE_Client -> String -> Effect Boolean
+  tryWrite (SSE_Client stream) message = do
+    result <- try $ Stream.writeString stream UTF8 message
+    case result of
+      Right _ -> pure true
+      Left _ -> pure false
 
 data AppEnv
   = DevEnv
@@ -140,14 +165,16 @@ startAppWithConfig { appEnv, port, dbPath } = do
             void $ startServer port appEnv db
 
 startServer :: Int -> AppEnv -> DBConnection -> ServerM
-startServer port appEnv db =
+startServer port appEnv db = do
+  -- Create ref to track active SSE connections (shared across all requests)
+  sseClientsRef <- liftEffect $ Ref.new []
+  let
+    router :: Request Route -> ResponseM
+    router =
+      corsMiddleware
+        $ jsonMiddleware
+        $ makeRouter appEnv db sseClientsRef
   serve { port } { route, router }
-  where
-  router :: Request Route -> ResponseM
-  router =
-    corsMiddleware
-      $ jsonMiddleware
-      $ makeRouter appEnv db
 
 corsMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
 corsMiddleware route' request = do
@@ -165,8 +192,8 @@ jsonMiddleware route' request = do
   response <- route' request
   pure $ response { headers = header "Content-Type" "application/json" <> response.headers }
 
-makeRouter :: AppEnv -> DBConnection -> Request Route -> ResponseM
-makeRouter appEnv db req =
+makeRouter :: AppEnv -> DBConnection -> Ref (Array SSE_Client) -> Request Route -> ResponseM
+makeRouter appEnv db sseClientsRef req =
   case req.route of
     Home ->
       case req.method of
@@ -360,6 +387,13 @@ makeRouter appEnv db req =
           -- Create a PassThrough stream using node-streams
           stream <- liftEffect Stream.newPassThrough
 
+          -- Add stream to the ref for broadcasting
+          liftEffect $ do
+            sseClients <- Ref.read sseClientsRef
+            let newSseClients = Array.snoc sseClients (SSE_Client stream)
+            Ref.write newSseClients sseClientsRef
+            log $ "[SSE] Added client to broadcast list. Total clients: " <> show (Array.length newSseClients)
+
           -- Send initial connection message using shared SSE_Event type
           _ <- liftEffect
             $ Stream.writeString stream UTF8
@@ -398,6 +432,7 @@ makeRouter appEnv db req =
       case req.method of
         Post -> do
           liftEffect $ log "[RELOAD] Received client reload request"
+          liftEffect $ broadcastSSE sseClientsRef SSE_ClientShouldRefreshData
           ok "Client reload request received"
         Options -> ok ""
         _ -> methodNotAllowed
