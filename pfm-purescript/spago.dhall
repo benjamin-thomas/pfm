@@ -24,6 +24,7 @@
   , "maybe"
   , "newtype"
   , "node-buffer"
+  , "node-event-emitter"
   , "node-fs"
   , "node-process"
   , "node-sqlite3"

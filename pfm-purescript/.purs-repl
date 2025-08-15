@@ -1,9 +1,3 @@
-import Prelude
-import WIP
-import Server.Database as DB
-import Data.Array ((!!))
-import Data.Array as Array
-
 --   Quick Reference: Haskell → PureScript
 --
 --   | Haskell  | PureScript |
@@ -14,8 +8,16 @@ import Data.Array as Array
 --   | putStrLn | log        |
 --   | mapM     | traverse   |
 --   | forM     | for        |
-import Data.Traversable (traverse_)
+--   | mconcat  | fold       |
 
+
+import Prelude
+import WIP
+import Server.Database as DB
+import Data.Array ((!!))
+import Data.Array as Array
+
+import Data.Traversable (traverse_)
 
 -- The Class.Console is more "general"
 import Effect.Class.Console (log, logShow)

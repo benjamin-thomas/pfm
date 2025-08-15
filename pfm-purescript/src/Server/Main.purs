@@ -3,39 +3,24 @@ module Server.Main (main, startServer, AppEnv(..)) where
 import Prelude hiding ((/))
 
 import Data.Either (Either(..))
-import Data.Foldable (foldl)
+import Data.Foldable (fold, foldl)
 import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), split)
 import Data.Traversable (traverse)
 import Effect (Effect)
-import Effect.Aff (runAff_)
+import Effect.Aff (Aff, Milliseconds(..), delay, forkAff, runAff_)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throw)
+import Effect.Now (now)
 import Foreign.Object as FO
-import HTTPurple
-  ( class Generic
-  , Method(..)
-  , Request
-  , ResponseM
-  , RouteDuplex'
-  , ServerM
-  , header
-  , int
-  , methodNotAllowed
-  , mkRoute
-  , noArgs
-  , ok
-  , response
-  , response'
-  , segment
-  , serve
-  , toString
-  , (/)
-  )
+import HTTPurple (class Generic, Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, response', segment, serve, toString, (/))
+import HTTPurple.Headers (empty)
 import HTTPurple.Response (Response)
+import Node.Encoding (Encoding(..))
 import Node.Process (lookupEnv)
+import Node.Stream as Stream
 import SQLite3 (DBConnection)
 import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
@@ -45,7 +30,6 @@ import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Suggestions.Queries as SuggestionQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Database as DB
-import Server.SSE as SSE
 import Server.Types.TransactionWrite (TransactionWrite(..))
 import Yoga.JSON as JSON
 
@@ -357,35 +341,50 @@ makeRouter appEnv db req =
         DevEnv, _ -> response 404 $ JSON.writeJSON { error: "Endpoint only available in test environment" }
 
     Events ->
-      {-
-        Should be:
-          curl -N -H 'Accept: text/event-stream' http://localhost:8081/events
-
-        But this is okay for now:
-          curl -N http://localhost:8081/events
-     -}
       case req.method of
         Get -> do
-          liftEffect $ log "[SSE] Client connected"
+          -- curl -N http://localhost:8081/events
+          liftEffect $ log "[SSE] Client connected (pure PureScript)"
 
-          -- Create SSE stream
-          stream <- liftEffect SSE.createSSEStream
+          -- Create a PassThrough stream using node-streams
+          stream <- liftEffect Stream.newPassThrough
 
           -- Send initial connection message
-          liftEffect $ SSE.sendSSEMessage stream "connected" "{\"message\": \"SSE connection established\"}"
+          let initialMsg = "event: connected\ndata: {\"message\": \"Pure PureScript SSE established\"}\n\n"
+          _ <- liftEffect $ Stream.writeString stream UTF8 initialMsg
 
-          -- Start ping interval (every 2 seconds)
-          _cleanup <- liftEffect $ SSE.startPingInterval stream 2000
+          -- Fork a process to send periodic pings
+          _ <- forkAff $ pingLoop stream
 
           -- Send SSE headers
           let
-            sseHeaders = header "Content-Type" "text/event-stream"
+            sseHeaders = empty
+              <> header "Content-Type" "text/event-stream"
               <> header "Cache-Control" "no-cache"
               <> header "Connection" "keep-alive"
               <> header "Access-Control-Allow-Origin" "*"
 
-          -- Return the stream as the response body
+          -- Return the stream as the response body (Duplex can be used as Readable)
           response' 200 sseHeaders stream
+
+          where
+          -- Helper function to send pings every 2 seconds
+          pingLoop :: Stream.Duplex -> Aff Unit
+          pingLoop stream = do
+            delay (Milliseconds 2000.0)
+            _ <- liftEffect $ do
+              instant <- now
+              let quote str = "\"" <> str <> "\""
+              let
+                data' = fold
+                  [ "{"
+                  , quote "time:"
+                  , show instant
+                  , "}"
+                  ]
+              let pingMsg = "event: ping\ndata: " <> data' <> "\n\n"
+              Stream.writeString stream UTF8 pingMsg
+            pingLoop stream
         Options -> ok ""
         _ -> methodNotAllowed
 
