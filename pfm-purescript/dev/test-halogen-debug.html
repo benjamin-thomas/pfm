@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Halogen Debug Test</title>
+</head>
+
+<body>
+  <h1>Halogen Debug Test</h1>
+  <p>Open console and click the buttons below:</p>
+
+  <button onclick="simulateStateChange1()">Simulate State Change 1</button>
+  <button onclick="simulateStateChange2()">Simulate State Change 2</button>
+  <button onclick="simulateNoChange()">Simulate No Change</button>
+
+  <p>Console commands: <code>dt()</code> to toggle, <code>dp()</code> to pause, <code>dr()</code> to resume</p>
+
+  <script src="./halogen-debug.js"></script>
+  <script>
+    // Simulate PureScript Halogen state changes
+    let mockState = {
+      counter: 0,
+      searchForm: {
+        query: "hello",
+        filters: []
+      },
+      user: null
+    };
+
+    function simulateStateChange1() {
+      const oldState = JSON.parse(JSON.stringify(mockState));
+      mockState.counter++;
+      mockState.searchForm.query = "hello world";
+
+      logStateDiff({
+        action: "UpdateCounter",
+        oldState: oldState,
+        newState: JSON.parse(JSON.stringify(mockState))
+      })();
+    }
+
+    function simulateStateChange2() {
+      const oldState = JSON.parse(JSON.stringify(mockState));
+      mockState.user = { id: 1, name: "Alice" };
+      mockState.searchForm.filters.push("active");
+
+      logStateDiff({
+        action: "LoginUser",
+        oldState: oldState,
+        newState: JSON.parse(JSON.stringify(mockState))
+      })();
+    }
+
+    function simulateNoChange() {
+      const oldState = JSON.parse(JSON.stringify(mockState));
+
+      logStateDiff({
+        action: "NoOpAction",
+        oldState: oldState,
+        newState: JSON.parse(JSON.stringify(mockState))
+      })();
+    }
+  </script>
+</body>
+
+</html>
