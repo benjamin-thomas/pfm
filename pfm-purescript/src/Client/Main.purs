@@ -7,10 +7,10 @@ import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
 import Control.Parallel (parallel, sequential)
-import Data.Array as Array
+import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Parser (jsonParser)
-import Data.Argonaut.Core (stringify)
+import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.HTTP.Method (Method(..))
@@ -28,6 +28,7 @@ import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
 import Effect.Console (log)
+import Halogen (HalogenM)
 import Halogen as H
 import Halogen.Aff as HA
 import Halogen.HTML as HH
@@ -229,6 +230,16 @@ fetchUsers = do
   -- For now, return empty array since we don't have a users endpoint
   pure (Right [])
 
+handleAction' :: forall o m. MonadAff m => Action -> HalogenM State Action () o m Unit
+handleAction' action = do
+  oldState <- H.get
+  result <- handleAction action
+  newState <- H.get
+  -- liftEffect clearConsole
+  -- _ <- pure $ Debug.spy "[DEBUG/handleAction(data)]" { action, oldState, newState }
+  liftEffect $ logStateDiff { action, oldState, newState }
+  pure result
+
 component :: forall q o m. MonadAff m => H.Component q InitArgs o m
 component = H.mkComponent
   { initialState: \{ isDarkMode, apiBaseUrl } ->
@@ -249,7 +260,7 @@ component = H.mkComponent
       }
   , render
   , eval: H.mkEval $ H.defaultEval
-      { handleAction = handleAction
+      { handleAction = handleAction'
       , initialize = Just Initialize
       }
   }
@@ -823,9 +834,8 @@ render state =
           ]
       ]
 
-handleAction :: forall o m. MonadAff m => Action -> H.HalogenM State Action () o m Unit
-handleAction action = case Debug.spy "action" action of
-  -- handleAction = case _ of
+handleAction :: forall o m. MonadAff m => Action -> HalogenM State Action () o m Unit
+handleAction = case _ of
   Initialize -> do
     -- Set up SSE subscription
     state <- H.get
@@ -1319,6 +1329,11 @@ foreign import setupSSEConnection :: String -> (String -> Effect Unit) -> Effect
 
 -- | Set up scroll position tracking from JavaScript
 foreign import setupScrollTracking :: (Number -> Effect Unit) -> Effect Unit
+
+foreign import clearConsole :: Effect Unit
+
+-- | Visual state diffing using jsondiffpatch
+foreign import logStateDiff :: { action :: Action, oldState :: State, newState :: State } -> Effect Unit
 
 -- Helper functions for transaction creation
 

@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "decimal.js": "^10.6.0",
+    "jsondiffpatch": "^0.7.3",
     "sqlite3": "^5.1.7",
     "xhr2": "^0.2.1"
   },

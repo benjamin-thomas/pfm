@@ -3,5 +3,8 @@
         "affjax",
         "httpurple",
         "thomas"
+    ],
+    "purescript.censorWarnings": [
+        // "UserDefinedWarning",
     ]
 }
