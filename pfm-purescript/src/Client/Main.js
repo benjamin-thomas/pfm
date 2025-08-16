@@ -122,7 +122,76 @@ export const clearConsole = () => {
   console.log("\n\n\n\n\n\n\n");
 };
 
+// Debug pause/resume functionality
+let debugPaused = false;
+let debugEverUsed = false;
+let debugOverlay = null;
+
+const createDebugOverlay = () => {
+  if (debugOverlay) return;
+
+  debugOverlay = document.createElement('div');
+  debugOverlay.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: bold;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  `;
+  document.body.appendChild(debugOverlay);
+  updateDebugOverlay();
+};
+
+const updateDebugOverlay = () => {
+  if (!debugOverlay) return;
+  debugOverlay.textContent = debugPaused ? '🛑 DEBUG PAUSED' : '▶️ DEBUG ACTIVE';
+  debugOverlay.style.background = debugPaused ? 'rgba(220, 53, 69, 0.8)' : 'rgba(40, 167, 69, 0.8)';
+};
+
+window.debugPause = () => {
+  debugPaused = true;
+  console.log("🛑 Debug logging paused - examine your diffs!");
+  updateDebugOverlay();
+};
+window.debugResume = () => {
+  debugPaused = false;
+  console.log("▶️ Debug logging resumed");
+  updateDebugOverlay();
+};
+window.debugStatus = () => {
+  console.log(debugPaused ? "🛑 Debug is PAUSED" : "▶️ Debug is ACTIVE");
+};
+
+// Debug toggle with Ctrl+F12
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key === 'F12') {
+    e.preventDefault();
+    if (!debugEverUsed) return; // Only work if debugging has been used
+
+    if (debugPaused) {
+      window.debugResume();
+    } else {
+      window.debugPause();
+    }
+  }
+});
+
 export const logStateDiff = ({ action, oldState, newState }) => () => {
+  // Activate debug overlay on first use
+  if (!debugEverUsed) {
+    debugEverUsed = true;
+    createDebugOverlay();
+  }
+
+  if (debugPaused) return; // Skip logging when paused
   console.group("[DEBUG/handleAction]");
   // console.group("Data")
   console.log("%c  action: ", "color: #007cba; font-weight: bold", action)

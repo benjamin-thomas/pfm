@@ -235,8 +235,6 @@ handleAction' action = do
   oldState <- H.get
   result <- handleAction action
   newState <- H.get
-  -- liftEffect clearConsole
-  -- _ <- pure $ Debug.spy "[DEBUG/handleAction(data)]" { action, oldState, newState }
   liftEffect $ logStateDiff { action, oldState, newState }
   pure result
 
