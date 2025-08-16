@@ -27,6 +27,16 @@
       user: null
     };
 
+    // Initialize the inspector with the initial state so it's always available
+    window.addEventListener('load', () => {
+      // Simulate an initial "no-op" action to set the baseline state
+      logStateDiff({
+        action: "InitialState",
+        oldState: null,
+        newState: JSON.parse(JSON.stringify(mockState))
+      })();
+    });
+
     function simulateStateChange1() {
       const oldState = JSON.parse(JSON.stringify(mockState));
       mockState.counter++;

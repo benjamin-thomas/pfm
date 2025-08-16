@@ -1,5 +1,5 @@
 /**
- * Halogen Debug - Visual State Debugging for PureScript Halogen
+ * Halogen Inspector - Visual State Inspection for PureScript Halogen
  * 
  * Usage:
  * 1. Add script tag: <script src="https://unpkg.com/halogen-debug@latest/dist/halogen-debug.js"></script>
@@ -17,16 +17,22 @@
   'use strict';
 
   // State management
-  let debugPaused = false;
-  let debugEverUsed = false;
-  let debugOverlay = null;
+  let inspectorStopped = true;  // Start stopped initially
+  let inspectorEverUsed = false;
+  let inspectorOverlay = null;
+  
+  // Snapshot functionality
+  let lastState = null;
+  let startState = null;
+  let endState = null;
+  let accumulatedActions = [];
 
   // Create visual debug overlay
-  const createDebugOverlay = () => {
-    if (debugOverlay) return;
+  const createInspectorOverlay = () => {
+    if (inspectorOverlay) return;
 
-    debugOverlay = document.createElement('div');
-    debugOverlay.style.cssText = `
+    inspectorOverlay = document.createElement('div');
+    inspectorOverlay.style.cssText = `
       position: fixed;
       top: 10px;
       right: 10px;
@@ -42,40 +48,93 @@
       transition: opacity 0.2s;
       user-select: none;
     `;
-    document.body.appendChild(debugOverlay);
-    updateDebugOverlay();
+    document.body.appendChild(inspectorOverlay);
+    updateInspectorOverlay();
   };
 
   // Update overlay visual state
-  const updateDebugOverlay = () => {
-    if (!debugOverlay) return;
-    debugOverlay.textContent = debugPaused ? '🛑 DEBUG PAUSED' : '▶️ DEBUG ACTIVE';
-    debugOverlay.style.background = debugPaused ? 'rgba(220, 53, 69, 0.8)' : 'rgba(40, 167, 69, 0.8)';
+  const updateInspectorOverlay = () => {
+    if (!inspectorOverlay) return;
+    inspectorOverlay.textContent = inspectorStopped ? '🛑 INSPECTOR STOPPED' : '▶️ INSPECTOR ACTIVE';
+    inspectorOverlay.style.background = inspectorStopped ? 'rgba(220, 53, 69, 0.8)' : 'rgba(40, 167, 69, 0.8)';
   };
 
-  // Debug controls
-  const debugPause = () => {
-    debugPaused = true;
-    console.log("🛑 Debug logging paused - examine your diffs!");
-    updateDebugOverlay();
-  };
-
-  const debugResume = () => {
-    debugPaused = false;
-    console.log("▶️ Debug logging resumed");
-    updateDebugOverlay();
-  };
-
-  const debugStatus = () => {
-    console.log(debugPaused ? "🛑 Debug is PAUSED" : "▶️ Debug is ACTIVE");
-  };
-
-  const debugToggle = () => {
-    if (!debugEverUsed) return;
-    if (debugPaused) {
-      debugResume();
+  // Inspector controls
+  const inspectorStop = () => {
+    inspectorStopped = true;
+    endState = lastState;
+    
+    console.group("🔍 Inspector Session Summary");
+    
+    // Actions summary - always show
+    console.log(`📊 ${accumulatedActions.length} actions occurred during session:`);
+    accumulatedActions.forEach((action, index) => {
+      console.log(`  ${index + 1}.`, action);
+    });
+    
+    // State changes summary - defensive programming
+    if (!startState) {
+      console.error("❌ Cannot show state changes: startState is null");
+      console.groupEnd();
+      return;
+    }
+    
+    if (!endState) {
+      console.error("❌ Cannot show state changes: endState is null");
+      console.groupEnd();
+      return;
+    }
+    
+    const changes = createDiff(startState, endState);
+    if (changes.length > 0) {
+      console.group(`📈 Accumulated state changes (${changes.length} total):`);
+      changes.forEach((change, index) => {
+        const path = change.path || 'root';
+        const num = `${index + 1}.`;
+        switch (change.type) {
+          case 'added':
+            console.log(`%c+ ${num} ${path}:`, 'color: #28a745; font-weight: bold', change.newValue);
+            break;
+          case 'deleted':
+            console.log(`%c- ${num} ${path}:`, 'color: #dc3545; font-weight: bold', change.oldValue);
+            break;
+          case 'changed':
+            console.log(`%c~ ${num} ${path}:`, 'color: #ffc107; font-weight: bold', `${change.oldValue} → ${change.newValue}`);
+            break;
+          case 'type-change':
+            console.log(`%c⚠ ${num} ${path}:`, 'color: #6f42c1; font-weight: bold', `${change.oldValue} → ${change.newValue} (type changed)`);
+            break;
+        }
+      });
+      console.groupEnd();
     } else {
-      debugPause();
+      console.log("✅ No accumulated state changes");
+    }
+    
+    console.groupEnd();
+    console.log("🛑 Inspector session stopped - showing summary!");
+    updateInspectorOverlay();
+  };
+
+  const inspectorStart = () => {
+    inspectorStopped = false;
+    startState = lastState; // Capture current state immediately
+    accumulatedActions = [];
+    console.log("▶️ Inspector session started");
+    console.log("📸 Current state captured as session start");
+    updateInspectorOverlay();
+  };
+
+  const inspectorStatus = () => {
+    console.log(inspectorStopped ? "🛑 Inspector is STOPPED" : "▶️ Inspector is ACTIVE");
+  };
+
+  const inspectorToggle = () => {
+    // Always allow toggle since overlay is always visible now
+    if (inspectorStopped) {
+      inspectorStart();
+    } else {
+      inspectorStop();
     }
   };
 
@@ -152,16 +211,22 @@
 
   // Main logging function - exposed globally for PureScript FFI
   const logStateDiff = ({ action, oldState, newState }) => {
-    // Activate debug overlay on first use
-    if (!debugEverUsed) {
-      debugEverUsed = true;
-      createDebugOverlay();
-      console.log("🔍 Halogen Debug activated! Use dt() to toggle pause/resume");
+    // Always update lastState to track current state (zero performance impact)
+    lastState = newState;
+    
+    if (inspectorStopped) return; // Early exit if stopped
+    
+    // Accumulate actions during active session
+    accumulatedActions.push(action);
+    
+    // Activate inspector overlay on first use
+    if (!inspectorEverUsed) {
+      inspectorEverUsed = true;
+      createInspectorOverlay();
+      console.log("🔍 Halogen Inspector activated! Use Ctrl+F12 to start/stop inspection sessions");
     }
 
-    if (debugPaused) return; // Skip logging when paused
-
-    console.group("[DEBUG/handleAction]");
+    console.group("[INSPECTOR/handleAction]");
     console.log("%c  action: ", "color: #007cba; font-weight: bold", action);
     console.log('%c  oldState:', 'color: #dc3545; font-weight: bold', oldState);
     console.log('%c  newState:', 'color: #28a745; font-weight: bold', newState);
@@ -222,10 +287,8 @@
 
   // Console shortcuts (always available)
   const exposeConsoleCommands = () => {
-    window.dt = debugToggle;        // "debug toggle"
-    window.dp = debugPause;         // "debug pause"
-    window.dr = debugResume;        // "debug resume"
-    window.ds = debugStatus;        // "debug status"
+    // Expose for keyboard shortcut access
+    window.inspectorToggle = inspectorToggle;
   };
 
   // Keyboard shortcut (only works when page is focused)
@@ -233,7 +296,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.key === 'F12') {
         e.preventDefault();
-        debugToggle();
+        inspectorToggle();
       }
     });
   };
@@ -249,7 +312,10 @@
     // Setup keyboard shortcuts
     setupKeyboardShortcuts();
 
-    console.log("🔍 Halogen Debug loaded. Use logStateDiff in your handleAction wrapper to activate.");
+    // Create overlay immediately to show it's loaded
+    createInspectorOverlay();
+
+    console.log("🔍 Halogen Inspector loaded. Use logStateDiff in your handleAction wrapper to activate.");
   };
 
   // Auto-initialize
