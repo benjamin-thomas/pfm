@@ -15,6 +15,10 @@ import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Database (seedFromOfx)
 
+import Control.Monad.ST as ST
+import Control.Monad.ST.Ref as STRef
+import Data.Foldable (for_)
+
 {-
 
 Usage
@@ -91,4 +95,15 @@ showTransactions =
 -- launchAff_ wip
 wip ∷ Aff Unit
 wip = newConn >>= LedgerViewQueries.getLedgerViewRows 4 <#> Array.drop 3 <#> Array.take 3 >>= traverse_ logShow
+
+-- Pure function that uses internal mutation
+countEvens :: Array Int -> Int
+countEvens arr = ST.run do
+  counter <- STRef.new 0 -- Create mutable counter
+
+  for_ arr \n -> do
+    when (n `mod` 2 == 0) do
+      void $ STRef.modify (_ + 1) counter -- Imperatively increment
+
+  STRef.read counter -- Return final count
 

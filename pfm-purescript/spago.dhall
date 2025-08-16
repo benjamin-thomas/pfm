@@ -43,6 +43,7 @@
   , "refs"
   , "spec"
   , "spec-node"
+  , "st"
   , "strings"
   , "transformers"
   , "tuples"
