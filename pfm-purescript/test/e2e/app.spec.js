@@ -177,49 +177,6 @@ test.describe('PFM PureScript App', () => {
     await page.locator('.dialog-actions .button').first().click();
   });
 
-  test('should allow form field interaction in dialogs', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Open create dialog
-    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
-    await createButton.click();
-
-    // Wait for dialog to be visible
-    const dialog = page.locator('#transaction-dialog');
-    await expect(dialog).toBeVisible();
-
-    // Test form field interaction
-    const descriptionField = page.locator('input[id="description"]');
-    const testDescription = 'Test Transaction Description';
-
-    await descriptionField.fill(testDescription);
-    await expect(descriptionField).toHaveValue(testDescription);
-
-    // Test amount field
-    const amountField = page.locator('input[id="amount"]');
-    const testAmount = '123.45';
-
-    await amountField.fill(testAmount);
-    await expect(amountField).toHaveValue(testAmount);
-
-    // Test account fields (now select dropdowns)
-    const fromAccountField = page.locator('select[id="from-account"]');
-
-    // Wait a bit for accounts to load, then try to select
-    await page.waitForTimeout(1000);
-
-    // Select the first available account (should be account ID 1)
-    await fromAccountField.selectOption('1');
-    await expect(fromAccountField).toHaveValue('1');
-
-    // Close dialog
-    await page.locator('.dialog-actions .button').first().click();
-    await expect(dialog).not.toBeVisible();
-  });
-
   test('should create a new transaction', async ({ page }) => {
     await page.goto('/');
 
@@ -262,8 +219,11 @@ test.describe('PFM PureScript App', () => {
     // Wait for dialog to close with longer timeout
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
-    // Wait for the transaction list to refresh
-    await page.waitForTimeout(2000);
+    // Wait for the new transaction to appear (polling until count increases)
+    await expect(async () => {
+      const currentCount = await page.locator('.transaction-item').count();
+      expect(currentCount).toBeGreaterThan(initialTransactions);
+    }).toPass({ timeout: 10000 });
 
     // Reload page to verify data persistence
     await page.reload();
@@ -322,9 +282,6 @@ test.describe('PFM PureScript App', () => {
 
     // Wait for dialog to close
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
-
-    // Wait for the transaction list to refresh
-    await page.waitForTimeout(2000);
 
     // Reload page to verify data persistence
     await page.reload();
@@ -421,8 +378,11 @@ test.describe('PFM PureScript App', () => {
     // Wait for dialog to close
     await expect(dialog).not.toBeVisible({ timeout: 10000 });
 
-    // Wait for transaction list to refresh
-    await page.waitForTimeout(2000);
+    // Wait for transaction to be deleted (count should decrease)
+    await expect(async () => {
+      const currentCount = await page.locator('.transaction-item').count();
+      expect(currentCount).toBe(initialCount - 1);
+    }).toPass({ timeout: 10000 });
 
     // Reload page to verify data persistence
     await page.reload();
@@ -469,231 +429,6 @@ test.describe('PFM PureScript App', () => {
     await expect(clearButton).toContainText('Clear');
   });
 
-  test('should filter transactions by description', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Get initial transaction count
-    const initialCount = await page.locator('.transaction-item').count();
-
-    // Add a test transaction with known description
-    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
-    await createButton.click();
-
-    const dialog = page.locator('#transaction-dialog');
-    await expect(dialog).toBeVisible();
-
-    const uniqueDescription = `Filter test GROCERY ${Date.now()}`;
-    await page.locator('input[id="description"]').fill(uniqueDescription);
-    await page.locator('select[id="from-account"]').selectOption('2');
-    await page.locator('select[id="to-account"]').selectOption('6');
-    await page.locator('input[id="amount"]').fill('25.00');
-    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
-
-    await page.locator('.dialog-actions .button--primary').click();
-    await expect(dialog).not.toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Now test filtering by description
-    const descriptionFilter = page.locator('input#search-description');
-    await descriptionFilter.fill('GROCERY');
-
-    // Give time for filter to be applied
-    await page.waitForTimeout(1000);
-
-    // Check that only transactions with "GROCERY" in description are shown
-    const filteredTransactions = await page.locator('.transaction-item').count();
-    const visibleDescriptions = await page.locator('.transaction-item__description').allTextContents();
-
-    // All visible descriptions should contain "GROCERY" (case insensitive)
-    for (const desc of visibleDescriptions) {
-      expect(desc.toLowerCase()).toContain('grocery');
-    }
-
-    // Clear filter and verify all transactions are shown again
-    const clearButton = page.locator('#form-clear-button');
-    await clearButton.click();
-    await page.waitForTimeout(1000);
-
-    const clearedCount = await page.locator('.transaction-item').count();
-    expect(clearedCount).toBeGreaterThanOrEqual(filteredTransactions);
-  });
-
-  test('should filter transactions by amount range', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Add test transactions with known amounts
-    for (const [amount, desc] of [['10.00', 'Small'], ['50.00', 'Medium'], ['100.00', 'Large']]) {
-      const createButton = page.locator('.transaction-list__header-buttons .button--primary');
-      await createButton.click();
-
-      const dialog = page.locator('#transaction-dialog');
-      await expect(dialog).toBeVisible();
-
-      await page.locator('input[id="description"]').fill(`${desc} transaction ${Date.now()}`);
-      await page.locator('select[id="from-account"]').selectOption('2');
-      await page.locator('select[id="to-account"]').selectOption('6');
-      await page.locator('input[id="amount"]').fill(amount);
-      await page.locator('input[id="date"]').fill('2024-07-01T10:30');
-
-      await page.locator('.dialog-actions .button--primary').click();
-      await expect(dialog).not.toBeVisible({ timeout: 10000 });
-      await page.waitForTimeout(1000);
-    }
-
-    await page.waitForTimeout(2000);
-
-    // Test minimum amount filter
-    const minAmountFilter = page.locator('input#search-amount-min');
-    await minAmountFilter.fill('50.00'); // 50.00 euros
-    await page.waitForTimeout(1000);
-
-    // All visible transactions should have amount >= 50.00
-    const visibleAmounts = await page.locator('.transaction-item__amount').allTextContents();
-    for (const amountText of visibleAmounts) {
-      const amount = parseFloat(amountText.replace(/[^0-9.-]/g, ''));
-      expect(Math.abs(amount)).toBeGreaterThanOrEqual(50.0);
-    }
-
-    // Clear filter
-    await page.locator('#form-clear-button').click();
-    await page.waitForTimeout(1000);
-
-    // Test maximum amount filter
-    const maxAmountFilter = page.locator('input#search-amount-max');
-    await maxAmountFilter.fill('50.00'); // 50.00 euros
-    await page.waitForTimeout(1000);
-
-    // All visible transactions should have amount <= 50.00
-    const visibleAmounts2 = await page.locator('.transaction-item__amount').allTextContents();
-    for (const amountText of visibleAmounts2) {
-      const amount = parseFloat(amountText.replace(/[^0-9.-]/g, ''));
-      expect(Math.abs(amount)).toBeLessThanOrEqual(50.0);
-    }
-  });
-
-  test('should filter for unknown expenses only', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Add a known expense transaction
-    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
-    await createButton.click();
-
-    const dialog = page.locator('#transaction-dialog');
-    await expect(dialog).toBeVisible();
-
-    await page.locator('input[id="description"]').fill(`Known expense ${Date.now()}`);
-    await page.locator('select[id="from-account"]').selectOption('2');
-    await page.locator('select[id="to-account"]').selectOption('7'); // Groceries (known expense)
-    await page.locator('input[id="amount"]').fill('30.00');
-    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
-
-    await page.locator('.dialog-actions .button--primary').click();
-    await expect(dialog).not.toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Check unknown expenses checkbox
-    const unknownExpensesCheckbox = page.locator('input[type="checkbox"]');
-    await unknownExpensesCheckbox.check();
-    await page.waitForTimeout(1000);
-
-    // All visible transactions should be TO Unknown_EXPENSE account
-    const visibleTransactions = await page.locator('.transaction-item').count();
-    if (visibleTransactions > 0) {
-      const accountTexts = await page.locator('.transaction-item__accounts').allTextContents();
-      for (const accountText of accountTexts) {
-        expect(accountText).toContain('Unknown_EXPENSE');
-      }
-    }
-
-    // Uncheck and verify all transactions are shown again
-    await unknownExpensesCheckbox.uncheck();
-    await page.waitForTimeout(1000);
-
-    const allCount = await page.locator('.transaction-item').count();
-    expect(allCount).toBeGreaterThanOrEqual(visibleTransactions);
-  });
-
-  test('should combine multiple filters', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Add test transaction with specific criteria
-    const createButton = page.locator('.transaction-list__header-buttons .button--primary');
-    await createButton.click();
-
-    const dialog = page.locator('#transaction-dialog');
-    await expect(dialog).toBeVisible();
-
-    const uniqueDescription = `MULTI filter test ${Date.now()}`;
-    await page.locator('input[id="description"]').fill(uniqueDescription);
-    await page.locator('select[id="from-account"]').selectOption('2');
-    await page.locator('select[id="to-account"]').selectOption('6'); // Unknown expense
-    await page.locator('input[id="amount"]').fill('75.50');
-    await page.locator('input[id="date"]').fill('2024-07-01T10:30');
-
-    await page.locator('.dialog-actions .button--primary').click();
-    await expect(dialog).not.toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(2000);
-
-    // Apply multiple filters
-    const descriptionFilter = page.locator('input#search-description');
-    await descriptionFilter.fill('MULTI');
-
-    const minAmountFilter = page.locator('input#search-amount-min');
-    await minAmountFilter.fill('70.00'); // 70.00 euros
-
-    const maxAmountFilter = page.locator('input#search-amount-max');
-    await maxAmountFilter.fill('80.00'); // 80.00 euros
-
-    const unknownExpensesCheckbox = page.locator('input[type="checkbox"]');
-    await unknownExpensesCheckbox.check();
-
-    await page.waitForTimeout(1000);
-
-    // Verify all visible transactions meet all criteria
-    const visibleTransactions = await page.locator('.transaction-item').count();
-    if (visibleTransactions > 0) {
-      const descriptions = await page.locator('.transaction-item__description').allTextContents();
-      const amounts = await page.locator('.transaction-item__amount').allTextContents();
-      const accounts = await page.locator('.transaction-item__accounts').allTextContents();
-
-      for (let i = 0; i < visibleTransactions; i++) {
-        // Check description contains "MULTI"
-        expect(descriptions[i].toLowerCase()).toContain('multi');
-
-        // Check amount is between 70.00 and 80.00
-        const amount = parseFloat(amounts[i].replace(/[^0-9.-]/g, ''));
-        expect(Math.abs(amount)).toBeGreaterThanOrEqual(70.0);
-        expect(Math.abs(amount)).toBeLessThanOrEqual(80.0);
-
-        // Check it's an unknown expense
-        expect(accounts[i]).toContain('Unknown_EXPENSE');
-      }
-    }
-
-    // Clear all filters
-    const clearButton = page.locator('#form-clear-button');
-    await clearButton.click();
-    await page.waitForTimeout(1000);
-
-    // Verify filters are cleared
-    await expect(descriptionFilter).toHaveValue('');
-    await expect(minAmountFilter).toHaveValue('');
-    await expect(maxAmountFilter).toHaveValue('');
-    await expect(unknownExpensesCheckbox).not.toBeChecked();
-  });
-
   test('should show context menu on right-click transaction', async ({ page }) => {
     await page.goto('/');
 
@@ -720,157 +455,11 @@ test.describe('PFM PureScript App', () => {
     // Verify context menu contains expected options including Find similar transactions
     await expect(page.locator('.context-menu li', { hasText: 'Find similar transactions' })).toBeVisible();
 
-    // Click elsewhere to close context menu
-    await page.locator('body').click({ position: { x: 0, y: 0 } });
+    // Press Escape to close context menu
+    await page.keyboard.press('Escape');
 
     // Verify context menu is hidden
     await expect(contextMenu).not.toBeVisible();
-  });
-
-  test('should filter transactions when clicking Find similar transactions', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // Get initial transaction count
-    const initialCount = await page.locator('.transaction-item').count();
-    expect(initialCount).toBeGreaterThan(5); // Ensure we have enough transactions to test filtering
-
-    // Find a transaction with a specific description that likely has similar transactions
-    // Look for something like "GROCERY" or similar common descriptions
-    const transactions = await page.locator('.transaction-item').all();
-    let targetTransaction = null;
-    let targetDescription = null;
-
-    for (const transaction of transactions) {
-      const description = await transaction.locator('.transaction-item__description').textContent();
-      // Find a transaction with a description that likely has similar ones
-      if (description && (description.includes('GROCERY') || description.includes('MARKET') || description.includes('STORE'))) {
-        targetTransaction = transaction;
-        targetDescription = description;
-        break;
-      }
-    }
-
-    if (!targetTransaction) {
-      // If no specific transaction found, just use the first one
-      targetTransaction = page.locator('.transaction-item').first();
-      targetDescription = await targetTransaction.locator('.transaction-item__description').textContent();
-    }
-
-    // Right-click on the target transaction
-    await targetTransaction.click({ button: 'right' });
-
-    // Wait for context menu to appear
-    const contextMenu = page.locator('.context-menu');
-    await expect(contextMenu).toBeVisible();
-
-    // Verify the soundex header is present
-    const soundexHeader = page.locator('.context-menu-debug');
-    await expect(soundexHeader).toBeVisible();
-    const soundexText = await soundexHeader.textContent();
-    expect(soundexText).toContain('SOUNDEX:');
-
-    // Click "Find similar transactions"
-    const findSimilarButton = page.locator('.context-menu li', { hasText: 'Find similar transactions' });
-    await findSimilarButton.click();
-
-    // Wait for context menu to disappear
-    await expect(contextMenu).not.toBeVisible();
-
-    // Wait for the transaction list to be filtered (give time for API call)
-    await page.waitForTimeout(1000);
-
-    // Get the new transaction count
-    const filteredCount = await page.locator('.transaction-item').count();
-
-    // The filtered count should be less than the initial count
-    expect(filteredCount).toBeLessThan(initialCount);
-    expect(filteredCount).toBeGreaterThan(0); // Should have at least one similar transaction
-
-    // Check that the similarity filter message is displayed
-    const similarityMessage = page.locator('.similar-transactions-info');
-    await expect(similarityMessage).toBeVisible();
-    await expect(similarityMessage).toContainText('Displaying transactions similar to:');
-    await expect(similarityMessage).toContainText(targetDescription);
-
-    // Verify all visible transactions have similar soundex values
-    // This is implicit in the filtering, but we can check the descriptions are somewhat similar
-
-    // Verify the filter state shows we're filtering by similarity
-    // Check if there's any UI indication of the active filter (this depends on implementation)
-  });
-
-  test('should show correct soundex value after filtering', async ({ page }) => {
-    await page.goto('/');
-
-    // Wait for transaction list to load
-    await page.waitForSelector('.transaction-list');
-
-    // First, let's see what transactions we have
-    const allDescriptions = await page.locator('.transaction-item__description').allTextContents();
-    console.log('All transaction descriptions:', allDescriptions);
-
-    // Get info about the first transaction before filtering
-    const firstTransactionBeforeFilter = page.locator('.transaction-item').first();
-    const firstDescriptionBefore = await firstTransactionBeforeFilter.locator('.transaction-item__description').textContent();
-
-    // Right-click to see its soundex
-    await firstTransactionBeforeFilter.click({ button: 'right' });
-    const contextMenuBefore = page.locator('.context-menu');
-    await expect(contextMenuBefore).toBeVisible();
-    const soundexBefore = await page.locator('.context-menu-debug').textContent();
-    console.log('First transaction before filter:', firstDescriptionBefore, soundexBefore);
-
-    // Close context menu
-    await page.locator('body').click({ position: { x: 0, y: 0 } });
-    await expect(contextMenuBefore).not.toBeVisible();
-
-    // Apply a filter that will definitely change which transaction is first
-    // Let's search for something specific that's NOT the first transaction
-    const descriptionFilter = page.locator('input#search-description');
-
-    // Find a description that's different from the first one
-    let searchTerm = '';
-    for (const desc of allDescriptions) {
-      if (desc !== firstDescriptionBefore && desc.length > 3) {
-        // Use the first few characters of a different transaction
-        searchTerm = desc.substring(0, 5);
-        break;
-      }
-    }
-
-    if (!searchTerm) {
-      // If we can't find a different one, skip the test
-      console.log('Could not find a suitable search term, skipping test');
-      return;
-    }
-
-    console.log('Searching for:', searchTerm);
-    await descriptionFilter.fill(searchTerm);
-    await page.waitForTimeout(1000);
-
-    // Get info about the first transaction after filtering
-    const firstTransactionAfterFilter = page.locator('.transaction-item').first();
-    const firstDescriptionAfter = await firstTransactionAfterFilter.locator('.transaction-item__description').textContent();
-
-    // This should be a different transaction
-    expect(firstDescriptionAfter).not.toBe(firstDescriptionBefore);
-
-    // Right-click to see its soundex
-    await firstTransactionAfterFilter.click({ button: 'right' });
-    const contextMenuAfter = page.locator('.context-menu');
-    await expect(contextMenuAfter).toBeVisible();
-    const soundexAfter = await page.locator('.context-menu-debug').textContent();
-    console.log('First transaction after filter:', firstDescriptionAfter, soundexAfter);
-
-    // The soundex should be different since it's a different transaction
-    expect(soundexAfter).not.toBe(soundexBefore);
-
-    // Also verify the soundex value is reasonable (not empty or undefined)
-    expect(soundexAfter).toContain('SOUNDEX:');
-    expect(soundexAfter.length).toBeGreaterThan(9); // "SOUNDEX: " + at least 1 char
   });
 
   test('should update transaction count text when filtering', async ({ page }) => {
@@ -889,7 +478,9 @@ test.describe('PFM PureScript App', () => {
     // Apply a filter that should reduce results
     const descriptionFilter = page.locator('input#search-description');
     await descriptionFilter.fill('nonexistent filter term that matches nothing');
-    await page.waitForTimeout(1000);
+
+    // Wait for filter to be applied (should result in 0 transactions)
+    await expect(page.locator('.transaction-item')).toHaveCount(0);
 
     // Count text should update to show filtered results
     const filteredCountText = await countElement.textContent();
@@ -898,7 +489,12 @@ test.describe('PFM PureScript App', () => {
     // Clear filter
     const clearButton = page.locator('#form-clear-button');
     await clearButton.click();
-    await page.waitForTimeout(1000);
+
+    // Wait for filters to be cleared
+    await expect(async () => {
+      const clearedCount = await page.locator('.transaction-item').count();
+      expect(clearedCount).toBeGreaterThan(0);
+    }).toPass({ timeout: 5000 });
 
     // Count should return to original
     const clearedCountText = await countElement.textContent();

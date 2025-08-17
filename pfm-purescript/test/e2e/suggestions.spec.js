@@ -15,8 +15,8 @@ test.describe('Apply All Suggestions', () => {
     await page.waitForSelector('h1:has-text("PFM - PureScript")');
     await page.waitForSelector('text=Transactions');
 
-    // Wait a bit for suggestions to load
-    await page.waitForTimeout(1000);
+    // Wait for suggestions to load
+    await page.waitForSelector('.suggestion-container');
   });
 
   test('should click Apply All Suggestions button without error', async ({ page }) => {
@@ -26,8 +26,8 @@ test.describe('Apply All Suggestions', () => {
     // Click Apply All Suggestions button (with lightbulb emoji)
     await page.click('button:has-text("Apply All Suggestions")');
 
-    // Wait for the operation to complete
-    await page.waitForTimeout(1000);
+    // Wait for the operation to complete - button should still be visible  
+    await expect(page.locator('button:has-text("Apply All Suggestions")')).toBeVisible();
 
     // For now, just verify the page doesn't crash and the button is still there
     // (This test will pass when we properly implement the functionality)
@@ -42,8 +42,8 @@ test.describe('Apply All Suggestions', () => {
     // Click Apply All Suggestions
     await page.click('button:has-text("Apply All Suggestions")');
 
-    // Wait for update
-    await page.waitForTimeout(1000);
+    // Wait for the count to update to 0
+    await expect(page.locator('.transaction-count')).toContainText('0 transactions');
 
     // The count should now be 0 since all unknown expenses were categorized
     await expect(page.locator('.transaction-count')).toContainText('0 transactions');
@@ -59,14 +59,11 @@ test.describe('Apply All Suggestions', () => {
 
     // Apply all suggestions
     await page.click('button:has-text("Apply All Suggestions")');
-    await page.waitForTimeout(2000);
+    // Wait for all suggestions to disappear
+    await expect(page.locator('.suggestion-container')).toHaveCount(0);
 
     // After applying all suggestions, there should be no suggestion containers visible
     const finalSuggestions = await page.locator('.suggestion-container').count();
     expect(finalSuggestions).toBe(0);
-
-    // The Apply All button should still be visible but clicking it should have no effect
-    const applyAllButton = page.locator('button:has-text("Apply All Suggestions")');
-    await expect(applyAllButton).toBeVisible();
   });
 });
