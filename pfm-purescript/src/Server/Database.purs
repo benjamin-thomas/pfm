@@ -4,19 +4,23 @@ module Server.Database
   , dateToUnixS
   , initDatabase
   , seedFromOfx
+  , resetTestData
   ) where
 
 import Prelude
 
-import Data.Array (length, reverse, uncons)
+import Data.Array (length, reverse, uncons, nub)
 import Data.Date (Date)
 import Data.DateTime.Instant (Instant, fromDate, unInstant)
 import Data.Decimal as Decimal
 import Data.Either (Either(..))
+import Data.Map as Map
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Newtype (unwrap)
 import Data.String (trim)
+import Data.Traversable (traverse, traverse_)
+import Data.Tuple (Tuple(..))
 import Debug (spy)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
@@ -234,9 +238,9 @@ seedFromOfx ofxFilePath db = do
       -- Clear existing transactions
       TransactionQueries.deleteAllTransactions db
 
-      -- Process each transaction
+      -- Process transactions efficiently - create budgets first, then bulk insert
       let reversedTransactions = reverse batch.transactions -- to have budget ids in logical order
-      processTransactions db batch.accountNumber reversedTransactions
+      processTransactionsEfficiently db batch.accountNumber reversedTransactions
 
       liftEffect $ log "=== Transactions inserted ==="
       liftEffect $ log "=== Categorizing some transactions for demo purposes ==="
@@ -265,6 +269,69 @@ seedFromOfx ofxFilePath db = do
 
         -- Process remaining transactions
         processTransactions dbConn accountNumber rest
+
+-- | Efficiently process OFX transactions by creating budgets first, then bulk inserting
+processTransactionsEfficiently :: SQLite3.DBConnection -> String -> Array StatementTransaction -> Aff Unit
+processTransactionsEfficiently db accountNumber transactions = do
+  liftEffect $ log "=== Creating budgets for all transaction dates ==="
+  
+  -- 1. Extract all unique dates from transactions
+  let 
+    allDates = map (\tx -> timestampToUnixMs tx.posted) transactions
+    uniqueDates = nub allDates
+  
+  liftEffect $ log $ "Found " <> show (length uniqueDates) <> " unique dates, creating budgets..."
+  
+  -- 2. Create budgets for all unique dates
+  traverse_ createBudgetForDate uniqueDates
+  
+  liftEffect $ log "=== Building budget lookup map ==="
+  
+  -- 3. Build a lookup map: date -> budgetId (single query per unique date)
+  budgetMap <- buildBudgetLookupMap uniqueDates
+  
+  liftEffect $ log "=== Preparing transactions for bulk insert ==="
+  
+  -- 4. Convert all transactions to TransactionNewRow using the lookup map
+  let transactionRows = map (prepareTransactionWithMap budgetMap accountNumber) transactions
+  
+  liftEffect $ log "=== Bulk inserting all transactions ==="
+  
+  -- 5. Bulk insert all transactions at once
+  TransactionQueries.insertTransactionsBulk transactionRows db
+  
+  where
+  createBudgetForDate :: Int -> Aff Unit
+  createBudgetForDate dateUnix = do
+    maybeBudgetId <- BudgetQueries.getBudgetIdForDate dateUnix db
+    case maybeBudgetId of
+      Just _ -> pure unit -- Budget already exists
+      Nothing -> do
+        _ <- BudgetQueries.insertBudgetForDate dateUnix db
+        pure unit
+  
+  buildBudgetLookupMap :: Array Int -> Aff (Map.Map Int Int)
+  buildBudgetLookupMap dates = do
+    pairs <- traverse (\date -> do
+      maybeBudgetId <- BudgetQueries.getBudgetIdForDate date db
+      case maybeBudgetId of
+        Just budgetId -> pure { date, budgetId }
+        Nothing -> liftEffect $ throwException $ error $ "Budget should exist for date: " <> show date
+    ) dates
+    pure $ Map.fromFoldable $ map (\p -> Tuple p.date p.budgetId) pairs
+  
+  prepareTransactionWithMap :: Map.Map Int Int -> String -> StatementTransaction -> TransactionQueries.TransactionNewRow
+  prepareTransactionWithMap budgetMap accNumber tx = 
+    let 
+      txnRow = fromOfxTransaction accNumber tx
+      (TransactionQueries.TransactionNewRow txnData) = txnRow
+      maybeBudgetId = Map.lookup txnData.dateUnix budgetMap
+    in
+      case maybeBudgetId of
+        Just budgetId -> 
+          TransactionQueries.TransactionNewRow $ txnData { budgetId = Just budgetId }
+        Nothing -> 
+          unsafeCrashWith $ "Budget not found in map for date: " <> show txnData.dateUnix
 
 -- | Add one properly categorized grocery transaction for demo purposes
 categorizeTransactionsForDemo :: SQLite3.DBConnection -> Aff Unit
@@ -296,7 +363,7 @@ categorizeTransactionsForDemo db = do
     demoTransaction2 = TransactionQueries.TransactionNewRow
       { budgetId: Just budgetId
       , fromAccountId: 2 -- Checking account
-      , toAccountId: 6   -- Unknown_EXPENSE account (uncategorized)
+      , toAccountId: 6 -- Unknown_EXPENSE account (uncategorized)
       , uniqueFitId: Nothing
       , dateUnix: demoDateUnix - 86400 -- One day earlier
       , descrOrig: "GROCERY STORE DOWNTOWN"
@@ -306,4 +373,33 @@ categorizeTransactionsForDemo db = do
 
   TransactionQueries.insertTransaction demoTransaction2 db
   pure unit
+
+-- | Reset test data without recreating schema (much faster and safer)
+resetTestData :: String -> SQLite3.DBConnection -> Aff Unit
+resetTestData ofxFilePath db = do
+  liftEffect $ log "=== Resetting test data (keeping schema) ==="
+  
+  -- Clear all data in dependency order (transactions -> budgets, accounts and categories have initial data)
+  _ <- SQLite3.queryDB db "DELETE FROM transactions" []
+  _ <- SQLite3.queryDB db "DELETE FROM budgets" []
+  liftEffect $ log "=== Data cleared ==="
+
+  liftEffect $ log "=== Reading OFX file ==="
+  ofxContent <- FS.readTextFile UTF8 ofxFilePath
+
+  case parseOfx ofxContent of
+    Left err -> do
+      liftEffect $ log $ "OFX parsing failed: " <> err
+      liftEffect $ throwException $ error $ "OFX parsing failed: " <> err
+    Right batch -> do
+      liftEffect $ log $ "=== Processing " <> show (length batch.transactions) <> " transactions ==="
+
+      -- Process transactions efficiently - create budgets first, then bulk insert
+      let reversedTransactions = reverse batch.transactions -- to have budget ids in logical order
+      processTransactionsEfficiently db batch.accountNumber reversedTransactions
+
+      liftEffect $ log "=== Transactions inserted ==="
+      liftEffect $ log "=== Categorizing some transactions for demo purposes ==="
+      categorizeTransactionsForDemo db
+      liftEffect $ log "=== Transaction categorization complete ==="
 

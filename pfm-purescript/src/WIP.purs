@@ -2,7 +2,10 @@ module WIP where
 
 import Prelude
 
+import Control.Monad.ST as ST
+import Control.Monad.ST.Ref as STRef
 import Data.Array as Array
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
 import Data.Traversable (traverse_)
 import Effect (Effect)
@@ -13,11 +16,7 @@ import Node.ChildProcess as CP
 import SQLite3 as SQLite3
 import Server.DB.LedgerView.Queries as LedgerViewQueries
 import Server.DB.Transactions.Queries as TransactionQueries
-import Server.Database (seedFromOfx)
-
-import Control.Monad.ST as ST
-import Control.Monad.ST.Ref as STRef
-import Data.Foldable (for_)
+import Server.Database (resetTestData, seedFromOfx)
 
 {-
 
@@ -80,6 +79,20 @@ reset = launchAff_ $ do
   _ <- SQLite3.queryDB conn "PRAGMA foreign_keys = ON" []
 
   seedFromOfx "test/OfxParser/fixture.ofx" conn
+  log "Now I should notify the SSE clients that there is new data"
+
+  -- Quick and dirty...
+  liftEffect $ void $ CP.exec' "curl --fail -X POST http://localhost:8082/request-client-reload" identity \result ->
+    case result.error of
+      Nothing -> log "[SSE] Successfully notified clients to reload"
+      Just err -> log $ "[SSE] Failed to notify clients: " <> show err
+
+reset2 :: Effect Unit
+reset2 = launchAff_ $ do
+  conn <- SQLite3.newDB "./db.e2e-test.sqlite"
+  _ <- SQLite3.queryDB conn "PRAGMA foreign_keys = ON" []
+
+  resetTestData "test/OfxParser/fixture.ofx" conn
   log "Now I should notify the SSE clients that there is new data"
 
   -- Quick and dirty...

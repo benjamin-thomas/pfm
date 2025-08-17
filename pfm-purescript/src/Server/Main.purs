@@ -392,9 +392,9 @@ makeRouter appEnv db sseClientsRef req =
     TestEnvResetDb ->
       case appEnv, req.method of
         TestEnv, Post -> do
-          -- Reset database by reseeding from OFX fixture
+          -- Reset test data without recreating schema (faster and safer)
           liftEffect $ log "[SERVER] Test environment database reset requested"
-          DB.seedFromOfx "test/OfxParser/fixture.ofx" db
+          DB.resetTestData "test/OfxParser/fixture.ofx" db
           ok $ JSON.writeJSON { message: "Database reset successful" }
         TestEnv, Options -> ok ""
         TestEnv, _ -> methodNotAllowed

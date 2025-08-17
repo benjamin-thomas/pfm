@@ -6,6 +6,7 @@ module Server.DB.Transactions.Queries
   , getAllTransactions
   , getTransactionById
   , insertTransaction
+  , insertTransactionsBulk
   , updateTransaction
   , deleteTransaction
   , deleteAllTransactions
@@ -13,7 +14,7 @@ module Server.DB.Transactions.Queries
 
 import Prelude
 
-import Data.Array (head)
+import Data.Array (head, length, intercalate, concatMap)
 import Data.Functor (map)
 import Data.Generic.Rep (class Generic)
 import Data.Int (toNumber)
@@ -22,6 +23,7 @@ import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (throwException, error)
+import Foreign (Foreign)
 import Yoga.JSON as JSON
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
@@ -134,6 +136,52 @@ insertTransaction (TransactionNewRow txn) db = do
         , JSON.writeImpl txn.cents
         ]
       pure unit
+
+-- | Insert multiple transactions in a single SQL statement (much more efficient)
+insertTransactionsBulk :: Array TransactionNewRow -> SQLite3.DBConnection -> Aff Unit
+insertTransactionsBulk transactions db = do
+  liftEffect $ log $ "Bulk inserting " <> show (length transactions) <> " transactions"
+
+  if length transactions == 0 then
+    pure unit
+  else do
+    -- Build the SQL with multiple VALUES clauses
+    let
+      valuesClause = intercalate ", " $ map (\_ -> "(?, ?, ?, ?, ?, ?, ?, ?)") transactions
+      sql =
+        """
+        INSERT INTO transactions
+          ( budget_id
+          , from_account_id
+          , to_account_id
+          , unique_fit_id
+          , date
+          , descr_orig
+          , descr
+          , cents
+          )
+        VALUES """ <> valuesClause
+
+      -- Flatten all parameters into a single array
+      params = concatMap transactionToParams transactions
+
+    _ <- SQLite3.queryDB db sql params
+    pure unit
+
+  where
+  transactionToParams :: TransactionNewRow -> Array Foreign
+  transactionToParams (TransactionNewRow txn) = case txn.budgetId of
+    Nothing -> [] -- This should never happen as we validate before calling bulk insert
+    Just budgetId ->
+      [ JSON.writeImpl budgetId
+      , JSON.writeImpl txn.fromAccountId
+      , JSON.writeImpl txn.toAccountId
+      , JSON.writeImpl txn.uniqueFitId
+      , JSON.writeImpl txn.dateUnix
+      , JSON.writeImpl txn.descrOrig
+      , JSON.writeImpl txn.descr
+      , JSON.writeImpl txn.cents
+      ]
 
 -- | Update a transaction
 updateTransaction :: Int -> TransactionNewRow -> SQLite3.DBConnection -> Aff Unit
