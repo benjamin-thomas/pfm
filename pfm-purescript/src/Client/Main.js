@@ -102,3 +102,11 @@ export const setupScrollTracking = (callback) => () => {
 // Use the global logStateDiff from halogen-debug.js
 export const logStateDiff = ({ action, oldState, newState }) => window.logStateDiff({ action, oldState, newState });
 
+// Focus an element by CSS selector
+export const focusElementBySelector = (selector) => () => {
+  const element = document.querySelector(selector);
+  if (element) {
+    element.focus();
+  }
+};
+

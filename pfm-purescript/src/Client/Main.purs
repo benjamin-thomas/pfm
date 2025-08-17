@@ -49,6 +49,7 @@ import Shared.Types
   )
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
+import Web.UIEvent.KeyboardEvent as KeyboardEvent
 import Web.UIEvent.MouseEvent as MouseEvent
 import Yoga.JSON as JSON
 
@@ -167,7 +168,8 @@ type State =
   }
 
 data Action
-  = LoadAllData
+  = NoOp
+  | LoadAllData
   | LoadLedgerView
   | ToggleDarkMode
   | Initialize
@@ -822,6 +824,10 @@ render state =
     HH.div
       [ HP.class_ (HH.ClassName "context-menu")
       , HP.style $ "position: absolute; left: " <> show x <> "px; top: " <> show y <> "px; z-index: 1000;"
+      , HP.tabIndex 0 -- Make the element focusable so it can receive keyboard events
+      , HE.onKeyDown \event ->
+          if KeyboardEvent.key event == "Escape" then HideContextMenu
+          else NoOp
       ]
       [ HH.div
           [ HP.class_ (HH.ClassName "context-menu-debug") ]
@@ -838,6 +844,8 @@ render state =
 
 handleAction :: forall o m. MonadAff m => Action -> HalogenM State Action () o m Unit
 handleAction = case _ of
+  NoOp -> do
+    pure unit
   Initialize -> do
     -- Set up SSE subscription
     state <- H.get
@@ -1065,6 +1073,8 @@ handleAction = case _ of
         let contextMenuData = { transactionId: 0, x, y, soundexDescr, descr }
         H.liftEffect $ Console.log $ "[APP] ShowContextMenu: " <> show { x, y }
         H.modify_ \s -> s { contextMenu = Just contextMenuData }
+        -- Focus the context menu so it can receive keyboard events
+        liftEffect $ focusElementBySelector ".context-menu"
       Nothing -> do
         pure unit
 
@@ -1275,6 +1285,9 @@ foreign import toggleTheme :: Unit -> Effect Unit
 -- Foreign imports for dialog control
 foreign import dialogShow :: String -> Effect Unit
 foreign import dialogClose :: String -> Effect Unit
+
+-- Foreign import for focusing elements
+foreign import focusElementBySelector :: String -> Effect Unit
 
 -- Foreign import for date formatting
 foreign import formatUnixToDateTimeLocal :: Int -> String

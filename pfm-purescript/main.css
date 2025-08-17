@@ -1172,6 +1172,10 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     overflow: hidden;
 }
 
+.context-menu:focus {
+    outline: none;
+}
+
 .context-menu ul {
     list-style: none;
     margin: 0;
