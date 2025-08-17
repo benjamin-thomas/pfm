@@ -3,7 +3,6 @@ module Server.DB.Suggestions.Queries
   , SuggestionInsert
   , SuggestionRowDB(..)
   , batchApplySuggestions
-  , convertRowToSuggestion
   , getSuggestions
   ) where
 
@@ -11,20 +10,21 @@ import Prelude
 
 import Data.Array as Array
 import Data.Either (Either(..))
-import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe(..), fromMaybe)
-import Data.Traversable (traverse)
 import Data.Foldable (traverse_)
+import Data.Generic.Rep (class Generic)
+import Data.Map as Map
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple)
+import Data.Tuple.Nested ((/\))
 import Effect.Aff (Aff, throwError, attempt)
 import Effect.Class (liftEffect)
 import Effect.Console (log)
 import Effect.Exception (error)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
-import Server.DB.Transactions.Queries as TransactionQueries
-import Server.DB.Utils (fromDbRows)
 import SQLite3 (DBConnection, queryDB)
-import Shared.Types (Suggestion(..), SuggestedAccount(..), Transaction(..))
+import Server.DB.Utils (fromDbRows)
+import Shared.Types (SoundexToSuggestedAccounts(..), SuggestedAccount(..))
 import Yoga.JSON (class ReadForeign)
 import Yoga.JSON as JSON
 
@@ -45,21 +45,24 @@ type SuggestedAccountDB =
 
 -- | Get suggestions for transactions that go to unknown expense accounts
 -- | Based on soundex matching with existing categorized transactions
-getSuggestions :: Int -> Int -> DBConnection -> Aff (Array Suggestion)
+getSuggestions :: Int -> Int -> DBConnection -> Aff SoundexToSuggestedAccounts
 getSuggestions fromAccountId toAccountId db = do
   sql <- FS.readTextFile UTF8 "src/Server/DB/Transactions/suggestions.sql"
   rows <- queryDB db sql [ JSON.writeImpl fromAccountId, JSON.writeImpl toAccountId ]
-  suggestionRows <- fromDbRows "suggestions" identity rows -- TODO: I'm not sure about that, maybe we can simplify
-  traverse convertRowToSuggestion suggestionRows
+  suggestionRows <- fromDbRows "suggestions" identity rows
 
--- | Convert a database row to a Suggestion
-convertRowToSuggestion :: SuggestionRowDB -> Aff Suggestion
-convertRowToSuggestion (MkSuggestionRowDB row) = do
-  case JSON.readJSON row.suggested_accounts of
-    Left err -> throwError $ error $ "Failed to parse suggested accounts JSON: " <> show err
-    Right (accounts :: Array SuggestedAccountDB) -> do
-      let suggestedAccounts = map (\acc -> SuggestedAccount { accountId: acc.id, accountName: acc.name }) accounts
-      pure $ Suggestion { soundexDescr: row.soundex_descr, suggestedAccounts }
+  -- Parse each row and build tuples for the Map
+  tuples <- traverse parseRow suggestionRows
+  pure $ SoundexToSuggestedAccounts $ Map.fromFoldable tuples
+
+  where
+  parseRow :: SuggestionRowDB -> Aff (Tuple String (Array SuggestedAccount))
+  parseRow (MkSuggestionRowDB row) = do
+    case JSON.readJSON row.suggested_accounts of
+      Left err -> throwError $ error $ "Failed to parse suggested accounts JSON: " <> show err
+      Right (accounts :: Array SuggestedAccountDB) -> do
+        let suggestedAccounts = (\x -> SuggestedAccount { accountId: x.id, accountName: x.name }) <$> accounts
+        pure (row.soundex_descr /\ suggestedAccounts)
 
 -- | Represents a suggestion update from the frontend
 type SuggestionInsert =

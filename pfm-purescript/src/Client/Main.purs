@@ -16,6 +16,8 @@ import Data.Generic.Rep (class Generic)
 import Data.HTTP.Method (Method(..))
 import Data.Int (toNumber)
 import Data.Int as Int
+import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Number as Number
@@ -27,7 +29,6 @@ import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
-import Effect.Console (log)
 import Halogen (HalogenM)
 import Halogen as H
 import Halogen.Aff as HA
@@ -36,7 +37,16 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
-import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(LedgerViewRow), User, Suggestion(..), SuggestedAccount(..), SSE_Event(..))
+import Shared.Types
+  ( Account(..)
+  , AccountBalanceRead(..)
+  , LedgerViewRow(..)
+  , SSE_Event(..)
+  , SoundexToSuggestedAccounts(..)
+  , SuggestedAccount(..)
+  , User
+  , unknownExpenseAccountName
+  )
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
 import Web.UIEvent.MouseEvent as MouseEvent
@@ -79,7 +89,7 @@ type AppData =
   , ledgerRows :: Array LedgerViewRow
   , accounts :: Array Account
   , balances :: Array AccountBalanceRead
-  , suggestions :: Array Suggestion
+  , suggestions :: SoundexToSuggestedAccounts
   }
 
 -- Dialog state types
@@ -265,25 +275,24 @@ component = H.mkComponent
 
 -- | Collect all available suggestions from ledger rows and suggestions data
 -- | Returns an array of { transactionId, accountId } pairs for batch updating
-collectAllSuggestions :: Array LedgerViewRow -> Array Suggestion -> Array { transactionId :: Int, accountId :: Int }
+collectAllSuggestions :: Array LedgerViewRow -> SoundexToSuggestedAccounts -> Array { transactionId :: Int, accountId :: Int }
 collectAllSuggestions ledgerRows suggestions =
   Array.mapMaybe extractSuggestion ledgerRows
   where
   extractSuggestion :: LedgerViewRow -> Maybe { transactionId :: Int, accountId :: Int }
-  extractSuggestion (LedgerViewRow row) = do
-    -- Only suggest for transactions going to Unknown_EXPENSE (account 6)
-    if row.toAccountId == 6 then do
-      -- Find matching suggestion by soundex
-      suggestion <- Array.find (\(Suggestion s) -> s.soundexDescr == row.soundexDescr) suggestions
-      case suggestion of
-        Suggestion s -> do
-          -- Get the first (most likely) suggested account
-          firstSuggestion <- Array.head s.suggestedAccounts
-          case firstSuggestion of
-            SuggestedAccount account ->
-              Just { transactionId: row.transactionId, accountId: account.accountId }
-    else
-      Nothing
+  extractSuggestion row@(LedgerViewRow r) = do
+    SuggestedAccount account <- bestSuggestion row suggestions
+    Just { transactionId: r.transactionId, accountId: account.accountId }
+
+-- | Get the best suggestion for a ledger row
+-- | Returns the first suggested account if the transaction goes to Unknown_EXPENSE
+bestSuggestion :: LedgerViewRow -> SoundexToSuggestedAccounts -> Maybe SuggestedAccount
+bestSuggestion (LedgerViewRow row) (SoundexToSuggestedAccounts suggestionsMap) =
+  if row.toAccountName == unknownExpenseAccountName then do
+    suggestedAccounts <- Map.lookup row.soundexDescr suggestionsMap
+    Array.head suggestedAccounts
+  else
+    Nothing
 
 render :: forall m. State -> H.ComponentHTML Action () m
 render state =
@@ -399,11 +408,17 @@ render state =
                   [ HH.text $ show (Array.length appData.ledgerRows) <> " transactions" ]
               ]
           , HH.div [ HP.class_ (HH.ClassName "transaction-list__header-buttons") ]
-              [ HH.button
-                  [ HP.class_ (HH.ClassName "button button--secondary")
-                  , HE.onClick \_ -> ApplyAllSuggestions (collectAllSuggestions appData.ledgerRows appData.suggestions)
-                  ]
-                  [ HH.text "💡 Apply All Suggestions" ]
+              [ let
+                  availableSuggestions = collectAllSuggestions appData.ledgerRows appData.suggestions
+                in
+                  if Array.null availableSuggestions then
+                    HH.text ""
+                  else
+                    HH.button
+                      [ HP.class_ (HH.ClassName "button button--secondary")
+                      , HE.onClick \_ -> ApplyAllSuggestions availableSuggestions
+                      ]
+                      [ HH.text "💡 Apply All Suggestions" ]
               , HH.button
                   [ HP.class_ (HH.ClassName "button button--primary")
                   , HE.onClick \_ -> OpenCreateDialog
@@ -497,7 +512,7 @@ render state =
           ByDescr _ -> HH.text ""
       ]
 
-  renderLedgerRow :: Array Suggestion -> LedgerViewRow -> H.ComponentHTML Action () m
+  renderLedgerRow :: SoundexToSuggestedAccounts -> LedgerViewRow -> H.ComponentHTML Action () m
   renderLedgerRow suggestions (LedgerViewRow row) =
     let
       isPositive = row.flowCents > 0
@@ -507,10 +522,6 @@ render state =
         else
           "transaction-item__amount transaction-item__amount--negative"
       amountSign = if isPositive then "+" else ""
-
-      -- Find suggestion for this transaction
-      maybeSuggestion = findSuggestionForTransaction row.soundexDescr suggestions
-
     in
       HH.li
         [ HP.class_ (HH.ClassName "transaction-item")
@@ -542,9 +553,10 @@ render state =
                     ]
                 ]
             ]
-        -- Render suggestion if available and transaction goes to Unknown_EXPENSE
-        , case maybeSuggestion of
-            Just suggestion | row.toAccountName == "Unknown_EXPENSE" ->
+        -- Render suggestion if available
+        , case bestSuggestion (LedgerViewRow row) suggestions of
+            Nothing -> HH.text ""
+            Just suggestion ->
               renderTransactionSuggestion
                 { transactionId: row.transactionId
                 , fromAccountId: row.fromAccountId
@@ -553,44 +565,36 @@ render state =
                 , flowCents: row.flowCents
                 }
                 suggestion
-            _ -> HH.text ""
         ]
 
-  -- Helper function to find suggestion for a transaction based on soundex
-  findSuggestionForTransaction :: String -> Array Suggestion -> Maybe Suggestion
-  findSuggestionForTransaction soundexDescr suggestions =
-    Array.find (\(Suggestion s) -> s.soundexDescr == soundexDescr) suggestions
-
   -- Render the yellow suggestion bar for a transaction
-  renderTransactionSuggestion :: { transactionId :: Int, fromAccountId :: Int, dateUnix :: Int, descr :: String, flowCents :: Int } -> Suggestion -> H.ComponentHTML Action () m
-  renderTransactionSuggestion txnRow (Suggestion suggestion) =
-    case Array.head suggestion.suggestedAccounts of
-      Nothing -> HH.text ""
-      Just (SuggestedAccount account) ->
-        HH.div
-          [ HP.class_ (HH.ClassName "suggestion-container") ]
-          [ HH.div [ HP.class_ (HH.ClassName "suggestion-text") ]
-              [ HH.span [ HP.class_ (HH.ClassName "suggestion-icon") ] [ HH.text "💡" ]
-              , HH.span []
-                  [ HH.text "Suggested category: "
-                  , HH.strong [] [ HH.text account.accountName ]
-                  ]
-              ]
-          , HH.div [ HP.class_ (HH.ClassName "suggestion-actions") ]
-              [ HH.button
-                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-apply")
-                  , HE.handler (EventType "click") \event -> do
-                      ApplySuggestionItem event { transaction: txnRow, accountId: account.accountId }
-                  ]
-                  [ HH.text "Apply" ]
-              , HH.button
-                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ignore") ]
-                  [ HH.text "Ignore" ]
-              , HH.button
-                  [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ai") ]
-                  [ HH.text "Ask AI ✨" ]
+  renderTransactionSuggestion :: { transactionId :: Int, fromAccountId :: Int, dateUnix :: Int, descr :: String, flowCents :: Int } -> SuggestedAccount -> H.ComponentHTML Action () m
+  renderTransactionSuggestion txnRow (SuggestedAccount account) =
+    HH.div
+      [ HP.class_ (HH.ClassName "suggestion-container") ]
+      [ HH.div [ HP.class_ (HH.ClassName "suggestion-text") ]
+          [ HH.span [ HP.class_ (HH.ClassName "suggestion-icon") ] [ HH.text "💡" ]
+          , HH.span []
+              [ HH.text "Suggested category: "
+              , HH.strong [] [ HH.text account.accountName ]
               ]
           ]
+
+      , HH.div [ HP.class_ (HH.ClassName "suggestion-actions") ]
+          [ HH.button
+              [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-apply")
+              , HE.handler (EventType "click") \event -> do
+                  ApplySuggestionItem event { transaction: txnRow, accountId: account.accountId }
+              ]
+              [ HH.text "Apply" ]
+          , HH.button
+              [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ignore") ]
+              [ HH.text "Ignore" ]
+          , HH.button
+              [ HP.class_ (HH.ClassName "suggestion-btn suggestion-btn-ai") ]
+              [ HH.text "Ask AI ✨" ]
+          ]
+      ]
 
   renderDialog :: Dialog -> AppData -> H.ComponentHTML Action () m
   renderDialog dialog appData =
@@ -839,12 +843,12 @@ handleAction = case _ of
     state <- H.get
     sseEmitter <- createSSEEmitter (unwrap state.apiBaseUrl)
     _ <- H.subscribe sseEmitter
-    liftEffect $ log "[SSE] Subscription established"
+    liftEffect $ Console.log "[APP] SSE Subscription established"
 
     -- Set up scroll position subscription
     scrollEmitter <- createScrollEmitter
     _ <- H.subscribe scrollEmitter
-    liftEffect $ log "[SCROLL] Subscription established"
+    liftEffect $ Console.log "[APP] Scroll Subscription established"
 
     handleAction LoadAllData
   LoadAllData -> do
@@ -919,7 +923,7 @@ handleAction = case _ of
         -- Convert amount string to cents
         case parseAmount createState.amount of
           Nothing -> do
-            liftEffect $ log "Invalid amount format"
+            liftEffect $ Console.error "[APP] Invalid amount format"
           Just cents -> do
             -- Create transaction request body
             let
@@ -931,7 +935,7 @@ handleAction = case _ of
                 , descr: createState.description
                 , cents: cents
                 }
-            liftEffect $ log $ "Sending transaction: " <> JSON.writeJSON transactionData
+            liftEffect $ Console.log $ "[APP] Sending transaction: " <> JSON.writeJSON transactionData
             -- Send POST request
             result <- H.liftAff $ AX.request
               AX.defaultRequest
@@ -942,9 +946,9 @@ handleAction = case _ of
                 , responseFormat = ResponseFormat.string
                 }
             case result of
-              Left err -> liftEffect $ log $ "Error creating transaction: " <> AX.printError err
+              Left err -> liftEffect $ Console.error $ "[APP] Error creating transaction: " <> AX.printError err
               Right response -> do
-                liftEffect $ log $ "Transaction created successfully. Status: " <> show response.status
+                liftEffect $ Console.log $ "[APP] Transaction created successfully. Status: " <> show response.status
                 liftEffect $ dialogClose "transaction-dialog"
                 H.modify_ \s -> s { dialog = Nothing }
                 -- Refresh all data
@@ -955,7 +959,7 @@ handleAction = case _ of
         -- Convert amount string to cents
         case parseAmount editState.amount of
           Nothing -> do
-            liftEffect $ log "Invalid amount format"
+            liftEffect $ Console.error "[APP] Invalid amount format"
           Just cents -> do
             -- Create transaction update request body
             let
@@ -967,7 +971,7 @@ handleAction = case _ of
                 , descr: editState.description
                 , cents: cents
                 }
-            liftEffect $ log $ "Updating transaction " <> show editState.transactionId <> ": " <> JSON.writeJSON transactionData
+            liftEffect $ Console.log $ "[APP] Updating transaction " <> show editState.transactionId <> ": " <> JSON.writeJSON transactionData
             -- Send PUT request
             result <- H.liftAff $ AX.request
               AX.defaultRequest
@@ -978,9 +982,9 @@ handleAction = case _ of
                 , responseFormat = ResponseFormat.string
                 }
             case result of
-              Left err -> liftEffect $ log $ "Error updating transaction: " <> AX.printError err
+              Left err -> liftEffect $ Console.error $ "[APP] Error updating transaction: " <> AX.printError err
               Right response -> do
-                liftEffect $ log $ "Transaction updated successfully. Status: " <> show response.status
+                liftEffect $ Console.log $ "[APP] Transaction updated successfully. Status: " <> show response.status
                 liftEffect $ dialogClose "transaction-dialog"
                 H.modify_ \s -> s { dialog = Nothing }
                 -- Refresh all data
@@ -1018,10 +1022,10 @@ handleAction = case _ of
               }
           case result of
             Left err -> do
-              liftEffect $ log $ "Error deleting transaction: " <> AX.printError err
+              liftEffect $ Console.error $ "[APP] Error deleting transaction: " <> AX.printError err
             -- TODO: Show error in toast notification when implemented
             Right response -> do
-              liftEffect $ log $ "Transaction deleted successfully. Status: " <> show response.status
+              liftEffect $ Console.log $ "[APP] Transaction deleted successfully. Status: " <> show response.status
               liftEffect $ dialogClose "transaction-dialog"
               H.modify_ \s -> s { dialog = Nothing }
               -- Refresh all data
@@ -1059,7 +1063,7 @@ handleAction = case _ of
         let x = toNumber $ MouseEvent.pageX mouseEvent
         let y = toNumber $ MouseEvent.pageY mouseEvent
         let contextMenuData = { transactionId: 0, x, y, soundexDescr, descr }
-        H.liftEffect $ Console.log $ "ShowContextMenu: " <> show { x, y }
+        H.liftEffect $ Console.log $ "[APP] ShowContextMenu: " <> show { x, y }
         H.modify_ \s -> s { contextMenu = Just contextMenuData }
       Nothing -> do
         pure unit
@@ -1106,7 +1110,7 @@ handleAction = case _ of
         , descr: transaction.descr
         , cents: if transaction.flowCents < 0 then (-transaction.flowCents) else transaction.flowCents -- Ensure positive value
         }
-    liftEffect $ log $ "Applying suggestion: updating transaction " <> show transaction.transactionId <> " to account " <> show accountId
+    liftEffect $ Console.log $ "[APP] Applying suggestion: updating transaction " <> show transaction.transactionId <> " to account " <> show accountId
 
     -- Send PUT request to update the transaction
     result <- H.liftAff $ AX.request
@@ -1118,9 +1122,9 @@ handleAction = case _ of
         , responseFormat = ResponseFormat.string
         }
     case result of
-      Left err -> liftEffect $ log $ "Error applying suggestion: " <> AX.printError err
+      Left err -> liftEffect $ Console.error $ "[APP] Error applying suggestion: " <> AX.printError err
       Right response -> do
-        liftEffect $ log $ "Suggestion applied successfully. Status: " <> show response.status
+        liftEffect $ Console.log $ "[APP] Suggestion applied successfully. Status: " <> show response.status
         -- Refresh only the ledger view to show the updated transaction
         handleAction LoadLedgerView
 
@@ -1129,9 +1133,9 @@ handleAction = case _ of
     state <- H.get
 
     if Array.length suggestions == 0 then do
-      liftEffect $ log "No suggestions to apply"
+      liftEffect $ Console.log "[APP] No suggestions to apply"
     else do
-      liftEffect $ log $ "Applying " <> show (Array.length suggestions) <> " suggestions in batch"
+      liftEffect $ Console.log $ "[APP] Applying " <> show (Array.length suggestions) <> " suggestions in batch"
 
       -- Convert to the format expected by batchApplySuggestions
       let suggestionInserts = map (\s -> { transactionId: s.transactionId, toAccountId: s.accountId }) suggestions
@@ -1148,11 +1152,11 @@ handleAction = case _ of
 
       case result of
         Right response -> do
-          liftEffect $ log $ "All suggestions applied successfully. Status: " <> show response.status
+          liftEffect $ Console.log $ "[APP] All suggestions applied successfully. Status: " <> show response.status
           -- Refresh the ledger view to show the updated transactions
           handleAction LoadLedgerView
         Left err -> do
-          liftEffect $ log $ "Failed to apply batch suggestions: " <> AX.printError err
+          liftEffect $ Console.error $ "[APP] Failed to apply batch suggestions: " <> AX.printError err
 
   GotSSE_Event event -> do
     H.modify_ \s -> s { last_SSE_Event = Just event }
@@ -1162,7 +1166,6 @@ handleAction = case _ of
     -- Debug.debugger \_ ->
     case event of
       SSE_ClientShouldRefreshData -> do
-        liftEffect $ log "[SSE] Refreshing data due to SSE request"
         handleAction LoadAllData
       _ -> pure unit
 
@@ -1253,7 +1256,7 @@ fetchBalances apiBaseUrl = do
         Right (balances :: Array AccountBalanceRead) ->
           pure $ Right balances
 
-fetchSuggestions :: ApiBaseUrl -> Aff (Either String (Array Suggestion))
+fetchSuggestions :: ApiBaseUrl -> Aff (Either String SoundexToSuggestedAccounts)
 fetchSuggestions apiBaseUrl = do
   -- Fetch suggestions from the API
   -- Use typical account IDs: fromAccountId=2 (checking), toAccountId=6 (unknown expenses)
@@ -1263,7 +1266,7 @@ fetchSuggestions apiBaseUrl = do
     Right response ->
       case JSON.readJSON response.body of
         Left err -> pure $ Left $ "JSON decode error: " <> show err
-        Right (suggestions :: Array Suggestion) ->
+        Right (suggestions :: SoundexToSuggestedAccounts) ->
           pure $ Right suggestions
 
 -- Foreign import to call JavaScript theme toggle
@@ -1290,8 +1293,7 @@ type InitArgs = { isDarkMode :: Boolean, apiBaseUrl :: String }
 
 main :: InitArgs -> Effect Unit
 main initArgs = do
-  log "[CLIENT/PS] Booting up..."
-  log $ "[CLIENT/PS] API Base URL: " <> initArgs.apiBaseUrl
+  Console.log "[APP] Booting up..."
   HA.runHalogenAff do
     body <- HA.awaitBody
     runUI component initArgs body
@@ -1302,14 +1304,14 @@ createSSEEmitter apiBaseUrl = do
   { emitter, listener } <- H.liftEffect HS.create
 
   -- Set up SSE connection and notify listener with actions
-  _ <- H.liftEffect $ setupSSEConnection apiBaseUrl \payload -> do
+  _ <- H.liftEffect $ setupSSE_Connection apiBaseUrl \payload -> do
     case jsonParser payload of
       Left parseErr ->
-        liftEffect $ log $ "[SSE] Failed to parse JSON: " <> parseErr <> "\nPayload: " <> payload
+        liftEffect $ Console.error $ "[SSE] Failed to parse JSON: " <> parseErr <> "\nPayload: " <> payload
       Right json ->
         case decodeJson json of
           Left decodeErr ->
-            liftEffect $ log $ "[SSE] Failed to decode SSE_Event: " <> show decodeErr <> "\nJSON: " <> stringify json
+            liftEffect $ Console.error $ "[SSE] Failed to decode SSE_Event: " <> show decodeErr <> "\nJSON: " <> stringify json
           Right event ->
             HS.notify listener (GotSSE_Event event)
 
@@ -1323,12 +1325,10 @@ createScrollEmitter = do
   pure emitter
 
 -- | Set up EventSource connection from PureScript
-foreign import setupSSEConnection :: String -> (String -> Effect Unit) -> Effect Unit
+foreign import setupSSE_Connection :: String -> (String -> Effect Unit) -> Effect Unit
 
 -- | Set up scroll position tracking from JavaScript
 foreign import setupScrollTracking :: (Number -> Effect Unit) -> Effect Unit
-
-foreign import clearConsole :: Effect Unit
 
 -- | Visual state diffing using jsondiffpatch
 foreign import logStateDiff :: { action :: Action, oldState :: State, newState :: State } -> Effect Unit

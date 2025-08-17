@@ -62,28 +62,16 @@ export const restoreScrollY = (scrollY) => () => {
 };
 
 // SSE functionality using Halogen subscriptions
-export const setupSSEConnection = (apiBaseUrl) => (callback) => () => {
-  console.log('[SSE/JS] Setting up connection to:', apiBaseUrl + '/events');
-
+export const setupSSE_Connection = (apiBaseUrl) => (callback) => () => {
   const eventSource = new EventSource(apiBaseUrl + '/events');
 
-  eventSource.onopen = () => {
-    console.log('[SSE/JS] Connection opened');
-  };
-
-  // Handle all SSE messages through onmessage (no specific event types)
-  eventSource.onmessage = (event) => {
-    console.log('[SSE/JS] Received message:', event.data);
-    callback(event.data)();
-  };
-
+  // Send the SSE messages to the Halogen app
+  eventSource.onmessage = (event) => callback(event.data)();
   eventSource.onerror = (error) => console.error('[SSE/JS] Error:', error);
-
 
   return eventSource;
 };
 
-// Reusable debounce utility - prevents a function from being called too frequently
 const debounce = (fn, delayMs) => {
   let timeoutId = null;
 
@@ -93,43 +81,24 @@ const debounce = (fn, delayMs) => {
       clearTimeout(timeoutId);
     }
 
-    // Schedule the function to run after the delay
+    // Schedule the function to run after the specified delay
     timeoutId = setTimeout(fn, delayMs);
   };
 };
 
-// Scroll position tracking with debounced updates
 export const setupScrollTracking = (callback) => () => {
-  // Create a debounced version of our scroll handler
-  const debouncedScrollHandler = debounce(() => {
-    callback(window.scrollY)();
-  }, 100); // Wait 100ms after scrolling stops before updating
-
-  // Start listening for scroll events
-  window.addEventListener('scroll', debouncedScrollHandler);
+  const sendScroll = (scrollY) => callback(scrollY)();
 
   // Send the initial scroll position immediately
-  callback(window.scrollY)();
+  sendScroll(window.scrollY);
+
+  const onScroll = debounce(() => sendScroll(window.scrollY), 100);
+  window.addEventListener('scroll', onScroll);
 
   // Return cleanup function
-  return () => {
-    window.removeEventListener('scroll', debouncedScrollHandler);
-  };
-};
-
-export const clearConsole = () => {
-  // console.clear();
-  console.log("\n\n\n\n\n\n\n");
+  return () => window.removeEventListener('scroll', onScroll);
 };
 
 // Use the global logStateDiff from halogen-debug.js
-export const logStateDiff = ({ action, oldState, newState }) => {
-  // Check if halogen-debug.js is loaded
-  if (typeof window.logStateDiff === 'function') {
-    return window.logStateDiff({ action, oldState, newState });
-  } else {
-    // Return noop if not loaded
-    return () => {};
-  }
-};
+export const logStateDiff = ({ action, oldState, newState }) => window.logStateDiff({ action, oldState, newState });
 

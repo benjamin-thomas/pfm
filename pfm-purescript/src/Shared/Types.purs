@@ -2,13 +2,18 @@ module Shared.Types where
 
 import Prelude
 
-import Data.Generic.Rep (class Generic)
-import Data.Maybe (Maybe)
-import Data.Argonaut.Decode.Generic (genericDecodeJson)
-import Data.Argonaut.Encode.Generic (genericEncodeJson)
 import Data.Argonaut.Decode (class DecodeJson)
+import Data.Argonaut.Decode.Generic (genericDecodeJson)
 import Data.Argonaut.Encode (class EncodeJson)
+import Data.Argonaut.Encode.Generic (genericEncodeJson)
+import Data.Generic.Rep (class Generic)
+import Data.Map (Map)
+import Data.Maybe (Maybe)
 import Yoga.JSON (class ReadForeign, class WriteForeign)
+
+-- | The default account name for uncategorized expenses
+unknownExpenseAccountName :: String
+unknownExpenseAccountName = "Unknown_EXPENSE"
 
 newtype User = User
   { id :: Maybe Int
@@ -111,16 +116,18 @@ derive newtype instance Eq SuggestedAccount
 derive newtype instance ReadForeign SuggestedAccount
 derive newtype instance WriteForeign SuggestedAccount
 
-newtype Suggestion = Suggestion
-  { soundexDescr :: String
-  , suggestedAccounts :: Array SuggestedAccount
-  }
+-- newtype Suggestion = Suggestion
+--   { soundexDescr :: String
+--   , suggestedAccounts :: Array SuggestedAccount
+--   }
 
-derive instance Generic Suggestion _
-derive newtype instance Show Suggestion
-derive newtype instance Eq Suggestion
-derive newtype instance ReadForeign Suggestion
-derive newtype instance WriteForeign Suggestion
+newtype SoundexToSuggestedAccounts = SoundexToSuggestedAccounts (Map String (Array SuggestedAccount))
+
+derive instance Generic SoundexToSuggestedAccounts _
+derive newtype instance Show SoundexToSuggestedAccounts
+derive newtype instance Eq SoundexToSuggestedAccounts
+derive newtype instance ReadForeign SoundexToSuggestedAccounts
+derive newtype instance WriteForeign SoundexToSuggestedAccounts
 
 -- SSE Event types with automatic encoding/decoding
 data SSE_Event

@@ -36,6 +36,7 @@
   , "now"
   , "nullable"
   , "numbers"
+  , "ordered-collections"
   , "parallel"
   , "parsing"
   , "partial"

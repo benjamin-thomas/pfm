@@ -6,7 +6,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="main.css">
-    
+
     <!-- Load halogen-debug.js for development debugging -->
     <script src="./dev/halogen-debug.js"></script>
 </head>
@@ -32,17 +32,17 @@
                 throw new Error(`Unknown client URL: ${currentUrl}. Expected http://localhost:4001/ or http://localhost:4002/`);
         }
 
-        console.log(`[CLIENT/JS] Client URL: ${currentUrl}, Using API: ${apiBaseUrl}`);
-
         import { main } from './output/Client.Main/index.js';
         const colorTheme = localStorage.getItem('COLOR_THEME') || 'light';
         if (colorTheme === 'dark') {
             document.documentElement.classList.add('dark-theme');
         }
-        main({
+        const initArgs = {
             isDarkMode: colorTheme === 'dark',
-            apiBaseUrl: apiBaseUrl
-        })();
+            apiBaseUrl: apiBaseUrl,
+        };
+        console.log("[PRE-APP] initArgs: ", initArgs);
+        main(initArgs)();
     </script>
 </body>
 

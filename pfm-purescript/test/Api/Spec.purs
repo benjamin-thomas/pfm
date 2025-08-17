@@ -16,10 +16,12 @@ import Data.Traversable (traverse)
 import Server.DB.Account (AccountDB(..))
 import Server.DB.Budget (BudgetDB(..))
 import Server.DB.Category (CategoryDB(..))
+import Data.Map as Map
 import Shared.Types
   ( AccountBalanceRead(..)
   , LedgerViewRow(..)
-  , Suggestion(..)
+  , SoundexToSuggestedAccounts(..)
+  , SuggestedAccount(..)
   , Transaction
   )
 import Test.Spec (Spec, describe, it)
@@ -605,7 +607,7 @@ spec port = do
             shouldEqual (StatusCode 200) response.status
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (_ :: Array Suggestion) -> pure unit
+              Right (_ :: SoundexToSuggestedAccounts) -> pure unit
 
       it "should return actual suggestions based on similar transactions" do
         -- This test sets up transactions with similar descriptions and expects suggestions
@@ -648,13 +650,12 @@ spec port = do
             shouldEqual (StatusCode 200) response.status
             case JSON.readJSON response.body of
               Left err -> shouldEqual "Expected valid JSON" $ "Got JSON error: " <> show err
-              Right (suggestions :: Array Suggestion) -> do
+              Right (SoundexToSuggestedAccounts suggestionsMap) -> do
                 -- Should have at least one suggestion
-                Array.length suggestions `shouldSatisfy` (_ > 0)
+                Map.size suggestionsMap `shouldSatisfy` (_ > 0)
                 -- The suggestion should be for "GROCERY" related transactions (soundex G626)
-                case Array.head suggestions of
-                  Nothing -> shouldEqual "Expected at least one suggestion" "No suggestions found"
-                  Just (Suggestion suggestion) -> do
-                    suggestion.soundexDescr `shouldEqual` "G626" -- Soundex for "GROCERY"
+                case Map.lookup "G626" suggestionsMap of
+                  Nothing -> shouldEqual "Expected suggestion for GROCERY" "No suggestion found"
+                  Just suggestedAccounts -> do
                     -- Should suggest account 7 (Groceries) as the most common destination
-                    Array.length suggestion.suggestedAccounts `shouldSatisfy` (_ > 0)
+                    Array.length suggestedAccounts `shouldSatisfy` (_ > 0)
