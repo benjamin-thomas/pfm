@@ -2,34 +2,37 @@ module Server.Main (main, startServer, AppEnv(..)) where
 
 import Prelude hiding ((/))
 
+import Data.Argonaut.Core (stringify)
+import Data.Argonaut.Encode (encodeJson)
+import Data.Array as Array
+import Data.DateTime.Instant (unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (foldl)
 import Data.Int (fromString)
 import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..), split)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Traversable (traverse)
 import Effect (Effect)
-import Effect.Aff (Aff, delay, forkAff, runAff_)
+import Effect.Aff (Aff, delay, forkAff, runAff_, launchAff_)
 import Effect.Class (liftEffect)
-import Effect.Ref (Ref)
-import Effect.Ref as Ref
+import Effect.Class.Console as Console
 import Effect.Console (log)
 import Effect.Exception (throw, try)
 import Effect.Now (now)
-import Data.DateTime.Instant (unInstant)
-import Data.Time.Duration (Milliseconds(..))
-import Data.Argonaut.Core (stringify)
-import Data.Argonaut.Encode (encodeJson)
-import Shared.Types (SSE_Event(..))
+import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Foreign.Object as FO
-import HTTPurple (class Generic, Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, response', segment, serve, toString, (/))
+import HTTPurple (class Generic, ClosingHandler(..), Method(..), Request, ResponseM, RouteDuplex', ServerM, header, int, methodNotAllowed, mkRoute, noArgs, ok, response, response', segment, serve, toString, (/))
 import HTTPurple.Headers (empty)
 import HTTPurple.Response (Response)
 import Node.Encoding (Encoding(..))
-import Node.Process (lookupEnv)
+import Node.Process (lookupEnv, mkSignalH)
+import Node.Process as Process
+import Data.Posix.Signal (Signal(..))
+import Node.EventEmitter as EE
 import Node.Stream as Stream
-import Data.Array as Array
-import SQLite3 (DBConnection)
+import SQLite3 (DBConnection, closeDB)
 import Server.DB.Account as Account
 import Server.DB.Budgets.Queries as BudgetQueries
 import Server.DB.Category as Category
@@ -39,6 +42,7 @@ import Server.DB.Suggestions.Queries as SuggestionQueries
 import Server.DB.Transactions.Queries as TransactionQueries
 import Server.Database as DB
 import Server.Types.TransactionWrite (TransactionWrite(..))
+import Shared.Types (SSE_Event(..))
 import Yoga.JSON as JSON
 
 -- | Create SSE data line from an SSE_Event
@@ -137,35 +141,53 @@ main = do
   case appEnv of
     DevEnv -> do
       log "[SERVER] Starting in development mode"
-      startAppWithConfig { appEnv, port: 8081, dbPath: "./db.sqlite" }
+      startAppWithConfig appEnv { port: 8081, dbPath: "./db.sqlite" }
     TestEnv -> do
       log "[SERVER] Starting in e2e-test mode"
-      startAppWithConfig { appEnv, port: 8082, dbPath: "./db.e2e-test.sqlite" }
+      startAppWithConfig appEnv { port: 8082, dbPath: "./db.e2e-test.sqlite" }
 
-startAppWithConfig :: { appEnv :: AppEnv, port :: Int, dbPath :: String } -> Effect Unit
-startAppWithConfig { appEnv, port, dbPath } = do
-  log $ "[SERVER] Using database: " <> dbPath
-  log $ "[SERVER] Starting server on port: " <> show port
-  DB.initDatabase dbPath # runAff_
-    case _ of
-      Left err -> log $ "Failed to initialize database: " <> show err
-      Right db -> do
-        log "Database initialized successfully"
-        case appEnv of
-          TestEnv -> do
-            log "[SERVER] Resetting database schema and seeding with fixtures (test mode)"
-            DB.seedFromOfx "test/OfxParser/fixture.ofx" db # runAff_
-              case _ of
-                Left seedErr -> log $ "Failed to seed database: " <> show seedErr
-                Right _ -> do
-                  log "Database schema ready and seeded with test fixtures"
-                  void $ startServer port appEnv db
-          DevEnv -> do
-            log "[SERVER] Using existing database schema (dev mode)"
-            void $ startServer port appEnv db
+startAppWithConfig :: AppEnv -> { port :: Int, dbPath :: String } -> Effect Unit
+startAppWithConfig appEnv { port, dbPath } = do
+  log $ "[SERVER] Starting up with init args: " <> show { appEnv, port, dbPath }
 
-startServer :: Int -> AppEnv -> DBConnection -> ServerM
-startServer port appEnv db = do
+  -- Do all async work first, then start the server synchronously at the end
+  launchAff_ do
+    -- Initialize database
+    db <- DB.initDatabase dbPath
+    liftEffect $ log "Database initialized successfully"
+
+    -- Set up our own signal handlers with database cleanup immediately after DB init
+    let
+      makeSignalHandler :: Signal -> Effect Unit
+      makeSignalHandler signal = do
+        let header = "[" <> show signal <> "] "
+        Console.log $ header <> "Received " <> show signal <> ", shutting down..."
+        closeDB db # runAff_
+          case _ of
+            Left err -> do
+              Console.error $ header <> "Failed to close database: " <> show err
+              Process.exit' 1
+            Right _ -> do
+              Console.log $ header <> "Database closed successfully"
+              Process.exit' 0
+
+    liftEffect $ Process.process # EE.on_ (mkSignalH SIGINT) (makeSignalHandler SIGINT)
+    liftEffect $ Process.process # EE.on_ (mkSignalH SIGTERM) (makeSignalHandler SIGTERM)
+
+    -- Handle app environment specific setup
+    case appEnv of
+      TestEnv -> do
+        liftEffect $ log "[SERVER] Resetting database schema and seeding with fixtures (test mode)"
+        DB.seedFromOfx "test/OfxParser/fixture.ofx" db
+        liftEffect $ log "Database schema ready and seeded with test fixtures"
+      DevEnv -> do
+        liftEffect $ log "[SERVER] Using existing database schema (dev mode)"
+
+    -- Now start the server with the fully initialized database
+    void $ liftEffect $ startServer appEnv port db
+
+startServer :: AppEnv -> Int -> DBConnection -> ServerM
+startServer appEnv port db = do
   -- Create ref to track active SSE connections (shared across all requests)
   sseClientsRef <- liftEffect $ Ref.new []
   let
@@ -174,7 +196,7 @@ startServer port appEnv db = do
       corsMiddleware
         $ jsonMiddleware
         $ makeRouter appEnv db sseClientsRef
-  serve { port } { route, router }
+  serve { port, closingHandler: Just NoClosingHandler } { route, router }
 
 corsMiddleware :: (Request Route -> ResponseM) -> Request Route -> ResponseM
 corsMiddleware route' request = do

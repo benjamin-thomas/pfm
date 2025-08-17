@@ -9,8 +9,18 @@ fi
 
 SCRIPT="import('./output/Server.Main/index.js').then(m => m.main())"
 
+# Cleanup with:
+#   lsof ./db.e2e-test.sqlite
+#   pgrep/pkill -f 'node --inspect-brk'
+#   pgrep/pkill f '/output/Server.Main/index.js'
+#   pstree -asp 123
+#
+# Other utils
+#   - systemctl --user status
+#     - then look for a node process is a "vte-spawn"
+
 if [ "${DEBUG:-0}" = "1" ]; then
-    node --inspect-brk -e "${SCRIPT}"
+    exec node --inspect-brk -e "${SCRIPT}"
 else
-    node -e "${SCRIPT}"
+    exec node -e "${SCRIPT}"
 fi

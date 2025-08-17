@@ -51,7 +51,7 @@ main = do
                 Right _ -> do
                   port <- liftEffect getRandomPort
                   liftEffect $ log $ "Starting test server on port: " <> show port
-                  liftEffect $ void $ startServer port TestEnv db
+                  liftEffect $ void $ startServer TestEnv port db
                   liftEffect $ log "Test server started successfully"
                   let testConfig = defaultConfig -- { failFast = true }
 
