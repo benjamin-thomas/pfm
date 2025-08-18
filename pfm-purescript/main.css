@@ -1230,7 +1230,6 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     font-size: 14px;
     color: var(--color-text);
-    animation: notification-appear 0.3s ease-out;
     transition: all 0.3s ease;
 }
 
@@ -1336,6 +1335,11 @@ html.dark-theme .notification--failure {
     color: #fed7d7;
 }
 
+/* Entering state for entrance animation */
+.notification--entering {
+    animation: notification-appear 0.3s ease-out;
+}
+
 /* Removing state for exit animation */
 .notification--removing {
     animation: notification-disappear 0.3s ease-in forwards;
@@ -1362,6 +1366,7 @@ html.dark-theme .notification--failure {
         opacity: 0;
         transform: translateX(100%);
     }
+
 }
 
 @keyframes notification-pulse {

@@ -39,7 +39,6 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
-import Partial.Unsafe (unsafeCrashWith)
 import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(..), SSE_Event(..), SoundexToSuggestedAccounts(..), SuggestedAccount(..), User, unknownExpenseAccountName)
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
@@ -96,7 +95,8 @@ derive instance Eq NotificationStatus
 derive instance Ord NotificationStatus
 
 type Notification =
-  { clearOn :: Instant
+  { createdAt :: Instant
+  , clearIn :: Milliseconds  -- How long the notification should stay
   , kind :: NotificationKind
   , status :: NotificationStatus
   }
@@ -425,15 +425,25 @@ render state =
   renderSingleNotification :: Notification -> H.ComponentHTML Action () m
   renderSingleNotification notification =
     let
+      -- Calculate clearOn from createdAt + clearIn
+      (Milliseconds createdMs) = Instant.unInstant notification.createdAt
+      (Milliseconds clearInMs) = notification.clearIn
+      clearMs = createdMs + clearInMs
+      
       -- Check if notification should be animating out (clearOn time has passed)
-      (Milliseconds clearMs) = Instant.unInstant notification.clearOn
       (Milliseconds tickMs) = Instant.unInstant state.tick
       timeLeft = clearMs - tickMs
       isRemoving = clearMs <= tickMs
       removingClass = if isRemoving then " notification--removing" else ""
-      fullClassName = "notification notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status <> removingClass
+      
+      -- Check if notification is entering (within first 300ms of creation)
+      timeSinceCreation = tickMs - createdMs
+      isEntering = timeSinceCreation < 300.0
+      enteringClass = if isEntering then " notification--entering" else ""
+      
+      fullClassName = "notification notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status <> enteringClass <> removingClass
 
-      shouldDebug = true
+      shouldDebug = false
     in
       HH.div
         [ HP.class_ (HH.ClassName "notification-wrapper") ]
@@ -982,38 +992,38 @@ render state =
 
 -- Notification helper functions
 
-computeClearOn :: forall m. MonadAff m => Milliseconds -> m Instant
-computeClearOn ms = do
-  currentTime <- liftEffect now
-  case Instant.instant (Instant.unInstant currentTime <> ms) of
-    Nothing ->
-      unsafeCrashWith "computeClearOn: this should never happen!"
-    Just clearOn ->
-      pure clearOn
-
 newNotification :: forall o m. MonadAff m => { clearIn :: Milliseconds, kind :: NotificationKind, status :: NotificationStatus } -> HalogenM State Action () o m Unit
 newNotification { clearIn, kind, status } = do
   -- First remove any existing notification of this kind to prevent duplicates
   removeNotificationByKind kind
 
   -- Then add the new notification
-  clearOn <- computeClearOn clearIn
+  createdAt <- liftEffect now
   H.modify_ \s -> s
     { notifications =
-        Array.snoc s.notifications { clearOn, kind, status }
+        Array.snoc s.notifications { createdAt, clearIn, kind, status }
     }
 
 setNotification :: forall o m. MonadAff m => { clearIn :: Milliseconds, kind :: NotificationKind, status :: NotificationStatus } -> HalogenM State Action () o m Unit
 setNotification { clearIn, kind, status } = do
-  clearOn <- computeClearOn clearIn
+  currentTime <- liftEffect now
   H.modify_ \s -> s
     { notifications =
         map
           ( \n ->
-              if n.kind == kind then n
-                { clearOn = clearOn
-                , status = status
-                }
+              if n.kind == kind then 
+                let
+                  -- Calculate how long the notification has already been showing
+                  (Milliseconds nowMs) = Instant.unInstant currentTime
+                  (Milliseconds createdMs) = Instant.unInstant n.createdAt
+                  alreadyShownMs = nowMs - createdMs
+                  -- The new clearIn should be: time already shown + desired additional time
+                  newClearIn = Milliseconds (alreadyShownMs + unwrap clearIn)
+                in
+                  n { clearIn = newClearIn
+                    , status = status
+                    -- Keep the original createdAt time
+                    }
               else n
           )
           s.notifications
@@ -1049,9 +1059,11 @@ handleAction = case _ of
           , notifications = Array.filter
               ( \n ->
                   let
-                    (Milliseconds clearMs) = Instant.unInstant n.clearOn
+                    (Milliseconds createdMs) = Instant.unInstant n.createdAt
+                    (Milliseconds clearInMs) = n.clearIn
+                    clearMs = createdMs + clearInMs
                     (Milliseconds nowMs) = Instant.unInstant currentTime
-                    destroyAnimationDuration = 2000.0
+                    destroyAnimationDuration = 1000.0
                   in
                     clearMs > nowMs - destroyAnimationDuration
               )
