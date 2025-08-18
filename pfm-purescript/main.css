@@ -1206,3 +1206,172 @@ html.dark-theme .transaction-item:hover .suggestion-container {
     background-color: var(--color-hover);
     border-bottom: 1px solid var(--context-menu-border);
 }
+
+/* Notifications System */
+.notifications-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    max-width: 350px;
+}
+
+.notification {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    padding: var(--space-md);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    font-size: 14px;
+    color: var(--color-text);
+    animation: notification-appear 0.3s ease-out;
+    transition: all 0.3s ease;
+}
+
+.notification:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.notification__icon {
+    font-size: 16px;
+    animation: notification-pulse 1.5s ease-in-out infinite;
+}
+
+.notification__text {
+    flex: 1;
+    font-weight: 500;
+    min-width: 150px; /* Prevent width jumps when text changes */
+}
+
+.notification__dismiss {
+    background: none;
+    border: none;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.notification__dismiss:hover {
+    background-color: var(--color-hover);
+    color: var(--color-text);
+}
+
+.notification-wrapper {
+    margin-bottom: var(--space-sm);
+}
+
+.notification__debug-header {
+    font-size: 9px;
+    font-family: monospace;
+    color: var(--color-text-tertiary);
+    background: var(--color-card-bg);
+    padding: 2px 8px;
+    border-radius: 3px 3px 0 0;
+    white-space: nowrap;
+    text-align: center;
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* Debug header inherits the same left border colors as notifications */
+/* Reuse existing notification border styles */
+.notification__debug-header.notification--saving,
+.notification__debug-header.notification--refreshing,
+.notification__debug-header.notification--deleting {
+    border-left: 4px solid var(--color-primary);
+}
+
+.notification__debug-header.notification--pending {
+    border-left: 4px solid #f39c12; /* Yellow/Orange - warning color */
+}
+
+.notification__debug-header.notification--success {
+    border-left: 4px solid var(--color-positive); /* Green */
+}
+
+.notification__debug-header.notification--failure {
+    border-left: 4px solid var(--color-negative); /* Red */
+}
+
+/* Notification type variants */
+.notification--saving {
+    border-left: 4px solid var(--color-primary);
+}
+
+.notification--refreshing {
+    border-left: 4px solid var(--color-primary);
+}
+
+.notification--deleting {
+    border-left: 4px solid var(--color-primary);
+}
+
+/* Notification status variants */
+.notification--pending {
+    border-left: 4px solid #f39c12; /* Yellow/Orange - warning color */
+}
+
+.notification--success {
+    border-left: 4px solid var(--color-positive); /* Green */
+}
+
+.notification--failure {
+    background: #fff5f5;
+    border-left: 4px solid var(--color-negative); /* Red */
+    color: #c53030;
+}
+
+html.dark-theme .notification--failure {
+    background: #2d1b1b;
+    color: #fed7d7;
+}
+
+/* Removing state for exit animation */
+.notification--removing {
+    animation: notification-disappear 0.3s ease-in forwards;
+}
+
+/* Animations */
+@keyframes notification-appear {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes notification-disappear {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+@keyframes notification-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.8;
+    }
+}
+

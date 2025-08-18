@@ -6,29 +6,31 @@ import Affjax.RequestBody as RequestBody
 import Affjax.RequestHeader as RequestHeader
 import Affjax.ResponseFormat as ResponseFormat
 import Affjax.Web as AX
+import Control.Monad.Rec.Class (forever)
 import Control.Parallel (parallel, sequential)
 import Data.Argonaut.Core (stringify)
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
+import Data.DateTime.Instant (Instant)
+import Data.DateTime.Instant as Instant
 import Data.Either (Either(..))
 import Data.Generic.Rep (class Generic)
 import Data.HTTP.Method (Method(..))
 import Data.Int (toNumber)
 import Data.Int as Int
-import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Newtype (class Newtype, unwrap)
 import Data.Number as Number
 import Data.String as String
 import Data.Time.Duration (Milliseconds(..))
-import Debug as Debug
 import Effect (Effect)
 import Effect.Aff (Aff, delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
+import Effect.Now (now)
 import Halogen (HalogenM)
 import Halogen as H
 import Halogen.Aff as HA
@@ -37,16 +39,8 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import Halogen.VDom.Driver (runUI)
-import Shared.Types
-  ( Account(..)
-  , AccountBalanceRead(..)
-  , LedgerViewRow(..)
-  , SSE_Event(..)
-  , SoundexToSuggestedAccounts(..)
-  , SuggestedAccount(..)
-  , User
-  , unknownExpenseAccountName
-  )
+import Partial.Unsafe (unsafeCrashWith)
+import Shared.Types (Account(..), AccountBalanceRead(..), LedgerViewRow(..), SSE_Event(..), SoundexToSuggestedAccounts(..), SuggestedAccount(..), User, unknownExpenseAccountName)
 import Web.Event.Event (Event, EventType(..))
 import Web.Event.Event as Event
 import Web.UIEvent.KeyboardEvent as KeyboardEvent
@@ -80,10 +74,32 @@ data Status a
   | Loaded a
 
 derive instance Generic (Status a) _
-instance Show a => Show (Status a) where
-  show Loading = "Loading"
-  show (Failed err) = "Failed: " <> err
-  show (Loaded a) = "Loaded: " <> show a
+
+-- User notification types
+data NotificationKind
+  = IsSaving
+  | IsRefreshing
+  | IsDeleting
+
+derive instance Generic NotificationKind _
+derive instance Eq NotificationKind
+derive instance Ord NotificationKind
+
+-- Notification status for visual state transitions
+data NotificationStatus
+  = Pending -- Yellow border (operation in progress)
+  | Success -- Green border (operation completed successfully)
+  | Failure -- Red border (operation failed)
+
+derive instance Generic NotificationStatus _
+derive instance Eq NotificationStatus
+derive instance Ord NotificationStatus
+
+type Notification =
+  { clearOn :: Instant
+  , kind :: NotificationKind
+  , status :: NotificationStatus
+  }
 
 type AppData =
   { users :: Array User
@@ -165,6 +181,8 @@ type State =
   , contextMenu :: Maybe ContextMenuData
   , scrollY :: Number
   , last_SSE_Event :: Maybe SSE_Event
+  , notifications :: Array Notification
+  , tick :: Instant
   }
 
 data Action
@@ -216,6 +234,12 @@ I'm not differentiating any event types currently.
    -}
   | GotSSE_Event SSE_Event
   | GotScrollY Number
+  | DismissNotification NotificationKind
+  | TestRefresh
+  | TestSaveSuccess
+  | TestSaveError
+  | TestDeleteSuccess
+  | TestDeleteError
 
 -- Parallel data fetching function
 fetchAllData :: ApiBaseUrl -> SearchForm -> Aff (Either String AppData)
@@ -250,30 +274,33 @@ handleAction' action = do
   liftEffect $ logStateDiff { action, oldState, newState }
   pure result
 
-component :: forall q o m. MonadAff m => H.Component q InitArgs o m
-component = H.mkComponent
-  { initialState: \{ isDarkMode, apiBaseUrl } ->
-      { data: Loading
-      , isDarkMode
-      , dialog: Nothing
-      , apiBaseUrl: mkApiBaseUrl apiBaseUrl
-      , searchForm:
-          { searchBy: ByDescr ""
-          , minAmount: ""
-          , maxAmount: ""
-          , filterUnknownExpenses: false
-          }
-      , debounceTimerId: Nothing
-      , contextMenu: Nothing
-      , scrollY: 0.0
-      , last_SSE_Event: Nothing
-      }
-  , render
-  , eval: H.mkEval $ H.defaultEval
-      { handleAction = handleAction'
-      , initialize = Just Initialize
-      }
-  }
+component :: forall q o m. MonadAff m => Instant -> H.Component q InitArgs o m
+component now' =
+  H.mkComponent
+    { initialState: \{ isDarkMode, apiBaseUrl } ->
+        { data: Loading
+        , isDarkMode
+        , dialog: Nothing
+        , apiBaseUrl: mkApiBaseUrl apiBaseUrl
+        , searchForm:
+            { searchBy: ByDescr ""
+            , minAmount: ""
+            , maxAmount: ""
+            , filterUnknownExpenses: false
+            }
+        , debounceTimerId: Nothing
+        , contextMenu: Nothing
+        , scrollY: 0.0
+        , last_SSE_Event: Nothing
+        , notifications: []
+        , tick: now'
+        }
+    , render
+    , eval: H.mkEval $ H.defaultEval
+        { handleAction = handleAction'
+        , initialize = Just Initialize
+        }
+    }
 
 -- | Collect all available suggestions from ledger rows and suggestions data
 -- | Returns an array of { transactionId, accountId } pairs for batch updating
@@ -317,6 +344,36 @@ render state =
         ]
         [ HH.text (if state.isDarkMode then "☀️" else "🌙") ]
 
+    -- Test buttons for notification scenarios
+    , HH.div
+        [ HP.style "margin-left: 10px; display: flex; gap: 5px; flex-wrap: wrap;" ]
+        [ HH.button
+            [ HP.style "font-size: 12px; padding: 4px 8px;"
+            , HE.onClick \_ -> TestRefresh
+            ]
+            [ HH.text "Test Refresh" ]
+        , HH.button
+            [ HP.style "font-size: 12px; padding: 4px 8px;"
+            , HE.onClick \_ -> TestSaveSuccess
+            ]
+            [ HH.text "Save ✓" ]
+        , HH.button
+            [ HP.style "font-size: 12px; padding: 4px 8px;"
+            , HE.onClick \_ -> TestSaveError
+            ]
+            [ HH.text "Save ✗" ]
+        , HH.button
+            [ HP.style "font-size: 12px; padding: 4px 8px;"
+            , HE.onClick \_ -> TestDeleteSuccess
+            ]
+            [ HH.text "Delete ✓" ]
+        , HH.button
+            [ HP.style "font-size: 12px; padding: 4px 8px;"
+            , HE.onClick \_ -> TestDeleteError
+            ]
+            [ HH.text "Delete ✗" ]
+        ]
+
     -- Main content based on data loading status
     , case state.data of
         Loading ->
@@ -350,8 +407,89 @@ render state =
               Just contextData -> renderContextMenu contextData
               Nothing -> HH.text ""
           ]
+
+    -- Render notifications
+    , renderNotifications state.notifications
     ]
   where
+
+  renderNotifications :: Array Notification -> H.ComponentHTML Action () m
+  renderNotifications notifications =
+    if Array.null notifications then
+      HH.text ""
+    else
+      HH.div
+        [ HP.class_ (HH.ClassName "notifications-container") ]
+        (notifications <#> renderSingleNotification)
+
+  renderSingleNotification :: Notification -> H.ComponentHTML Action () m
+  renderSingleNotification notification =
+    let
+      -- Check if notification should be animating out (clearOn time has passed)
+      (Milliseconds clearMs) = Instant.unInstant notification.clearOn
+      (Milliseconds tickMs) = Instant.unInstant state.tick
+      timeLeft = clearMs - tickMs
+      isRemoving = clearMs <= tickMs
+      removingClass = if isRemoving then " notification--removing" else ""
+      fullClassName = "notification notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status <> removingClass
+
+      shouldDebug = true
+    in
+      HH.div
+        [ HP.class_ (HH.ClassName "notification-wrapper") ]
+        [ if not shouldDebug then HH.text ""
+          else HH.div
+            [ HP.class_ (HH.ClassName ("notification__debug-header notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status)) ]
+            [ HH.text $ "DEBUG: diff=" <> show (Int.floor timeLeft) <> "ms" ]
+        , HH.div
+            [ HP.class_ (HH.ClassName fullClassName) ]
+            [ HH.span
+                [ HP.class_ (HH.ClassName "notification__icon") ]
+                [ HH.text $ getNotificationIcon notification.kind ]
+            , HH.span
+                [ HP.class_ (HH.ClassName "notification__text") ]
+                [ HH.text $ getNotificationText notification.kind notification.status ]
+            , HH.button
+                [ HP.class_ (HH.ClassName "notification__dismiss")
+                , HE.onClick \_ -> DismissNotification notification.kind
+                , HP.title "Dismiss notification"
+                ]
+                [ HH.text "×" ]
+            ]
+        ]
+
+  getNotificationIcon :: NotificationKind -> String
+  getNotificationIcon = case _ of
+    IsSaving -> "💾"
+    IsRefreshing -> "🔄"
+    IsDeleting -> "🗑️"
+
+  getNotificationText :: NotificationKind -> NotificationStatus -> String
+  getNotificationText kind status = case kind of
+    IsSaving -> case status of
+      Pending -> "Saving..."
+      Success -> "Saved successfully"
+      Failure -> "Failed to save"
+    IsRefreshing -> case status of
+      Pending -> "Refreshing data..."
+      Success -> "Data refreshed"
+      Failure -> "Failed to refresh"
+    IsDeleting -> case status of
+      Pending -> "Deleting..."
+      Success -> "Deleted successfully"
+      Failure -> "Failed to delete"
+
+  getNotificationClass :: NotificationKind -> String
+  getNotificationClass = case _ of
+    IsSaving -> "saving"
+    IsRefreshing -> "refreshing"
+    IsDeleting -> "deleting"
+
+  getStatusClass :: NotificationStatus -> String
+  getStatusClass = case _ of
+    Pending -> "pending"
+    Success -> "success"
+    Failure -> "failure"
 
   renderBalanceCards :: AppData -> H.ComponentHTML Action () m
   renderBalanceCards appData =
@@ -842,6 +980,49 @@ render state =
           ]
       ]
 
+-- Notification helper functions
+
+computeClearOn :: forall m. MonadAff m => Milliseconds -> m Instant
+computeClearOn ms = do
+  currentTime <- liftEffect now
+  case Instant.instant (Instant.unInstant currentTime <> ms) of
+    Nothing ->
+      unsafeCrashWith "computeClearOn: this should never happen!"
+    Just clearOn ->
+      pure clearOn
+
+newNotification :: forall o m. MonadAff m => { clearIn :: Milliseconds, kind :: NotificationKind, status :: NotificationStatus } -> HalogenM State Action () o m Unit
+newNotification { clearIn, kind, status } = do
+  -- First remove any existing notification of this kind to prevent duplicates
+  removeNotificationByKind kind
+
+  -- Then add the new notification
+  clearOn <- computeClearOn clearIn
+  H.modify_ \s -> s
+    { notifications =
+        Array.snoc s.notifications { clearOn, kind, status }
+    }
+
+setNotification :: forall o m. MonadAff m => { clearIn :: Milliseconds, kind :: NotificationKind, status :: NotificationStatus } -> HalogenM State Action () o m Unit
+setNotification { clearIn, kind, status } = do
+  clearOn <- computeClearOn clearIn
+  H.modify_ \s -> s
+    { notifications =
+        map
+          ( \n ->
+              if n.kind == kind then n
+                { clearOn = clearOn
+                , status = status
+                }
+              else n
+          )
+          s.notifications
+    }
+
+removeNotificationByKind :: forall o m. MonadAff m => NotificationKind -> HalogenM State Action () o m Unit
+removeNotificationByKind kind = do
+  H.modify_ \s -> s { notifications = Array.filter (\n -> n.kind /= kind) s.notifications }
+
 handleAction :: forall o m. MonadAff m => Action -> HalogenM State Action () o m Unit
 handleAction = case _ of
   NoOp -> do
@@ -858,15 +1039,41 @@ handleAction = case _ of
     _ <- H.subscribe scrollEmitter
     liftEffect $ Console.log "[APP] Scroll Subscription established"
 
+    -- Start notification cleanup loop (automatically cleaned up on component finalize)
+    _ <- H.fork do
+      forever do
+        H.liftAff $ delay (Milliseconds 1000.0)
+        currentTime <- liftEffect now
+        H.modify_ \s -> s
+          { tick = currentTime
+          , notifications = Array.filter
+              ( \n ->
+                  let
+                    (Milliseconds clearMs) = Instant.unInstant n.clearOn
+                    (Milliseconds nowMs) = Instant.unInstant currentTime
+                    destroyAnimationDuration = 2000.0
+                  in
+                    clearMs > nowMs - destroyAnimationDuration
+              )
+              s.notifications
+          }
+    liftEffect $ Console.log "[APP] Notification cleanup loop started"
+
+    -- Set loading state only during initialization
+    H.modify_ \s -> s { data = Loading }
     handleAction LoadAllData
   LoadAllData -> do
-    H.modify_ \s -> s { data = Loading }
     state <- H.get
     result <- H.liftAff $ fetchAllData state.apiBaseUrl state.searchForm
     case result of
-      Left err -> H.modify_ \s -> s { data = Failed err }
+      Left err -> do
+        -- Update refreshing notification to error status
+        setNotification { clearIn: Milliseconds 10000.0, kind: IsRefreshing, status: Failure }
+        H.modify_ \s -> s { data = Failed err }
       Right appData -> do
         H.liftEffect $ restoreScrollY state.scrollY -- we may receive an SSE event for example
+        -- Update refreshing notification to success status
+        setNotification { clearIn: Milliseconds 2000.0, kind: IsRefreshing, status: Success }
         H.modify_ \s -> s { data = Loaded appData }
   LoadLedgerView -> do
     state <- H.get
@@ -924,6 +1131,8 @@ handleAction = case _ of
 
   SaveDialog -> do
     state <- H.get
+    -- Add saving notification immediately
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Pending }
     case state.dialog of
       Just (CreateDialog createState) -> do
         -- Parse datetime-local to Unix timestamp
@@ -954,10 +1163,13 @@ handleAction = case _ of
                 , responseFormat = ResponseFormat.string
                 }
             case result of
-              Left err -> liftEffect $ Console.error $ "[APP] Error creating transaction: " <> AX.printError err
+              Left err -> do
+                liftEffect $ Console.error $ "[APP] Error creating transaction: " <> AX.printError err
+                setNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Failure }
               Right response -> do
                 liftEffect $ Console.log $ "[APP] Transaction created successfully. Status: " <> show response.status
                 liftEffect $ dialogClose "transaction-dialog"
+                setNotification { clearIn: Milliseconds 2000.0, kind: IsSaving, status: Success } -- FIXME: double render here
                 H.modify_ \s -> s { dialog = Nothing }
                 -- Refresh all data
                 handleAction LoadAllData
@@ -990,10 +1202,13 @@ handleAction = case _ of
                 , responseFormat = ResponseFormat.string
                 }
             case result of
-              Left err -> liftEffect $ Console.error $ "[APP] Error updating transaction: " <> AX.printError err
+              Left err -> do
+                liftEffect $ Console.error $ "[APP] Error updating transaction: " <> AX.printError err
+                setNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Failure }
               Right response -> do
                 liftEffect $ Console.log $ "[APP] Transaction updated successfully. Status: " <> show response.status
                 liftEffect $ dialogClose "transaction-dialog"
+                setNotification { clearIn: Milliseconds 2000.0, kind: IsSaving, status: Success } -- FIXME: double render here
                 H.modify_ \s -> s { dialog = Nothing }
                 -- Refresh all data
                 handleAction LoadAllData
@@ -1021,6 +1236,8 @@ handleAction = case _ of
       Just (EditDialog editState) -> do
         confirmed <- liftEffect $ confirmDialog "Are you sure you want to delete this transaction?"
         when confirmed do
+          -- Add deleting notification immediately
+          newNotification { clearIn: Milliseconds 10000.0, kind: IsDeleting, status: Pending }
           -- Send DELETE request
           result <- H.liftAff $ AX.request
             AX.defaultRequest
@@ -1031,10 +1248,11 @@ handleAction = case _ of
           case result of
             Left err -> do
               liftEffect $ Console.error $ "[APP] Error deleting transaction: " <> AX.printError err
-            -- TODO: Show error in toast notification when implemented
+              setNotification { clearIn: Milliseconds 10000.0, kind: IsDeleting, status: Failure }
             Right response -> do
               liftEffect $ Console.log $ "[APP] Transaction deleted successfully. Status: " <> show response.status
               liftEffect $ dialogClose "transaction-dialog"
+              setNotification { clearIn: Milliseconds 2000.0, kind: IsDeleting, status: Success }
               H.modify_ \s -> s { dialog = Nothing }
               -- Refresh all data
               handleAction LoadAllData
@@ -1176,11 +1394,41 @@ handleAction = case _ of
     -- Debug.debugger \_ ->
     case event of
       SSE_ClientShouldRefreshData -> do
+        newNotification { clearIn: Milliseconds 10000.0, kind: IsRefreshing, status: Pending }
         handleAction LoadAllData
       _ -> pure unit
 
   GotScrollY scrollY -> do
     H.modify_ \s -> s { scrollY = scrollY }
+
+  DismissNotification notification -> do
+    removeNotificationByKind notification
+
+  TestRefresh -> do
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsRefreshing, status: Pending }
+    -- Add a delay to simulate slow loading for demo purposes
+    H.liftAff $ delay (Milliseconds 300.0)
+    handleAction LoadAllData
+
+  TestSaveSuccess -> do
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Pending }
+    H.liftAff $ delay (Milliseconds 2000.0)
+    setNotification { clearIn: Milliseconds 2000.0, kind: IsSaving, status: Success }
+
+  TestSaveError -> do
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Pending }
+    H.liftAff $ delay (Milliseconds 1500.0)
+    setNotification { clearIn: Milliseconds 10000.0, kind: IsSaving, status: Failure }
+
+  TestDeleteSuccess -> do
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsDeleting, status: Pending }
+    H.liftAff $ delay (Milliseconds 2000.0)
+    setNotification { clearIn: Milliseconds 2000.0, kind: IsDeleting, status: Success }
+
+  TestDeleteError -> do
+    newNotification { clearIn: Milliseconds 10000.0, kind: IsDeleting, status: Pending }
+    H.liftAff $ delay (Milliseconds 2000.0)
+    setNotification { clearIn: Milliseconds 10000.0, kind: IsDeleting, status: Failure }
 
 findTransaction :: Int -> Array LedgerViewRow -> Maybe LedgerViewRow
 findTransaction transactionId rows =
@@ -1307,9 +1555,10 @@ type InitArgs = { isDarkMode :: Boolean, apiBaseUrl :: String }
 main :: InitArgs -> Effect Unit
 main initArgs = do
   Console.log "[APP] Booting up..."
+  tick <- now
   HA.runHalogenAff do
     body <- HA.awaitBody
-    runUI component initArgs body
+    runUI (component tick) initArgs body
 
 -- | Create an SSE subscription emitter
 createSSEEmitter :: forall m. MonadAff m => String -> m (HS.Emitter Action)

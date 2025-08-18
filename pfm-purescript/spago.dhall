@@ -48,6 +48,7 @@
   , "spec-node"
   , "st"
   , "strings"
+  , "tailrec"
   , "transformers"
   , "tuples"
   , "web-dom"

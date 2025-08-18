@@ -21,11 +21,59 @@
   let inspectorEverUsed = false;
   let inspectorOverlay = null;
   
+  // Position management
+  const POSITIONS = ['tr', 'br', 'bl', 'tl'];
+  let currentPosition = localStorage.getItem('halogen-inspector-position') || 'tr';
+  
+  // Ensure valid position
+  if (!POSITIONS.includes(currentPosition)) {
+    currentPosition = 'tr';
+  }
+  
   // Snapshot functionality
   let lastState = null;
   let startState = null;
   let endState = null;
   let accumulatedActions = [];
+
+  // Get position styles
+  const getPositionStyles = (position) => {
+    const positions = {
+      'tr': { top: '10px', right: '10px' },
+      'br': { bottom: '10px', right: '10px' },
+      'bl': { bottom: '10px', left: '10px' },
+      'tl': { top: '10px', left: '10px' }
+    };
+    return positions[position];
+  };
+
+  // Cycle through positions
+  const cyclePosition = () => {
+    const currentIndex = POSITIONS.indexOf(currentPosition);
+    const nextIndex = (currentIndex + 1) % POSITIONS.length;
+    currentPosition = POSITIONS[nextIndex];
+    
+    // Save to localStorage
+    localStorage.setItem('halogen-inspector-position', currentPosition);
+    
+    // Update position
+    updateInspectorPosition();
+  };
+
+  // Update position without changing other styles
+  const updateInspectorPosition = () => {
+    if (!inspectorOverlay) return;
+    
+    // Clear all position properties
+    inspectorOverlay.style.top = '';
+    inspectorOverlay.style.right = '';
+    inspectorOverlay.style.bottom = '';
+    inspectorOverlay.style.left = '';
+    
+    // Apply new position
+    const position = getPositionStyles(currentPosition);
+    Object.assign(inspectorOverlay.style, position);
+  };
 
   // Create visual debug overlay
   const createInspectorOverlay = () => {
@@ -34,8 +82,6 @@
     inspectorOverlay = document.createElement('div');
     inspectorOverlay.style.cssText = `
       position: fixed;
-      top: 10px;
-      right: 10px;
       z-index: 9999;
       background: rgba(0, 0, 0, 0.8);
       color: white;
@@ -44,11 +90,20 @@
       font-family: monospace;
       font-size: 12px;
       font-weight: bold;
-      pointer-events: none;
-      transition: opacity 0.2s;
+      pointer-events: auto;
+      transition: all 0.3s ease;
       user-select: none;
+      cursor: pointer;
     `;
+    
+    // Click handler to cycle position
+    inspectorOverlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      cyclePosition();
+    });
+    
     document.body.appendChild(inspectorOverlay);
+    updateInspectorPosition();
     updateInspectorOverlay();
   };
 
@@ -315,7 +370,7 @@
     // Create overlay immediately to show it's loaded
     createInspectorOverlay();
 
-    console.log("🔍 Halogen Inspector loaded. Use logStateDiff in your handleAction wrapper to activate.");
+    console.log("🔍 Halogen Inspector loaded. Use logStateDiff in your handleAction wrapper to activate. Click inspector to reposition (tr → br → bl → tl).");
   };
 
   // Auto-initialize
