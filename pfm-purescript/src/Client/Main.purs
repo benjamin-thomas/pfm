@@ -46,6 +46,8 @@ import Web.UIEvent.KeyboardEvent as KeyboardEvent
 import Web.UIEvent.MouseEvent as MouseEvent
 import Yoga.JSON as JSON
 
+shouldDebug = true
+
 -- Type-safe wrapper for API base URL
 newtype ApiBaseUrl = ApiBaseUrl String
 
@@ -96,7 +98,7 @@ derive instance Ord NotificationStatus
 
 type Notification =
   { createdAt :: Instant
-  , clearIn :: Milliseconds  -- How long the notification should stay
+  , clearIn :: Milliseconds -- How long the notification should stay
   , kind :: NotificationKind
   , status :: NotificationStatus
   }
@@ -345,7 +347,8 @@ render state =
         [ HH.text (if state.isDarkMode then "☀️" else "🌙") ]
 
     -- Test buttons for notification scenarios
-    , HH.div
+    , if not shouldDebug then HH.text ""
+      else HH.div
         [ HP.style "margin-left: 10px; display: flex; gap: 5px; flex-wrap: wrap;" ]
         [ HH.button
             [ HP.style "font-size: 12px; padding: 4px 8px;"
@@ -429,21 +432,19 @@ render state =
       (Milliseconds createdMs) = Instant.unInstant notification.createdAt
       (Milliseconds clearInMs) = notification.clearIn
       clearMs = createdMs + clearInMs
-      
+
       -- Check if notification should be animating out (clearOn time has passed)
       (Milliseconds tickMs) = Instant.unInstant state.tick
       timeLeft = clearMs - tickMs
       isRemoving = clearMs <= tickMs
       removingClass = if isRemoving then " notification--removing" else ""
-      
+
       -- Check if notification is entering (within first 300ms of creation)
       timeSinceCreation = tickMs - createdMs
       isEntering = timeSinceCreation < 300.0
       enteringClass = if isEntering then " notification--entering" else ""
-      
-      fullClassName = "notification notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status <> enteringClass <> removingClass
 
-      shouldDebug = false
+      fullClassName = "notification notification--" <> getNotificationClass notification.kind <> " notification--" <> getStatusClass notification.status <> enteringClass <> removingClass
     in
       HH.div
         [ HP.class_ (HH.ClassName "notification-wrapper") ]
@@ -1011,7 +1012,7 @@ setNotification { clearIn, kind, status } = do
     { notifications =
         map
           ( \n ->
-              if n.kind == kind then 
+              if n.kind == kind then
                 let
                   -- Calculate how long the notification has already been showing
                   (Milliseconds nowMs) = Instant.unInstant currentTime
@@ -1020,7 +1021,8 @@ setNotification { clearIn, kind, status } = do
                   -- The new clearIn should be: time already shown + desired additional time
                   newClearIn = Milliseconds (alreadyShownMs + unwrap clearIn)
                 in
-                  n { clearIn = newClearIn
+                  n
+                    { clearIn = newClearIn
                     , status = status
                     -- Keep the original createdAt time
                     }
