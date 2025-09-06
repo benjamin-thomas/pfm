@@ -1,0 +1,6 @@
+/* Main app container - let main.css handle the styling */
+.app {
+  min-height: 100vh;
+}
+
+/* Use the existing CSS from main.css for consistent styling */
