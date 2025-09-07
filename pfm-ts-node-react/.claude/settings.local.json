@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/benjamin/code/github.com/benjamin-thomas/pfm/pfm-purescript/**)",
+      "Read(//home/benjamin/code/github.com/benjamin-thomas/multi-playground/sse-demo/**)",
+      "Read(//home/benjamin/code/github.com/benjamin-thomas/pfm/**)",
+      "mcp__playwright__browser_navigate"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

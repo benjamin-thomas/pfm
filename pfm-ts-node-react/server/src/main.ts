@@ -1,13 +1,13 @@
 import * as http from 'http';
 import { createTransactionRepoFakeWithSeedData } from './repos/TransactionRepoFake';
 import type { TransactionRepo } from './repos/transactionRepo';
-import { dispatchInit, isValidMethod, type HttpMethod } from './utils/dispatch';
+import { httpDispatchInit, isValidMethod, type HttpMethod } from './utils/httpDispatch';
 import * as transactionHandlers from './handlers/transactionHandlers';
 import * as balanceHandlers from './handlers/balanceHandlers';
 import * as healthHandlers from './handlers/healthHandlers';
 import * as sseHandlers from './handlers/sseHandlers';
 
-interface Config {
+export interface Config {
   env: string;
   port: number;
   frontendUrl: string;
@@ -41,8 +41,7 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
 };
 
 // Create HTTP server with dependency injection
-const createServer = (transactionRepo: TransactionRepo): http.Server => {
-  const config = getConfig();
+export const createServer = (transactionRepo: TransactionRepo, config: Config): http.Server => {
 
   // We'll register routes inside the request handler where we have req/res
 
@@ -67,18 +66,24 @@ const createServer = (transactionRepo: TransactionRepo): http.Server => {
         throw new Error(`Invalid method: ${req.method}`);
       }
 
-      // Initialize dispatch and register routes for this request
-      const dispatch = dispatchInit();
-      dispatch.onMatch('GET', '/health', () => healthHandlers.check(req, res, config));
-      dispatch.onMatchPstring('GET', '/hello/{name}', (name) => () => healthHandlers.hello(req, res, name));
-      dispatch.onMatch('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
-      dispatch.onMatchPnumber('GET', '/api/transactions/{id}', (id) => () => transactionHandlers.getOne(req, res, transactionRepo, id));
-      dispatch.onMatch('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
-      dispatch.onMatch('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
-      dispatch.onMatch('GET', '/api/events', () => sseHandlers.events(req, res, config));
+      // Initialize httpDispatch and register routes for this request
+      const httpDispatch = httpDispatchInit();
+      httpDispatch.onMatch('GET', '/health', () => healthHandlers.check(req, res, config));
+      httpDispatch.onMatchP<string>('GET', '/hello/{name}', (name) => healthHandlers.hello(req, res, name), (s) => s);
+      httpDispatch.onMatch('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
+      httpDispatch.onMatchP<number>('GET', '/api/transactions/{id}', (id) => transactionHandlers.getOne(req, res, transactionRepo, id), (s) => {
+        const n = parseInt(s, 10);
+        if (isNaN(n)) {
+          throw new Error(`Invalid number parameter: ${s}`);
+        }
+        return n;
+      });
+      httpDispatch.onMatch('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
+      httpDispatch.onMatch('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
+      httpDispatch.onMatch('GET', '/api/events', () => sseHandlers.events(req, res, config));
       
       // Pure dispatch with just method and url
-      const matched = await dispatch({
+      const matched = await httpDispatch.dispatch({
         method: req.method,
         url: req.url
       });
@@ -105,7 +110,7 @@ const main = (): void => {
   const transactionRepo = createTransactionRepoFakeWithSeedData();
 
   // Create and start server
-  const server = createServer(transactionRepo);
+  const server = createServer(transactionRepo, config);
 
   server.listen(config.port, () => {
     console.log(`🚀 Server running in ${config.env} mode on http://localhost:${config.port}`);
@@ -122,5 +127,7 @@ const main = (): void => {
   });
 };
 
-// Run the server
-main();
+// Run the server only if this file is executed directly (not imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main();
+}
