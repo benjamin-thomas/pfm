@@ -1,12 +1,20 @@
 import tseslint from 'typescript-eslint';
 
 export default [
+  {
+    ignores: ['dist/', 'node_modules/'],
+  },
   ...tseslint.configs.recommended,
   ...tseslint.configs.strict,
   {
-    files: ['**/*.{ts,js}'],
+    files: ['src/**/*.{ts,js}'],
     languageOptions: {
       ecmaVersion: 2022,
+      parser: tseslint.parser,
+      parserOptions: {
+        project: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       '@typescript-eslint/no-use-before-define': 'error',
@@ -25,9 +33,7 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
+      '@typescript-eslint/no-deprecated': 'warn',
     },
-  },
-  {
-    ignores: ['dist/', 'node_modules/'],
   },
 ];

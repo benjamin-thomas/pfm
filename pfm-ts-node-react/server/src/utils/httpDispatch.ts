@@ -1,5 +1,5 @@
 // HTTP Dispatch - pure function dispatching based on HTTP patterns
-import { type ZodSchema } from 'zod';
+import { type ZodType } from 'zod';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'OPTIONS' | 'PATCH';
 
@@ -22,8 +22,8 @@ interface BaseRoute {
   execution:
   | { kind: 'sync'; tag: 'exact'; handler: SyncHandler }
   | { kind: 'async'; tag: 'exact'; handler: AsyncHandler }
-  | { kind: 'sync'; tag: 'param'; schema: ZodSchema<unknown>; handler: SyncParameterHandler<unknown> }
-  | { kind: 'async'; tag: 'param'; schema: ZodSchema<unknown>; handler: AsyncParameterHandler<unknown> };
+  | { kind: 'sync'; tag: 'param'; schema: ZodType<unknown>; handler: SyncParameterHandler<unknown> }
+  | { kind: 'async'; tag: 'param'; schema: ZodType<unknown>; handler: AsyncParameterHandler<unknown> };
 }
 
 type Route = BaseRoute;
@@ -32,8 +32,8 @@ type Route = BaseRoute;
 export const httpDispatchInit = (): {
   onMatchSync: (method: HttpMethod, pattern: string, handler: SyncHandler) => void;
   onMatchAsync: (method: HttpMethod, pattern: string, handler: AsyncHandler) => void;
-  onMatchP_Sync: <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: SyncParameterHandler<T>) => void;
-  onMatchP_Async: <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: AsyncParameterHandler<T>) => void;
+  onMatchP_Sync: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: SyncParameterHandler<T>) => void;
+  onMatchP_Async: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: AsyncParameterHandler<T>) => void;
   run: (request: { method: HttpMethod; url: string }) => Promise<boolean>;
 } => {
   const routes: Route[] = [];
@@ -74,19 +74,19 @@ export const httpDispatchInit = (): {
   };
 
   // Generic parameter handlers with Zod validation - schema-first approach
-  const onMatchP_Sync = <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: SyncParameterHandler<T>): void => {
+  const onMatchP_Sync = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: SyncParameterHandler<T>): void => {
     routes.push({
       method,
       pattern,
-      execution: { kind: 'sync', tag: 'param', schema: schema as ZodSchema<unknown>, handler: handler as SyncParameterHandler<unknown> }
+      execution: { kind: 'sync', tag: 'param', schema: schema as ZodType<unknown>, handler: handler as SyncParameterHandler<unknown> }
     });
   };
 
-  const onMatchP_Async = <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: AsyncParameterHandler<T>): void => {
+  const onMatchP_Async = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: AsyncParameterHandler<T>): void => {
     routes.push({
       method,
       pattern,
-      execution: { kind: 'async', tag: 'param', schema: schema as ZodSchema<unknown>, handler: handler as AsyncParameterHandler<unknown> }
+      execution: { kind: 'async', tag: 'param', schema: schema as ZodType<unknown>, handler: handler as AsyncParameterHandler<unknown> }
     });
   };
 

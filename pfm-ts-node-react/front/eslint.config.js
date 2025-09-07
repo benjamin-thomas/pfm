@@ -10,10 +10,19 @@ export default [
   ...tseslint.configs.recommended,
   ...tseslint.configs.strict,
   {
-    files: ['**/*.{ts,tsx,js}'],
+    files: ['src/**/*.{js,ts,tsx}'],
     plugins: {
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+    },
+    languageOptions: {
+      ecmaVersion: 2022,
+      globals: globals.browser,
+      parser: tseslint.parser,
+      parserOptions: {
+        project: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       ...reactHooks.configs['recommended-latest'].rules,
@@ -26,10 +35,7 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
-    },
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
+      '@typescript-eslint/no-deprecated': 'warn',
     },
   },
 ]
