@@ -1,7 +1,49 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
+  "compilerOptions": {
+    // Strict options
+    "strict": true,
+    // "noUnusedLocals": true, // favor eslint warning
+    // "noUnusedParameters": true, // favor eslint warning
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true, // Additional safety for array/object access
+    "noUncheckedSideEffectImports": true, // Prevent importing modules with side effects without explicit side effect imports
+    "verbatimModuleSyntax": true, // Strict import/export syntax validation
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    //
+    // Output options
+    "target": "es2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "es2022",
+    "moduleResolution": "bundler", // Vite-optimized module resolution
+    "moduleDetection": "force", // Force module detection even without imports
+    //
+    // Bundler-specific options
+    "noEmit": true, // Vite handles compilation, not tsc
+    "allowImportingTsExtensions": true, // Allow .ts/.tsx imports (Vite strips these)
+    "jsx": "react-jsx", // New JSX transform (React 17+)
+    //
+    // Path mapping
+    "paths": {
+      "@shared/*": [
+        "../shared/*"
+      ],
+      "@src/*": [
+        "./src/*"
+      ],
+    }
+  },
+  "include": [
+    "src/**/*",
+    "../shared/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
   ]
 }

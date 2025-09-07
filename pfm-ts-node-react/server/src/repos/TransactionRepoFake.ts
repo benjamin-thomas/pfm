@@ -1,7 +1,10 @@
 // Fake implementation of TransactionRepo for testing
 // Uses in-memory storage
 
-import {
+// Fake implementation of TransactionRepo for testing
+// Uses in-memory storage
+import type { TransactionRepo } from './transactionRepo';
+import type {
   Transaction,
   NewTransaction,
   UpdateTransaction,
@@ -9,7 +12,7 @@ import {
   PaginationParams,
   PaginatedResponse,
 } from '@shared/types';
-import { TransactionRepo } from '@shared/repos';
+
 
 export const createTransactionRepoFake = (): TransactionRepo => {
   // In-memory storage
@@ -41,7 +44,7 @@ export const createTransactionRepoFake = (): TransactionRepo => {
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         if (!tx.descr.toLowerCase().includes(searchLower) &&
-            !tx.descrOrig.toLowerCase().includes(searchLower)) {
+          !tx.descrOrig.toLowerCase().includes(searchLower)) {
           return false;
         }
       }
@@ -113,7 +116,9 @@ export const createTransactionRepoFake = (): TransactionRepo => {
       const index = transactions.findIndex((tx) => tx.transactionId === id);
       if (index === -1) return null;
 
-      const existing = transactions[index]!;
+      const existing = transactions[index];
+      if (!existing) return null;
+
       const updated: Transaction = {
         ...updates,
         transactionId: existing.transactionId,

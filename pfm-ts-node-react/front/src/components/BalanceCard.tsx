@@ -1,5 +1,6 @@
 import React from 'react';
 import type { AccountBalanceRead } from '@shared/types';
+import styles from './BalanceCard.module.css';
 
 type BalanceCardProps = {
   balance: AccountBalanceRead;
@@ -26,16 +27,16 @@ export const BalanceCard: React.FC<BalanceCardProps> = ({ balance }) => {
 
   return (
     <div
-      className="balance-card"
+      className={styles.card}
       style={{ borderLeftColor: getColorAccent(balance.categoryName) }}
     >
-      <div className="balance-card__category">
+      <div className={styles.category}>
         {balance.categoryName}
       </div>
-      <div className="balance-card__account">
+      <div className={styles.account}>
         {balance.accountName}
       </div>
-      <div className="balance-card__amount">
+      <div className={styles.amount}>
         {formatAmount(balance.accountBalance)}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import './components/Buttons.css';
 import { BalanceCards } from './components/BalanceCards';
 import TransactionList from './components/TransactionList';
 import TransactionFilters from './components/TransactionFilters';
@@ -96,7 +97,7 @@ function App() {
               <span className="transaction-count">8 transactions</span>
             </div>
             <div className="transaction-list__header-buttons">
-              <button className="button button--secondary">
+              <button className="button">
                 💡 Apply All Suggestions
               </button>
               <button className="button button--primary">

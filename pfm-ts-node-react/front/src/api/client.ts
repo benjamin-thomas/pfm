@@ -79,7 +79,7 @@ export const transactionApi = {
 };
 
 // SSE (Server-Sent Events) client
-export const createEventSource = (onMessage: (data: any) => void): EventSource => {
+export const createEventSource = (onMessage: (data: unknown) => void): EventSource => {
   const apiUrl = getApiUrl();
   const eventSource = new EventSource(`${apiUrl}/api/events`);
 

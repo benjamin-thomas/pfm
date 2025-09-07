@@ -1,0 +1,257 @@
+/* Transaction List Component */
+
+.transaction-list {
+    background: var(--color-card-bg);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.transaction-list__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border-dark);
+}
+
+.transaction-list__header h3 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--color-text-bright);
+}
+
+.transaction-list__header-title {
+    display: flex;
+    align-items: baseline;
+}
+
+.transaction-list__header-buttons {
+    display: flex;
+    align-items: center;
+}
+
+.transaction-list__header-buttons button:not(:first-child) {
+    margin-left: var(--space-md);
+}
+
+.transaction-count {
+    margin-left: var(--space-md);
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.transaction-list__items {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+/* Transaction Item Component */
+
+.transaction-item {
+    padding: var(--space-md) var(--space-lg);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.transaction-item:hover {
+    background-color: var(--color-hover);
+}
+
+.transaction-item:last-child {
+    border-bottom: none;
+}
+
+.transaction-item__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.transaction-item__main-content {
+    display: flex;
+    flex: 1;
+    gap: var(--space-md);
+    align-items: center;
+}
+
+.transaction-item__details {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.transaction-item__description {
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: pre; /* some OFX descriptions insert many whitespaces to separate related data */
+}
+
+.transaction-item__accounts {
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.transaction-item__date {
+    font-size: 13px;
+    color: var(--color-text-tertiary);
+    align-self: center;
+}
+
+.transaction-item__amount {
+    font-weight: 600;
+    text-align: right;
+    align-self: center;
+    min-width: 100px;
+}
+
+.transaction-item__amount--positive {
+    color: var(--color-positive);
+}
+
+.transaction-item__amount--negative {
+    color: var(--color-negative);
+}
+
+.transaction-item__balance-column {
+    margin-left: var(--space-md);
+    min-width: 180px;
+    text-align: right;
+}
+
+.transaction-item__balance-movement {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    padding-left: var(--space-md);
+}
+
+.balance-before,
+.balance-after {
+    white-space: nowrap;
+}
+
+.arrow-icon {
+    margin: 0 var(--space-xs);
+    font-size: 10px;
+}
+
+.balance-before {
+    font-weight: 500;
+    color: var(--color-text-tertiary);
+}
+
+/* Transaction suggestion styles */
+.suggestion-container {
+    margin-top: var(--space-sm);
+    padding: var(--space-sm);
+    border-left: 3px solid var(--color-primary);
+    background-color: rgba(0, 0, 0, 0.04); /* Neutral background that works in both themes */
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure suggestion container stands out when parent row is hovered */
+.transaction-item:hover .suggestion-container {
+    background-color: rgba(0, 0, 0, 0.07); /* Slightly darker when parent is hovered */
+}
+
+/* Dark theme specific styling for suggestion container */
+html.dark-theme .suggestion-container {
+    background-color: rgba(255, 255, 255, 0.08); /* Lighter in dark mode for better contrast */
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+html.dark-theme .transaction-item:hover .suggestion-container {
+    background-color: rgba(255, 255, 255, 0.12); /* Even more contrast when hovered in dark mode */
+}
+
+.suggestion-text {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    color: var(--color-text-secondary);
+    font-size: 0.9em;
+}
+
+.suggestion-icon {
+    color: var(--color-primary);
+}
+
+.suggestion-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.suggestion-btn {
+    border: none;
+    background: none;
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.suggestion-btn-apply {
+    background-color: var(--color-primary);
+    color: white;
+}
+
+.suggestion-btn-ignore {
+    color: var(--color-text-tertiary);
+}
+
+.suggestion-btn-ai {
+    color: var(--color-text-tertiary);
+}
+
+.suggestion-btn:hover {
+    opacity: 0.9;
+}
+
+.suggestion-btn-ignore:hover,
+.suggestion-btn-ai:hover {
+    background-color: var(--color-hover);
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+}
+
+/* Apply All Suggestions button styling */
+.transaction-list__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* Similar Transactions Info */
+.similar-transactions-info {
+    margin: var(--space-lg) 0 var(--space-sm) 0;
+    padding: var(--space-md);
+    background-color: var(--color-hover);
+    border-left: 3px solid var(--color-primary);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.similar-transactions-label {
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.similar-transactions-value {
+    color: var(--color-text-bright);
+    font-weight: 600;
+}

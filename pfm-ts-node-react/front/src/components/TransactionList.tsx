@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Transaction } from '@shared/types';
 import { transactionApi } from '../api/client';
 import { formatMoney, formatDate } from '@shared/types';
+import './TransactionList.css';
 
 type Status<T> = 
   | { kind: 'loading' }

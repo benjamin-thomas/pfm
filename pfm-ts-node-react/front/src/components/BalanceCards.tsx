@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AccountBalanceRead } from '@shared/types';
 import { BalanceCard } from './BalanceCard';
+import './BalanceCards.css';
 
 type BalanceCardsProps = {
   balances: AccountBalanceRead[];

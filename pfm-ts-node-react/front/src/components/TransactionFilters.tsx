@@ -1,3 +1,5 @@
+import './TransactionFilters.css';
+
 const TransactionFilters = (): React.JSX.Element => {
   return (
     <div className="transaction-search">

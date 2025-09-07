@@ -6,11 +6,12 @@
   "scripts": {
     "dev": "vite --port 4003",
     "dev:test": "vite --port 4004",
-    "build": "tsc -b && vite build",
+    "build": "check-unused-css && tsc && vite build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "clean": "rm -rf dist node_modules"
+    "clean": "rm -rf dist node_modules",
+    "check-unused-css": "check-unused-css"
   },
   "dependencies": {
     "react": "^19.1.1",
@@ -22,11 +23,12 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^5.0.2",
     "babel-plugin-react-compiler": "^19.1.0-rc.3",
+    "check-unused-css": "^0.1.8",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
-    "typescript": "~5.8.3",
+    "typescript": "^5.9.2",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2",
     "vite-tsconfig-paths": "^5.1.4"

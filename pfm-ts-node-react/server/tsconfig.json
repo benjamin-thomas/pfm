@@ -1,52 +1,51 @@
 {
   "compilerOptions": {
-    // Type checking
+    // Strict options
     "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "strictBindCallApply": true,
-    "strictPropertyInitialization": true,
-    "noImplicitThis": true,
-    "alwaysStrict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    // "noUnusedLocals": true, // favor eslint warning
+    // "noUnusedParameters": true, // favor eslint warning
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true,
-    
-    // Module resolution
-    "module": "ESNext",
+    "noUncheckedIndexedAccess": true, // Additional safety for array/object access
+    "noUncheckedSideEffectImports": true, // Prevent importing modules with side effects without explicit side effect imports
+    "verbatimModuleSyntax": true, // Strict import/export syntax validation
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    //
+    // Output options
+    "target": "es2022",
+    "lib": [
+      "ES2022"
+    ],
+    "module": "es2022",
     "moduleResolution": "node",
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    
-    // Emit
-    "target": "ES2020",
-    "lib": ["ES2020"],
     "outDir": "./dist",
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
     "removeComments": true,
-    
+    //
     // Node.js
-    "types": ["node"],
-    
-    // Interop
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    
+    "types": [
+      "node"
+    ],
+    //
     // Path mapping
-    "baseUrl": ".",
+    // "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"],
-      "@src/*": ["./src/*"]
-    }
+      "zod": [ // allow 'zod' dependency to be called from ../shared
+        "./node_modules/zod"
+      ],
+      "@shared/*": [
+        "../shared/*"
+      ],
+      "@src/*": [
+        "./src/*"
+      ],
+    },
   },
   "include": [
-    "./**/*",
+    "src/**/*",
     "../shared/**/*"
   ],
   "exclude": [
