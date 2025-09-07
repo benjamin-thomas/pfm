@@ -7,12 +7,12 @@ describe('httpDispatch', () => {
         const httpDispatch = httpDispatchInit();
         let handlerCalled = false;
 
-        const handler = (): void => {
+        const handler = async (): Promise<void> => {
             handlerCalled = true;
         };
 
         // Register the route
-        httpDispatch.onMatchSync('GET', '/health', handler);
+        httpDispatch.matchP0('GET', '/health', handler);
 
         // Test dispatch with simple method and url
         const matched = await httpDispatch.run({ method: 'GET', url: '/health' });
@@ -25,8 +25,8 @@ describe('httpDispatch', () => {
         const httpDispatch = httpDispatchInit();
         let result = 0;
 
-        // Register route with typed parameter handler (sync)
-        httpDispatch.onMatchP_Sync('GET', '/inc/{n}', z.coerce.number(), (n) => {
+        // Register route with typed parameter handler
+        httpDispatch.matchP1('GET', '/inc/?', z.coerce.number(), async (n) => {
             result = n + 1;  // Extract 123, add 1 = 124
         });
 
@@ -41,8 +41,8 @@ describe('httpDispatch', () => {
         const httpDispatch = httpDispatchInit();
         let result = '';
 
-        // Register route with typed parameter handler (sync)
-        httpDispatch.onMatchP_Sync('GET', '/hello/{name}', z.string(), (name) => {
+        // Register route with typed parameter handler
+        httpDispatch.matchP1('GET', '/hello/?', z.string(), async (name) => {
             result = `Hello, ${name}!`;
         });
 
@@ -58,7 +58,7 @@ describe('httpDispatch', () => {
         let result = 0;
 
         // Register route with typed async parameter handler
-        httpDispatch.onMatchP_Async('GET', '/async-inc/{n}', z.coerce.number(), async (n) => {
+        httpDispatch.matchP1('GET', '/async-inc/?', z.coerce.number(), async (n) => {
             // Simulate async work
             await new Promise(resolve => setTimeout(resolve, 1));
             result = n * 2;  // Extract 123, multiply by 2 = 246
@@ -76,7 +76,7 @@ describe('httpDispatch', () => {
         let result = '';
 
         // Register route with typed async parameter handler
-        httpDispatch.onMatchP_Async('GET', '/async-greet/{name}', z.string(), async (name) => {
+        httpDispatch.matchP1('GET', '/async-greet/?', z.string(), async (name) => {
             // Simulate async work
             await new Promise(resolve => setTimeout(resolve, 1));
             result = `Async greeting: ${name}`;
@@ -92,7 +92,7 @@ describe('httpDispatch', () => {
     it('should return false when no route matches', async () => {
         const httpDispatch = httpDispatchInit();
 
-        httpDispatch.onMatchSync('GET', '/health', () => { });
+        httpDispatch.matchP0('GET', '/health', async () => { });
 
         const matched = await httpDispatch.run({ method: 'GET', url: '/nonexistent' });
 
@@ -106,7 +106,7 @@ describe('httpDispatch', () => {
 
         // Register route with custom type parameter handler using Zod schema
         const userIdSchema = z.string().transform(s => ({ id: parseInt(s, 10) }));
-        httpDispatch.onMatchP_Sync('GET', '/user/{userId}', userIdSchema, (userId) => {
+        httpDispatch.matchP1('GET', '/user/?', userIdSchema, async (userId) => {
             result = userId;
         });
 
@@ -117,11 +117,37 @@ describe('httpDispatch', () => {
         expect(result).toEqual({ id: 42 });
     });
 
+    it('should handle matchP2 with arithmetic operations', async () => {
+        const httpDispatch = httpDispatchInit();
+        let addResult = 0;
+        let mulResult = 0;
+
+        // Register route with 2 parameters for addition
+        httpDispatch.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), async (a, b) => {
+            addResult = a + b;
+        });
+
+        // Register route with 2 parameters for multiplication  
+        httpDispatch.matchP2('GET', '/mul/?/?', z.coerce.number(), z.coerce.number(), async (a, b) => {
+            mulResult = a * b;
+        });
+
+        // Test addition: 15 + 27 = 42
+        const addMatched = await httpDispatch.run({ method: 'GET', url: '/add/15/27' });
+        expect(addMatched).toBe(true);
+        expect(addResult).toBe(42);
+
+        // Test multiplication: 6 * 7 = 42
+        const mulMatched = await httpDispatch.run({ method: 'GET', url: '/mul/6/7' });
+        expect(mulMatched).toBe(true);
+        expect(mulResult).toBe(42);
+    });
+
     it('should handle invalid number parameters gracefully', async () => {
         const httpDispatch = httpDispatchInit();
 
         // Using z.coerce.number() which will throw ZodError for invalid numbers
-        httpDispatch.onMatchP_Sync('GET', '/api/{id}', z.coerce.number(), (_id) => {
+        httpDispatch.matchP1('GET', '/api/?', z.coerce.number(), async (_id) => {
             // This should not be called for invalid numbers
         });
 

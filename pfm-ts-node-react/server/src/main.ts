@@ -69,17 +69,22 @@ export const createServer = (transactionRepo: TransactionRepo, config: Config): 
 
       // Initialize httpDispatch and register routes for this request
       const httpDispatch = httpDispatchInit();
-      httpDispatch.onMatchAsync('GET', '/health', () => healthHandlers.check(req, res, config));
-      httpDispatch.onMatchP_Async('GET', '/hello/{name}', z.string(), (name) => healthHandlers.hello(req, res, name));
-      httpDispatch.onMatchAsync('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
-      httpDispatch.onMatchP_Async(
-        'GET', '/api/transactions/{id}',
-        z.coerce.number(),
-        (id) => transactionHandlers.getOne(req, res, transactionRepo, id)
+      httpDispatch.matchP0('GET', '/health', async () => healthHandlers.check(req, res, config));
+
+      httpDispatch.matchP1(
+        'GET', '/hello/?', z.string(),
+        async (name) => healthHandlers.hello(req, res, name),
       );
-      httpDispatch.onMatchAsync('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
-      httpDispatch.onMatchAsync('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
-      httpDispatch.onMatchSync('GET', '/api/events', () => sseHandlers.events(req, res, config));
+
+      httpDispatch.matchP0('GET', '/api/transactions', async () => transactionHandlers.getMany(req, res, transactionRepo));
+      httpDispatch.matchP1(
+        'GET', '/api/transactions/?',
+        z.coerce.number(),
+        async (id) => transactionHandlers.getOne(req, res, transactionRepo, id)
+      );
+      httpDispatch.matchP0('POST', '/api/transactions', async () => transactionHandlers.create(req, res, transactionRepo));
+      httpDispatch.matchP0('GET', '/api/balances', async () => balanceHandlers.getAll(req, res));
+      httpDispatch.matchP0('GET', '/api/events', async () => sseHandlers.events(req, res, config));
 
       // Pure dispatch with just method and url
       const matched = await httpDispatch.run({

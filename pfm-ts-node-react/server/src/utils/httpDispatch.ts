@@ -9,84 +9,71 @@ export const isValidMethod = (method: unknown): method is HttpMethod => {
     ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'].includes(method);
 };
 
-// Handler function types - pure functions that do work
-type SyncHandler = () => void;
-type AsyncHandler = () => Promise<void>;
-type SyncParameterHandler<T> = (param: T) => void;
-type AsyncParameterHandler<T> = (param: T) => Promise<void>;
-
-// Route types with nested discriminated union - groups common fields
+// Route types - simplified with async-only handlers
 interface BaseRoute {
   method: HttpMethod;
   pattern: string;
   execution:
-  | { kind: 'sync'; tag: 'exact'; handler: SyncHandler }
-  | { kind: 'async'; tag: 'exact'; handler: AsyncHandler }
-  | { kind: 'sync'; tag: 'param'; schema: ZodType<unknown>; handler: SyncParameterHandler<unknown> }
-  | { kind: 'async'; tag: 'param'; schema: ZodType<unknown>; handler: AsyncParameterHandler<unknown> };
+  | { tag: 'exact'; toPromise: () => Promise<void> }
+  | { tag: 'param1'; schema: ZodType<unknown>; toPromise: (param: unknown) => Promise<void> }
+  | { tag: 'param2'; schema1: ZodType<unknown>; schema2: ZodType<unknown>; toPromise: (param1: unknown, param2: unknown) => Promise<void> };
 }
 
 type Route = BaseRoute;
 
 
 export const httpDispatchInit = (): {
-  onMatchSync: (method: HttpMethod, pattern: string, handler: SyncHandler) => void;
-  onMatchAsync: (method: HttpMethod, pattern: string, handler: AsyncHandler) => void;
-  onMatchP_Sync: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: SyncParameterHandler<T>) => void;
-  onMatchP_Async: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: AsyncParameterHandler<T>) => void;
+  matchP0: (method: HttpMethod, pattern: string, toPromise: () => Promise<void>) => void;
+  matchP1: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, toPromise: (param: T) => Promise<void>) => void;
+  matchP2: <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, toPromise: (param1: T, param2: U) => Promise<void>) => void;
   run: (request: { method: HttpMethod; url: string }) => Promise<boolean>;
 } => {
   const routes: Route[] = [];
 
-  const extractParam = (pattern: string, pathname: string): { matched: boolean; param: string | null } => {
+  const extractParams = (pattern: string, pathname: string): { matched: boolean; params: string[] } => {
     const patternParts = pattern.split('/');
     const pathParts = pathname.split('/');
 
     if (patternParts.length !== pathParts.length) {
-      return { matched: false, param: null };
+      return { matched: false, params: [] };
     }
 
-    let param: string | null = null;
+    const params: string[] = [];
 
     for (const [i, patternPart] of patternParts.entries()) {
       const pathPart = pathParts[i];
       if (!pathPart) continue;
 
-
-      if (patternPart.startsWith('{') && patternPart.endsWith('}')) {
+      if (patternPart === '?') {
         // This is a parameter, capture it
-        param = pathPart;
+        params.push(pathPart);
       } else if (patternPart !== pathPart) {
         // Static part doesn't match
-        return { matched: false, param: null };
+        return { matched: false, params: [] };
       }
     }
 
-    return { matched: true, param }; // param is null for exact matches, string for param matches
+    return { matched: true, params }; // params array contains captured values
   };
 
-  const onMatchSync = (method: HttpMethod, pattern: string, handler: SyncHandler): void => {
-    routes.push({ method, pattern, execution: { kind: 'sync', tag: 'exact', handler } });
-  };
-
-  const onMatchAsync = (method: HttpMethod, pattern: string, handler: AsyncHandler): void => {
-    routes.push({ method, pattern, execution: { kind: 'async', tag: 'exact', handler } });
+  const matchP0 = (method: HttpMethod, pattern: string, toPromise: () => Promise<void>): void => {
+    routes.push({ method, pattern, execution: { tag: 'exact', toPromise } });
   };
 
   // Generic parameter handlers with Zod validation - schema-first approach
-  const onMatchP_Sync = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: SyncParameterHandler<T>): void => {
+  const matchP1 = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, toPromise: (param: T) => Promise<void>): void => {
     routes.push({
       method,
       pattern,
-      execution: { kind: 'sync', tag: 'param', schema: schema as ZodType<unknown>, handler: handler as SyncParameterHandler<unknown> }
+      execution: { tag: 'param1', schema: schema as ZodType<unknown>, toPromise: toPromise as (param: unknown) => Promise<void> }
     });
   };
 
-  const onMatchP_Async = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: AsyncParameterHandler<T>): void => {
+  const matchP2 = <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, toPromise: (param1: T, param2: U) => Promise<void>): void => {
     routes.push({
       method,
       pattern,
-      execution: { kind: 'async', tag: 'param', schema: schema as ZodType<unknown>, handler: handler as AsyncParameterHandler<unknown> }
+      execution: { tag: 'param2', schema1: schema1 as ZodType<unknown>, schema2: schema2 as ZodType<unknown>, toPromise: toPromise as (param1: unknown, param2: unknown) => Promise<void> }
     });
   };
 
@@ -98,50 +85,32 @@ export const httpDispatchInit = (): {
     for (const route of routes) {
       if (route.method !== method) continue;
 
-      const result = extractParam(route.pattern, pathname);
+      const result = extractParams(route.pattern, pathname);
       if (result.matched) {
-        // Clean pattern matching with nested switches on execution
-        switch (route.execution.kind) {
-          case 'sync':
-            switch (route.execution.tag) {
-              case 'exact':
-                route.execution.handler();
-                break;
-              case 'param':
-                if (result.param === null) {
-                  throw new Error('Expected parameter but none found');
-                }
-                const syncValidatedParam = route.execution.schema.parse(result.param);
-                route.execution.handler(syncValidatedParam);
-                break;
-              default:
-                  // noinspection UnnecessaryLocalVariableJS
-                  const _exhaustiveCheckSync: never = route.execution;
-                return _exhaustiveCheckSync;
-            }
+        // Execute promise based on route type
+        switch (route.execution.tag) {
+          case 'exact':
+            await route.execution.toPromise();
             break;
-          case 'async':
-            switch (route.execution.tag) {
-              case 'exact':
-                await route.execution.handler();
-                break;
-              case 'param':
-                if (result.param === null) {
-                  throw new Error('Expected parameter but none found');
-                }
-                const asyncValidatedParam = route.execution.schema.parse(result.param);
-                await route.execution.handler(asyncValidatedParam);
-                break;
-              default:
-                  // noinspection UnnecessaryLocalVariableJS
-                  const _exhaustiveCheckAsync: never = route.execution;
-                return _exhaustiveCheckAsync;
+          case 'param1':
+            if (result.params.length !== 1) {
+              throw new Error('Expected exactly 1 parameter but found ' + result.params.length);
             }
+            const validatedParam = route.execution.schema.parse(result.params[0]);
+            await route.execution.toPromise(validatedParam);
+            break;
+          case 'param2':
+            if (result.params.length !== 2) {
+              throw new Error('Expected exactly 2 parameters but found ' + result.params.length);
+            }
+            const validatedParam1 = route.execution.schema1.parse(result.params[0]);
+            const validatedParam2 = route.execution.schema2.parse(result.params[1]);
+            await route.execution.toPromise(validatedParam1, validatedParam2);
             break;
           default:
-              // noinspection UnnecessaryLocalVariableJS
-              const _exhaustiveCheckKind: never = route.execution;
-            return _exhaustiveCheckKind;
+            // noinspection UnnecessaryLocalVariableJS
+            const _exhaustiveCheck: never = route.execution;
+            return _exhaustiveCheck;
         }
         return true;
       }
@@ -152,10 +121,9 @@ export const httpDispatchInit = (): {
 
   // Return clean object literal without Object.assign indirection
   return {
-    onMatchSync,
-    onMatchAsync,
-    onMatchP_Sync,
-    onMatchP_Async,
+    matchP0,
+    matchP1,
+    matchP2,
     run
   };
 };
