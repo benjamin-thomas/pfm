@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --port 4003",
     "dev:test": "vite --port 4004",
-    "build": "check-unused-css && tsc && vite build",
+    "build": "eslint . && check-unused-css && tsc && vite build",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",

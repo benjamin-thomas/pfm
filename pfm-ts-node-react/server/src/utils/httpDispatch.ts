@@ -115,7 +115,8 @@ export const httpDispatchInit = (): {
                 route.execution.handler(syncValidatedParam);
                 break;
               default:
-                const _exhaustiveCheckSync: never = route.execution;
+                  // noinspection UnnecessaryLocalVariableJS
+                  const _exhaustiveCheckSync: never = route.execution;
                 return _exhaustiveCheckSync;
             }
             break;
@@ -132,12 +133,14 @@ export const httpDispatchInit = (): {
                 await route.execution.handler(asyncValidatedParam);
                 break;
               default:
-                const _exhaustiveCheckAsync: never = route.execution;
+                  // noinspection UnnecessaryLocalVariableJS
+                  const _exhaustiveCheckAsync: never = route.execution;
                 return _exhaustiveCheckAsync;
             }
             break;
           default:
-            const _exhaustiveCheckKind: never = route.execution;
+              // noinspection UnnecessaryLocalVariableJS
+              const _exhaustiveCheckKind: never = route.execution;
             return _exhaustiveCheckKind;
         }
         return true;
