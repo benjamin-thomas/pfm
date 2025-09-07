@@ -6,7 +6,10 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "APP_ENV=dev tsx watch src/main.ts",
-    "test": "APP_ENV=test tsx watch src/main.ts",
+    "test:server": "APP_ENV=test tsx watch src/main.ts",
+    "test": "vitest --run",
+    "test:ui": "vitest --ui",
+    "test:watch": "vitest --watch",
     "build": "tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -21,10 +24,12 @@
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.8",
     "@types/node": "^20.10.5",
+    "@vitest/ui": "^3.2.4",
     "eslint": "^9.35.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.2",
-    "typescript-eslint": "^8.42.0"
+    "typescript-eslint": "^8.42.0",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=18.0.0"

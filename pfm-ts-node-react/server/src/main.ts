@@ -1,7 +1,7 @@
 import * as http from 'http';
 import { createTransactionRepoFakeWithSeedData } from './repos/TransactionRepoFake';
 import type { TransactionRepo } from './repos/transactionRepo';
-import { createRouter } from './utils/router';
+import { dispatchInit, isValidMethod, type HttpMethod } from './utils/dispatch';
 import * as transactionHandlers from './handlers/transactionHandlers';
 import * as balanceHandlers from './handlers/balanceHandlers';
 import * as healthHandlers from './handlers/healthHandlers';
@@ -44,15 +44,7 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
 const createServer = (transactionRepo: TransactionRepo): http.Server => {
   const config = getConfig();
 
-  // Register all routes declaratively
-  const router = createRouter();
-  router.onMatch('GET', '/health', healthHandlers.check(config));
-  router.onMatchPstring('GET', '/hello/{name}', healthHandlers.hello);
-  router.onMatch('GET', '/api/transactions', transactionHandlers.getMany(transactionRepo));
-  router.onMatchPnumber('GET', '/api/transactions/{id}', transactionHandlers.getOne(transactionRepo));
-  router.onMatch('POST', '/api/transactions', transactionHandlers.create(transactionRepo));
-  router.onMatch('GET', '/api/balances', balanceHandlers.getAll());
-  router.onMatch('GET', '/api/events', sseHandlers.events(config));
+  // We'll register routes inside the request handler where we have req/res
 
   // Main request handler
   const server = http.createServer(async (req, res) => {
@@ -67,8 +59,31 @@ const createServer = (transactionRepo: TransactionRepo): http.Server => {
     }
 
     try {
-      const routed = await router.run(req, res);
-      if (!routed) {
+      // Strict validation - throw if missing or invalid
+      if (!req.url) {
+        throw new Error('URL is required');
+      }
+      if (!isValidMethod(req.method)) {
+        throw new Error(`Invalid method: ${req.method}`);
+      }
+
+      // Initialize dispatch and register routes for this request
+      const dispatch = dispatchInit();
+      dispatch.onMatch('GET', '/health', () => healthHandlers.check(req, res, config));
+      dispatch.onMatchPstring('GET', '/hello/{name}', (name) => () => healthHandlers.hello(req, res, name));
+      dispatch.onMatch('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
+      dispatch.onMatchPnumber('GET', '/api/transactions/{id}', (id) => () => transactionHandlers.getOne(req, res, transactionRepo, id));
+      dispatch.onMatch('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
+      dispatch.onMatch('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
+      dispatch.onMatch('GET', '/api/events', () => sseHandlers.events(req, res, config));
+      
+      // Pure dispatch with just method and url
+      const matched = await dispatch({
+        method: req.method,
+        url: req.url
+      });
+      
+      if (!matched) {
         sendJson(res, 404, { error: 'Not found' });
       }
     } catch (error) {

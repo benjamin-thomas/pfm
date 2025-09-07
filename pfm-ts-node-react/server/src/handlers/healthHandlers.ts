@@ -13,12 +13,10 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
   res.end(JSON.stringify(data));
 };
 
-export const check = (config: Config) =>
-  async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    sendJson(res, 200, { status: 'ok', env: config.env, port: config.port });
-  };
+export const check = async (req: http.IncomingMessage, res: http.ServerResponse, config: Config): Promise<void> => {
+  sendJson(res, 200, { status: 'ok', env: config.env, port: config.port });
+};
 
-export const hello = (name: string) =>
-  async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
-    sendJson(res, 200, { message: `Hello, ${name}!` });
-  };
+export const hello = async (req: http.IncomingMessage, res: http.ServerResponse, name: string): Promise<void> => {
+  sendJson(res, 200, { message: `Hello, ${name}!` });
+};

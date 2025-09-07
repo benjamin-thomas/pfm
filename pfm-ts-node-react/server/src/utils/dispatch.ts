@@ -1,44 +1,53 @@
-import * as http from 'http';
+// Dispatch - pure function dispatching based on patterns
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'OPTIONS' | 'PATCH';
 
-// Handler function that takes (req, res) and optionally returns a promise
-type HandlerFunction = (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void> | void;
+// Method validation
+export const isValidMethod = (method: unknown): method is HttpMethod => {
+  return typeof method === 'string' && 
+    ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'].includes(method);
+};
+
+// Handler function types - pure functions that do work
+type ExactHandler = () => Promise<void> | void;
+type StringHandler = (param: string) => Promise<void> | void;
+type NumberHandler = (param: number) => Promise<void> | void;
 
 // Route types
 interface ExactRoute {
   type: 'exact';
-  method: string;
+  method: HttpMethod;
   pattern: string;
-  handler: HandlerFunction;
+  handler: ExactHandler;
 }
 
 interface StringParameterizedRoute {
   type: 'string-parameterized';
-  method: string;
+  method: HttpMethod;
   pattern: string;
-  handlerFactory: (param: string) => HandlerFunction;
+  handlerFactory: (param: string) => StringHandler;
 }
 
 interface NumberParameterizedRoute {
   type: 'number-parameterized';
-  method: string;
+  method: HttpMethod;
   pattern: string;
-  handlerFactory: (param: number) => HandlerFunction;
+  handlerFactory: (param: number) => NumberHandler;
 }
 
 type Route = ExactRoute | StringParameterizedRoute | NumberParameterizedRoute;
 
-export const createRouter = () => {
+export const dispatchInit = () => {
   const routes: Route[] = [];
 
-  const onMatch = (method: string, pattern: string, handler: HandlerFunction): void => {
+  const onMatch = (method: HttpMethod, pattern: string, handler: ExactHandler): void => {
     routes.push({ type: 'exact', method, pattern, handler });
   };
 
-  const onMatchPstring = (method: string, pattern: string, handlerFactory: (param: string) => HandlerFunction): void => {
+  const onMatchPstring = (method: HttpMethod, pattern: string, handlerFactory: (param: string) => StringHandler): void => {
     routes.push({ type: 'string-parameterized', method, pattern, handlerFactory });
   };
 
-  const onMatchPnumber = (method: string, pattern: string, handlerFactory: (param: number) => HandlerFunction): void => {
+  const onMatchPnumber = (method: HttpMethod, pattern: string, handlerFactory: (param: number) => NumberHandler): void => {
     routes.push({ type: 'number-parameterized', method, pattern, handlerFactory });
   };
 
@@ -68,19 +77,10 @@ export const createRouter = () => {
     return { matched: true, param }; // param is null for exact matches, string for param matches
   };
 
-  const run = async (req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> => {
-    // Fail early if we don't have basic info
-    if (!req.method) {
-      throw new Error('Request method is required');
-    }
-
-    if (!req.url) {
-      throw new Error('Request URL is required');
-    }
-
-    const method = req.method;
-    const url = new URL(req.url, 'http://localhost');
-    const pathname = url.pathname;
+  // Pure dispatch function - just takes method and url
+  const dispatch = async ({ method, url }: { method: HttpMethod; url: string }): Promise<boolean> => {
+    const urlObj = new URL(url, 'http://localhost');
+    const pathname = urlObj.pathname;
 
     for (const route of routes) {
       if (route.method !== method) continue;
@@ -88,13 +88,13 @@ export const createRouter = () => {
       const result = extractParam(route.pattern, pathname);
       if (result.matched) {
         if (route.type === 'exact') {
-          await route.handler(req, res);
+          await route.handler();
         } else if (route.type === 'string-parameterized') {
           if (result.param === null) {
             throw new Error('Expected parameter but none found');
           }
           const handler = route.handlerFactory(result.param);
-          await handler(req, res);
+          await handler(result.param);
         } else if (route.type === 'number-parameterized') {
           if (result.param === null) {
             throw new Error('Expected parameter but none found');
@@ -104,7 +104,7 @@ export const createRouter = () => {
             throw new Error(`Invalid number parameter: ${result.param}`);
           }
           const handler = route.handlerFactory(n);
-          await handler(req, res);
+          await handler(n);
         }
         return true;
       }
@@ -113,5 +113,6 @@ export const createRouter = () => {
     return false; // No route matched
   };
 
-  return { onMatch, onMatchPstring, onMatchPnumber, run };
+  // Return dispatch function with registration methods
+  return Object.assign(dispatch, { onMatch, onMatchPstring, onMatchPnumber });
 };
