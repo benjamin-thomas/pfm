@@ -1,4 +1,6 @@
 // HTTP Dispatch - pure function dispatching based on HTTP patterns
+import { z, type ZodSchema } from 'zod';
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'OPTIONS' | 'PATCH';
 
 // Method validation
@@ -11,7 +13,6 @@ export const isValidMethod = (method: unknown): method is HttpMethod => {
 type ExactHandler = () => Promise<void> | void;
 type SyncParameterHandler<T> = (param: T) => void;
 type AsyncParameterHandler<T> = (param: T) => Promise<void>;
-type ParameterConverter<T> = (value: string) => T;
 
 // Route types
 interface ExactRoute {
@@ -25,7 +26,7 @@ interface SyncParameterRoute<T> {
   type: 'sync-parameter';
   method: HttpMethod;
   pattern: string;
-  converter: ParameterConverter<T>;
+  schema: ZodSchema<T>;
   handler: SyncParameterHandler<T>;
 }
 
@@ -33,30 +34,12 @@ interface AsyncParameterRoute<T> {
   type: 'async-parameter';
   method: HttpMethod;
   pattern: string;
-  converter: ParameterConverter<T>;
+  schema: ZodSchema<T>;
   handler: AsyncParameterHandler<T>;
 }
 
 type Route = ExactRoute | SyncParameterRoute<any> | AsyncParameterRoute<any>;
 
-// Type conversion utilities
-const convertParameter = <T>(value: string, targetType: 'string' | 'number'): T => {
-  if (targetType === 'number') {
-    const n = parseInt(value, 10);
-    if (isNaN(n)) {
-      throw new Error(`Invalid number parameter: ${value}`);
-    }
-    return n as T;
-  }
-  return value as T;
-};
-
-// Infer parameter type from TypeScript generic
-const inferParameterType = <T>(): 'string' | 'number' => {
-  // This is a bit of TypeScript magic - we'll use a runtime check
-  // In practice, we could enhance this with branded types or explicit type hints
-  return 'string'; // Default to string, will be overridden for number types
-};
 
 export const httpDispatchInit = () => {
   const routes: Route[] = [];
@@ -91,34 +74,29 @@ export const httpDispatchInit = () => {
     routes.push({ type: 'exact', method, pattern, handler });
   };
 
-  // Generic parameter handlers with type conversion
-  const onMatchP = <T>(method: HttpMethod, pattern: string, handler: SyncParameterHandler<T>, converter: ParameterConverter<T>): void => {
+  // Generic parameter handlers with Zod validation - schema-first approach
+  const onMatchP = <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: SyncParameterHandler<T>): void => {
     routes.push({ 
       type: 'sync-parameter', 
       method, 
       pattern, 
-      converter,
+      schema,
       handler 
     });
   };
 
-  const onMatchP_Async = <T>(method: HttpMethod, pattern: string, handler: AsyncParameterHandler<T>, converter: ParameterConverter<T>): void => {
+  const onMatchP_Async = <T>(method: HttpMethod, pattern: string, schema: ZodSchema<T>, handler: AsyncParameterHandler<T>): void => {
     routes.push({ 
       type: 'async-parameter', 
       method, 
       pattern, 
-      converter,
+      schema,
       handler 
     });
   };
 
-  // Helper function to determine parameter type from the first call
-  const determineParameterType = (value: string): 'string' | 'number' => {
-    const num = parseInt(value, 10);
-    return !isNaN(num) && num.toString() === value ? 'number' : 'string';
-  };
 
-  const dispatch = async ({ method, url }: { method: HttpMethod; url: string }): Promise<boolean> => {
+  const run = async ({ method, url }: { method: HttpMethod; url: string }): Promise<boolean> => {
     const urlObj = new URL(url, 'http://localhost');
     const pathname = urlObj.pathname;
 
@@ -134,17 +112,17 @@ export const httpDispatchInit = () => {
             throw new Error('Expected parameter but none found');
           }
           
-          // Use the stored converter function
-          const convertedParam = route.converter(result.param);
-          route.handler(convertedParam);
+          // Use Zod schema to parse and validate the parameter
+          const validatedParam = route.schema.parse(result.param);
+          route.handler(validatedParam);
         } else if (route.type === 'async-parameter') {
           if (result.param === null) {
             throw new Error('Expected parameter but none found');
           }
           
-          // Use the stored converter function
-          const convertedParam = route.converter(result.param);
-          await route.handler(convertedParam);
+          // Use Zod schema to parse and validate the parameter
+          const validatedParam = route.schema.parse(result.param);
+          await route.handler(validatedParam);
         }
         return true;
       }
@@ -158,6 +136,6 @@ export const httpDispatchInit = () => {
     onMatch,
     onMatchP,
     onMatchP_Async,
-    dispatch
+    run
   };
 };

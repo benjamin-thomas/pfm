@@ -36,10 +36,10 @@ const makeRequest = (port: number, path: string, method = 'GET'): Promise<{ stat
 describe('Server E2E Tests', () => {
   let server: http.Server;
   let transactionRepo: TransactionRepo;
-  const testPort = 8085; // Different port for testing
+  let actualPort: number; // Will be set to the randomly assigned port
   const testConfig: Config = {
     env: 'test',
-    port: testPort,
+    port: 0, // 0 means "assign any available port"
     frontendUrl: 'http://localhost:4005', // Test frontend URL
   };
 
@@ -50,11 +50,21 @@ describe('Server E2E Tests', () => {
     // Create server with test config
     server = createServer(transactionRepo, testConfig);
     
-    // Start the server
+    // Start the server with port 0 (random port assignment)
     await new Promise<void>((resolve, reject) => {
       server.listen(testConfig.port, (err?: Error) => {
         if (err) reject(err);
-        else resolve();
+        else {
+          // Extract the actual assigned port
+          const address = server.address();
+          if (address && typeof address === 'object') {
+            actualPort = address.port;
+          } else {
+            reject(new Error('Could not get server port'));
+            return;
+          }
+          resolve();
+        }
       });
     });
     
@@ -72,7 +82,7 @@ describe('Server E2E Tests', () => {
 
   describe('Health endpoint', () => {
     it('should return health status', async () => {
-      const response = await makeRequest(testPort, '/health');
+      const response = await makeRequest(actualPort, '/health');
       
       expect(response.statusCode).toBe(200);
       
@@ -80,14 +90,14 @@ describe('Server E2E Tests', () => {
       expect(data).toEqual({
         status: 'ok',
         env: 'test',
-        port: testPort,
+        port: 0, // Config port, not the actual assigned port
       });
     });
   });
 
   describe('Hello endpoint', () => {
     it('should return personalized greeting', async () => {
-      const response = await makeRequest(testPort, '/hello/alice');
+      const response = await makeRequest(actualPort, '/hello/alice');
       
       expect(response.statusCode).toBe(200);
       
@@ -98,7 +108,7 @@ describe('Server E2E Tests', () => {
     });
 
     it('should handle special characters in name', async () => {
-      const response = await makeRequest(testPort, '/hello/test-user');
+      const response = await makeRequest(actualPort, '/hello/test-user');
       
       expect(response.statusCode).toBe(200);
       
@@ -111,7 +121,7 @@ describe('Server E2E Tests', () => {
 
   describe('Transactions endpoints', () => {
     it('should return list of transactions', async () => {
-      const response = await makeRequest(testPort, '/api/transactions');
+      const response = await makeRequest(actualPort, '/api/transactions');
       
       expect(response.statusCode).toBe(200);
       
@@ -130,7 +140,7 @@ describe('Server E2E Tests', () => {
     });
 
     it('should return specific transaction by id', async () => {
-      const response = await makeRequest(testPort, '/api/transactions/1');
+      const response = await makeRequest(actualPort, '/api/transactions/1');
       
       expect(response.statusCode).toBe(200);
       
@@ -140,7 +150,7 @@ describe('Server E2E Tests', () => {
     });
 
     it('should return 404 for non-existent transaction', async () => {
-      const response = await makeRequest(testPort, '/api/transactions/999');
+      const response = await makeRequest(actualPort, '/api/transactions/999');
       
       expect(response.statusCode).toBe(404);
       
@@ -149,18 +159,22 @@ describe('Server E2E Tests', () => {
     });
 
     it('should handle invalid transaction id', async () => {
-      const response = await makeRequest(testPort, '/api/transactions/invalid');
+      const response = await makeRequest(actualPort, '/api/transactions/invalid');
       
       expect(response.statusCode).toBe(500);
       
       const data = JSON.parse(response.data);
-      expect(data).toHaveProperty('error', 'Invalid number parameter: invalid');
+      // Zod error gets stringified by the error handler
+      expect(data).toHaveProperty('error');
+      expect(data.error).toContain('invalid_type');
+      expect(data.error).toContain('expected');
+      expect(data.error).toContain('number');
     });
   });
 
   describe('Balances endpoint', () => {
     it('should return list of account balances', async () => {
-      const response = await makeRequest(testPort, '/api/balances');
+      const response = await makeRequest(actualPort, '/api/balances');
       
       expect(response.statusCode).toBe(200);
       
@@ -180,7 +194,7 @@ describe('Server E2E Tests', () => {
 
   describe('404 handling', () => {
     it('should return 404 for unknown endpoints', async () => {
-      const response = await makeRequest(testPort, '/unknown/endpoint');
+      const response = await makeRequest(actualPort, '/unknown/endpoint');
       
       expect(response.statusCode).toBe(404);
       

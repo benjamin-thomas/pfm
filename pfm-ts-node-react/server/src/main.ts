@@ -1,4 +1,5 @@
 import * as http from 'http';
+import { z } from 'zod';
 import { createTransactionRepoFakeWithSeedData } from './repos/TransactionRepoFake';
 import type { TransactionRepo } from './repos/transactionRepo';
 import { httpDispatchInit, isValidMethod, type HttpMethod } from './utils/httpDispatch';
@@ -69,25 +70,23 @@ export const createServer = (transactionRepo: TransactionRepo, config: Config): 
       // Initialize httpDispatch and register routes for this request
       const httpDispatch = httpDispatchInit();
       httpDispatch.onMatch('GET', '/health', () => healthHandlers.check(req, res, config));
-      httpDispatch.onMatchP<string>('GET', '/hello/{name}', (name) => healthHandlers.hello(req, res, name), (s) => s);
+      httpDispatch.onMatchP('GET', '/hello/{name}', z.string(), (name) => healthHandlers.hello(req, res, name));
       httpDispatch.onMatch('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
-      httpDispatch.onMatchP<number>('GET', '/api/transactions/{id}', (id) => transactionHandlers.getOne(req, res, transactionRepo, id), (s) => {
-        const n = parseInt(s, 10);
-        if (isNaN(n)) {
-          throw new Error(`Invalid number parameter: ${s}`);
-        }
-        return n;
-      });
+      httpDispatch.onMatchP(
+        'GET', '/api/transactions/{id}',
+        z.coerce.number(),
+        (id) => transactionHandlers.getOne(req, res, transactionRepo, id)
+      );
       httpDispatch.onMatch('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
       httpDispatch.onMatch('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
       httpDispatch.onMatch('GET', '/api/events', () => sseHandlers.events(req, res, config));
-      
+
       // Pure dispatch with just method and url
-      const matched = await httpDispatch.dispatch({
+      const matched = await httpDispatch.run({
         method: req.method,
         url: req.url
       });
-      
+
       if (!matched) {
         sendJson(res, 404, { error: 'Not found' });
       }
