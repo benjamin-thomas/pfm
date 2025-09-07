@@ -74,7 +74,7 @@ export const transactionApi = {
     const response = await fetch(apiUrl(`/api/transactions/${id}`), {
       method: 'DELETE',
     });
-    await jsonAsync<void>(response);
+    await jsonAsync(response);
   },
 };
 

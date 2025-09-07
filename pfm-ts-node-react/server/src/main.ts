@@ -2,7 +2,7 @@ import * as http from 'http';
 import { z } from 'zod';
 import { createTransactionRepoFakeWithSeedData } from './repos/TransactionRepoFake';
 import type { TransactionRepo } from './repos/transactionRepo';
-import { httpDispatchInit, isValidMethod, type HttpMethod } from './utils/httpDispatch';
+import { httpDispatchInit, isValidMethod } from './utils/httpDispatch';
 import * as transactionHandlers from './handlers/transactionHandlers';
 import * as balanceHandlers from './handlers/balanceHandlers';
 import * as healthHandlers from './handlers/healthHandlers';
@@ -69,17 +69,17 @@ export const createServer = (transactionRepo: TransactionRepo, config: Config): 
 
       // Initialize httpDispatch and register routes for this request
       const httpDispatch = httpDispatchInit();
-      httpDispatch.onMatch('GET', '/health', () => healthHandlers.check(req, res, config));
-      httpDispatch.onMatchP('GET', '/hello/{name}', z.string(), (name) => healthHandlers.hello(req, res, name));
-      httpDispatch.onMatch('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
-      httpDispatch.onMatchP(
+      httpDispatch.onMatchAsync('GET', '/health', () => healthHandlers.check(req, res, config));
+      httpDispatch.onMatchP_Async('GET', '/hello/{name}', z.string(), (name) => healthHandlers.hello(req, res, name));
+      httpDispatch.onMatchAsync('GET', '/api/transactions', () => transactionHandlers.getMany(req, res, transactionRepo));
+      httpDispatch.onMatchP_Async(
         'GET', '/api/transactions/{id}',
         z.coerce.number(),
         (id) => transactionHandlers.getOne(req, res, transactionRepo, id)
       );
-      httpDispatch.onMatch('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
-      httpDispatch.onMatch('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
-      httpDispatch.onMatch('GET', '/api/events', () => sseHandlers.events(req, res, config));
+      httpDispatch.onMatchAsync('POST', '/api/transactions', () => transactionHandlers.create(req, res, transactionRepo));
+      httpDispatch.onMatchAsync('GET', '/api/balances', () => balanceHandlers.getAll(req, res));
+      httpDispatch.onMatchSync('GET', '/api/events', () => sseHandlers.events(req, res, config));
 
       // Pure dispatch with just method and url
       const matched = await httpDispatch.run({

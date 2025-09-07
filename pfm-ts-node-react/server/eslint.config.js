@@ -3,7 +3,6 @@ import tseslint from 'typescript-eslint';
 export default [
   ...tseslint.configs.recommended,
   ...tseslint.configs.strict,
-  ...tseslint.configs.stylistic,
   {
     files: ['**/*.{ts,js}'],
     languageOptions: {

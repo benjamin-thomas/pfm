@@ -30,6 +30,9 @@
     //
     // Path mapping
     "paths": {
+      "zod": [ // allow 'zod' dependency to be called from ../shared
+        "./node_modules/zod"
+      ],
       "@shared/*": [
         "../shared/*"
       ],
