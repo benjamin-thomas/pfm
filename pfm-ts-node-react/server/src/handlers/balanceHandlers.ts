@@ -8,7 +8,7 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
   res.end(JSON.stringify(data));
 };
 
-export const getAll = () =>
+export const getAll =
   async (req: http.IncomingMessage, res: http.ServerResponse): Promise<void> => {
     const balances: AccountBalanceRead[] = [
       {

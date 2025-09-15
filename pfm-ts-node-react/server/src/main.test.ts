@@ -197,7 +197,7 @@ describe('Server E2E Tests', () => {
       expect(response.statusCode).toBe(404);
 
       const data = JSON.parse(response.data);
-      expect(data).toHaveProperty('error', 'Not found');
+      expect(data).toHaveProperty('error', 'No route found for GET /unknown/endpoint');
     });
   });
 });

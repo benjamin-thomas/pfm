@@ -19,24 +19,24 @@ import { httpDispatch2Init, type HttpDispatcher } from './httpDispatch2';
 
 // Custom types for demo
 type UUID = { uuid: string };
-type ReplContext = Record<string, never>; // Empty context for REPL
+type ReplContext = () => void; // "empty" execution context, a NOOP (but could have been a Promise)
 
 const setupDemoRoutes = (dispatcher: HttpDispatcher<ReplContext>): void => {
-  // P0 routes
-  dispatcher.matchP0('GET', '/health', async (_ctx) => {
+  // P0 routes - return execution contexts (NOOP functions that log)
+  dispatcher.matchP0('GET', '/health', () => {
     console.log('Health check: OK');
   });
 
-  dispatcher.matchP0('GET', '/api/info', async (_ctx) => {
+  dispatcher.matchP0('GET', '/api/info', () => {
     console.log('API version 2.0 (Trie-based)');
   });
 
   // P1 routes with basic types
-  dispatcher.matchP1('GET', '/greet/?', z.string(), (name) => async (_ctx) => {
+  dispatcher.matchP1('GET', '/greet/?', z.string(), (name) => () => {
     console.log(`Hello, ${name}!`);
   });
 
-  dispatcher.matchP1('GET', '/double/?', z.coerce.number(), (n) => async (_ctx) => {
+  dispatcher.matchP1('GET', '/double/?', z.coerce.number(), (n) => () => {
     console.log(`${n} * 2 = ${n * 2}`);
   });
 
@@ -44,26 +44,26 @@ const setupDemoRoutes = (dispatcher: HttpDispatcher<ReplContext>): void => {
   const uuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     .transform(s => ({ uuid: s }));
 
-  dispatcher.matchP1('GET', '/resource/?', uuidSchema, (resource: UUID) => async (_ctx) => {
+  dispatcher.matchP1('GET', '/resource/?', uuidSchema, (resource: UUID) => () => {
     console.log(`Fetching resource: ${resource.uuid}`);
   });
 
   const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-  dispatcher.matchP1('GET', '/events/?', dateSchema, (date) => async (_ctx) => {
+  dispatcher.matchP1('GET', '/events/?', dateSchema, (date) => () => {
     console.log(`Events for date: ${date}`);
   });
 
   // P2 routes
-  dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
+  dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), (a, b) => () => {
     console.log(`${a} + ${b} = ${a + b}`);
   });
 
-  dispatcher.matchP2('GET', '/between/?/?', dateSchema, dateSchema, (from, to) => async (_ctx) => {
+  dispatcher.matchP2('GET', '/between/?/?', dateSchema, dateSchema, (from, to) => () => {
     console.log(`Date range: ${from} to ${to}`);
   });
 
-  dispatcher.matchP2('GET', '/multiply/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
+  dispatcher.matchP2('GET', '/multiply/?/?', z.coerce.number(), z.coerce.number(), (a, b) => () => {
     console.log(`${a} × ${b} = ${a * b}`);
   });
 
@@ -72,8 +72,8 @@ const setupDemoRoutes = (dispatcher: HttpDispatcher<ReplContext>): void => {
 
 const runRepl = async (): Promise<void> => {
   const dispatcher = httpDispatch2Init<ReplContext>({
-    onMatchBadParam: (_ctx, msg) => console.log(`Error: ${msg}`),
-    onMatchNotFound: (_ctx, msg) => console.log(`Not Found: ${msg}`)
+    onMatchBadParam: (msg) => () => console.log(`Error: ${msg}`),
+    onMatchNotFound: (msg) => () => console.log(`Not Found: ${msg}`)
   });
 
   const rl = readline.createInterface({
@@ -116,7 +116,7 @@ const runRepl = async (): Promise<void> => {
     const parts = input.split(' ');
     const [method, path] = parts;
     if (method && path) {
-      await dispatcher.run({}, method, path);
+      dispatcher.run(method, path, (execCtx) => execCtx());
       console.log('');
     } else {
       console.log('Usage: <METHOD> <PATH>');
@@ -128,8 +128,8 @@ const runRepl = async (): Promise<void> => {
 // Automated test mode
 const runAutomatedTest = async (): Promise<void> => {
   const dispatcher = httpDispatch2Init<ReplContext>({
-    onMatchBadParam: (_ctx, msg) => console.log(`Error: ${msg}`),
-    onMatchNotFound: (_ctx, msg) => console.log(`Not Found: ${msg}`)
+    onMatchBadParam: (msg) => () => console.log(`Error: ${msg}`),
+    onMatchNotFound: (msg) => () => console.log(`Not Found: ${msg}`)
   });
 
   console.log('\n=== Running Automated Test ===\n');
@@ -156,7 +156,7 @@ const runAutomatedTest = async (): Promise<void> => {
     console.log(`> ${input}`);
     const [method, path] = input.split(' ');
     if (method && path) {
-      await dispatcher.run({}, method, path);
+      dispatcher.run(method, path, (execCtx) => execCtx());
     }
     console.log('');
   }

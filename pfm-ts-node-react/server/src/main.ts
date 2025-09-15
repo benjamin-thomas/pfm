@@ -41,50 +41,57 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
   res.end(JSON.stringify(data));
 };
 
-// Define context type for requests
-type RequestContext = {
-  req: http.IncomingMessage;
-  res: http.ServerResponse;
-};
-
-// Helper to adapt curried handlers to work with context
-const applyContext = <T>(
-  handler: (req: http.IncomingMessage, res: http.ServerResponse) => T
-): ((ctx: RequestContext) => T) => {
-  return (ctx) => handler(ctx.req, ctx.res);
-};
+// ======================================================================
+// HANDLER CREATES CONTEXT PATTERN
+// ======================================================================
+// This is a functional programming pattern where:
+// 1. Handlers don't receive context - they CREATE the execution context
+// 2. The execution context is a function that will process the HTTP request
+// 3. The router calls handler() to get the execution function, then runs it
+//
+// Benefits:
+// - No forced async - handlers decide if they're sync/async via the execution context
+// - Clean dependency injection - dependencies bound at handler creation time
+// - Simple function composition
+// - No context object impedance mismatch - execution context IS the request processor
+// - Test simplicity - test handlers return sync NOOPs, production returns mostly async processors
+//
+// Flow: handler(deps) -> ()                  -> (req, res) -> Promise<void> | void
+//       ^dependency      ^execution context     ^actual HTTP processing
+//
+type RequestContext = (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void> | void;
 
 
 // Create HTTP server with dependency injection
 export const serverInit = (transactionRepo: TransactionRepo, config: Config): http.Server => {
 
   // Build the trie, once at startup
+  // Error callbacks return execution contexts (following the same pattern as handlers)
+  // Instead of performing side effects directly, they return functions that will perform them
   const httpDispatch = httpDispatch2Init<RequestContext>({
-    onMatchBadParam: ({ res }, msg) => sendJson(res, 400, { error: msg }),
-    onMatchNotFound: ({ res }) => sendJson(res, 404, { error: 'Not found' })
+    onMatchBadParam: (msg) => (_req, res) => sendJson(res, 400, { error: msg }),
+    onMatchNotFound: (msg) => (_req, res) => sendJson(res, 404, { error: msg })
   });
 
   {
-    httpDispatch.matchP0('GET', '/health', applyContext(healthHandlers.check(config)));
+    httpDispatch.matchP0('GET', '/health', healthHandlers.check(config));
+
+    httpDispatch.matchP0('GET', '/api/events', sseHandlers.events(config));
 
     httpDispatch.matchP1(
       'GET', '/hello/?', z.string(),
-      (name) => applyContext(healthHandlers.hello(name)),
+      (name) => healthHandlers.hello(name),
     );
 
-    httpDispatch.matchP0('GET', '/api/transactions', applyContext(transactionHandlers.getMany(transactionRepo)));
-
+    httpDispatch.matchP0('GET', '/api/transactions', transactionHandlers.getMany(transactionRepo));
+    httpDispatch.matchP0('POST', '/api/transactions', transactionHandlers.create(transactionRepo));
     httpDispatch.matchP1(
       'GET', '/api/transactions/?',
       z.coerce.number(),
-      (id) => applyContext(transactionHandlers.getOne(transactionRepo, id)),
+      (id) => transactionHandlers.getOne(transactionRepo, id),
     );
 
-    httpDispatch.matchP0('POST', '/api/transactions', applyContext(transactionHandlers.create(transactionRepo)));
-
-    httpDispatch.matchP0('GET', '/api/balances', applyContext(balanceHandlers.getAll()));
-
-    httpDispatch.matchP0('GET', '/api/events', applyContext(sseHandlers.events(config)));
+    httpDispatch.matchP0('GET', '/api/balances', balanceHandlers.getAll);
   }
 
   // Main request handler
@@ -94,7 +101,7 @@ export const serverInit = (transactionRepo: TransactionRepo, config: Config): ht
 
     const queryIndex = req.url.indexOf('?');
     const reqPath: string = queryIndex === -1 ? req.url : req.url.substring(0, queryIndex);
-    console.log({ reqPath });
+    // console.log({ reqPath });
 
     // console.log({ reqUrl: req.url, reqMethod: req.method, reqPath: new URL(req.url, req.headers.host).pathname });
 
@@ -110,8 +117,17 @@ export const serverInit = (transactionRepo: TransactionRepo, config: Config): ht
 
     try {
 
-      // Pure dispatch with context - errors handled by callbacks
-      await httpDispatch.run({ req, res }, req.method, reqPath);
+      // ======================================================================
+      // THE MAGIC HAPPENS HERE - HANDLER CREATES CONTEXT PATTERN IN ACTION
+      // ======================================================================
+      // 1. Router finds the handler for this method/path
+      // 2. Handler returns an execution context (a function)
+      // 3. We provide an executor that calls executionContext(req, res)
+      // 4. The execution context processes the HTTP request
+      //
+      // This is the key insight: the handler creates the execution context,
+      // and we just provide the parameters (req, res) to run it
+      await httpDispatch.run(req.method, reqPath, (executionContext) => executionContext(req, res));
     } catch (error) {
       console.error('Unexpected handler error:', error);
       sendJson(res, 500, { error: 'Internal server error' });
@@ -146,7 +162,7 @@ const main = (): void => {
   });
 };
 
-// Run the server only if this file is executed directly (not imported)
+// Run the server only if this file is executed directly (not imported/tested)
 if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
