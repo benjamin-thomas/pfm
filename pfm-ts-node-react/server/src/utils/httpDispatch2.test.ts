@@ -48,7 +48,7 @@ describe('httpDispatch2', () => {
             onMatchNotFound: (_ctx, msg) => { notFoundRef = msg; }
         });
 
-        dispatcher.matchP1('GET', '/inc/?', z.coerce.number(), async (_ctx, n) => {
+        dispatcher.matchP1('GET', '/inc/?', z.coerce.number(), (n) => async (_ctx) => {
             successRef = `result: ${n + 1}`;
         });
 
@@ -69,7 +69,7 @@ describe('httpDispatch2', () => {
             onMatchNotFound: (_ctx, msg) => { notFoundRef = msg; }
         });
 
-        dispatcher.matchP1('GET', '/hello/?', z.string(), async (_ctx, name) => {
+        dispatcher.matchP1('GET', '/hello/?', z.string(), (name) => async (_ctx) => {
             successRef = `hello, ${name}!`;
         });
 
@@ -90,7 +90,7 @@ describe('httpDispatch2', () => {
             onMatchNotFound: (_ctx, msg) => { notFoundRef = msg; }
         });
 
-        dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), async (_ctx, a, b) => {
+        dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
             successRef = `sum: ${a + b}`;
         });
 
@@ -132,7 +132,7 @@ describe('httpDispatch2', () => {
             onMatchNotFound: (_ctx, msg) => { notFoundRef = msg; }
         });
 
-        dispatcher.matchP1('GET', '/api/?', z.coerce.number(), async (_ctx, id) => {
+        dispatcher.matchP1('GET', '/api/?', z.coerce.number(), (id) => async (_ctx) => {
             successRef = `id: ${id}`;
         });
 
@@ -170,7 +170,7 @@ describe('httpDispatch2', () => {
         });
 
         const userIdSchema = z.string().transform(s => ({ id: parseInt(s, 10) }));
-        dispatcher.matchP1('GET', '/user/?', userIdSchema, async (_ctx, userId) => {
+        dispatcher.matchP1('GET', '/user/?', userIdSchema, (userId) => async (_ctx) => {
             successRef = `user id: ${userId.id}`;
         });
 
@@ -195,7 +195,7 @@ describe('httpDispatch2', () => {
             successRef = 'exact route called';
         });
 
-        dispatcher.matchP1('GET', '/api/?', z.string(), async (_ctx) => {
+        dispatcher.matchP1('GET', '/api/?', z.string(), (_param) => async (_ctx) => {
             successRef = 'wildcard route called';
         });
 
@@ -237,7 +237,7 @@ describe('httpDispatch2', () => {
             onMatchNotFound: (_ctx, msg) => { notFoundRef = msg; }
         });
 
-        dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), async (_ctx, a, b) => {
+        dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
             successRef = `sum: ${a + b}`;
         });
 
@@ -263,7 +263,7 @@ describe('httpDispatch2', () => {
             successRef = 'created user';
         });
 
-        dispatcher.matchP1('DELETE', '/api/users/?', z.coerce.number(), async (_ctx, id) => {
+        dispatcher.matchP1('DELETE', '/api/users/?', z.coerce.number(), (id) => async (_ctx) => {
             successRef = `deleted user ${id}`;
         });
 

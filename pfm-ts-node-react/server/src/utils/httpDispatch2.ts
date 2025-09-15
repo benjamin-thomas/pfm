@@ -12,8 +12,8 @@ export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'OPTIONS' | 'PATCH'
 
 // Handler types - pure functions returning promises
 type P0Handler<Ctx> = (ctx: Ctx) => Promise<void>;
-type P1Handler<Ctx> = (ctx: Ctx, param: unknown) => Promise<void>;
-type P2Handler<Ctx> = (ctx: Ctx, param1: unknown, param2: unknown) => Promise<void>;
+type P1Handler<Ctx> = (param: unknown) => (ctx: Ctx) => Promise<void>;
+type P2Handler<Ctx> = (param1: unknown, param2: unknown) => (ctx: Ctx) => Promise<void>;
 
 // Route action - stores handler with its decoder(s)
 type RouteAction<Ctx> =
@@ -33,8 +33,8 @@ type TrieNode<Ctx> =
 
 export interface HttpDispatcher<Ctx> {
   matchP0: (method: HttpMethod, pattern: string, handler: P0Handler<Ctx>) => void;
-  matchP1: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: (ctx: Ctx, param: T) => Promise<void>) => void;
-  matchP2: <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, handler: (ctx: Ctx, param1: T, param2: U) => Promise<void>) => void;
+  matchP1: <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: (param: T) => (ctx: Ctx) => Promise<void>) => void;
+  matchP2: <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, handler: (param1: T, param2: U) => (ctx: Ctx) => Promise<void>) => void;
   run: (ctx: Ctx, method: string, path: string) => Promise<void>;
 }
 
@@ -99,11 +99,11 @@ export const httpDispatch2Init = <Ctx>(callbacks: DispatchCallbacks<Ctx>): HttpD
     addRoute(method, pattern, { tag: 'P0', handler });
   };
 
-  const matchP1 = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: (ctx: Ctx, param: T) => Promise<void>): void => {
+  const matchP1 = <T>(method: HttpMethod, pattern: string, schema: ZodType<T>, handler: (param: T) => (ctx: Ctx) => Promise<void>): void => {
     addRoute(method, pattern, { tag: 'P1', schema: schema as ZodType<unknown>, handler: handler as P1Handler<Ctx> });
   };
 
-  const matchP2 = <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, handler: (ctx: Ctx, param1: T, param2: U) => Promise<void>): void => {
+  const matchP2 = <T, U>(method: HttpMethod, pattern: string, schema1: ZodType<T>, schema2: ZodType<U>, handler: (param1: T, param2: U) => (ctx: Ctx) => Promise<void>): void => {
     addRoute(method, pattern, { tag: 'P2', schema1: schema1 as ZodType<unknown>, schema2: schema2 as ZodType<unknown>, handler: handler as P2Handler<Ctx> });
   };
 
@@ -125,7 +125,7 @@ export const httpDispatch2Init = <Ctx>(callbacks: DispatchCallbacks<Ctx>): HttpD
         }
         try {
           const value = action.schema.parse(params[0]);
-          await action.handler(ctx, value);
+          await action.handler(value)(ctx);
         } catch {
           callbacks.onMatchBadParam(ctx, `Decoding error: invalid parameter '${params[0]}'`);
         }
@@ -139,7 +139,7 @@ export const httpDispatch2Init = <Ctx>(callbacks: DispatchCallbacks<Ctx>): HttpD
         try {
           const value1 = action.schema1.parse(params[0]);
           const value2 = action.schema2.parse(params[1]);
-          await action.handler(ctx, value1, value2);
+          await action.handler(value1, value2)(ctx);
         } catch {
           callbacks.onMatchBadParam(ctx, `Decoding error: invalid parameters '${params[0]}', '${params[1]}'`);
         }

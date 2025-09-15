@@ -47,6 +47,13 @@ type RequestContext = {
   res: http.ServerResponse;
 };
 
+// Helper to adapt curried handlers to work with context
+const applyContext = <T>(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => T
+): ((ctx: RequestContext) => T) => {
+  return (ctx) => handler(ctx.req, ctx.res);
+};
+
 
 // Create HTTP server with dependency injection
 export const serverInit = (transactionRepo: TransactionRepo, config: Config): http.Server => {
@@ -58,27 +65,26 @@ export const serverInit = (transactionRepo: TransactionRepo, config: Config): ht
   });
 
   {
-    httpDispatch.matchP0('GET', '/health', async (ctx) => healthHandlers.check(ctx.req, ctx.res, config));
+    httpDispatch.matchP0('GET', '/health', applyContext(healthHandlers.check(config)));
 
     httpDispatch.matchP1(
       'GET', '/hello/?', z.string(),
-      async (ctx, name) => healthHandlers.hello(ctx.req, ctx.res, name),
+      (name) => applyContext(healthHandlers.hello(name)),
     );
 
-    // TODO: use currying to reduce verbosity here (the (req, res) passing)
-    httpDispatch.matchP0('GET', '/api/transactions', async ({ req, res }) => transactionHandlers.getMany(req, res, transactionRepo));
+    httpDispatch.matchP0('GET', '/api/transactions', applyContext(transactionHandlers.getMany(transactionRepo)));
 
     httpDispatch.matchP1(
       'GET', '/api/transactions/?',
       z.coerce.number(),
-      async (ctx, id) => transactionHandlers.getOne(ctx.req, ctx.res, transactionRepo, id)
+      (id) => applyContext(transactionHandlers.getOne(transactionRepo, id)),
     );
 
-    httpDispatch.matchP0('POST', '/api/transactions', async (ctx) => transactionHandlers.create(ctx.req, ctx.res, transactionRepo));
+    httpDispatch.matchP0('POST', '/api/transactions', applyContext(transactionHandlers.create(transactionRepo)));
 
-    httpDispatch.matchP0('GET', '/api/balances', async (ctx) => balanceHandlers.getAll(ctx.req, ctx.res));
+    httpDispatch.matchP0('GET', '/api/balances', applyContext(balanceHandlers.getAll()));
 
-    httpDispatch.matchP0('GET', '/api/events', async (ctx) => sseHandlers.events(ctx.req, ctx.res, config));
+    httpDispatch.matchP0('GET', '/api/events', applyContext(sseHandlers.events(config)));
   }
 
   // Main request handler

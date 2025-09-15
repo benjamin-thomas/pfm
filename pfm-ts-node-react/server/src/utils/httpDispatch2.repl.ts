@@ -32,11 +32,11 @@ const setupDemoRoutes = (dispatcher: HttpDispatcher<ReplContext>): void => {
   });
 
   // P1 routes with basic types
-  dispatcher.matchP1('GET', '/greet/?', z.string(), async (_ctx, name) => {
+  dispatcher.matchP1('GET', '/greet/?', z.string(), (name) => async (_ctx) => {
     console.log(`Hello, ${name}!`);
   });
 
-  dispatcher.matchP1('GET', '/double/?', z.coerce.number(), async (_ctx, n) => {
+  dispatcher.matchP1('GET', '/double/?', z.coerce.number(), (n) => async (_ctx) => {
     console.log(`${n} * 2 = ${n * 2}`);
   });
 
@@ -44,26 +44,26 @@ const setupDemoRoutes = (dispatcher: HttpDispatcher<ReplContext>): void => {
   const uuidSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
     .transform(s => ({ uuid: s }));
 
-  dispatcher.matchP1('GET', '/resource/?', uuidSchema, async (_ctx, resource: UUID) => {
+  dispatcher.matchP1('GET', '/resource/?', uuidSchema, (resource: UUID) => async (_ctx) => {
     console.log(`Fetching resource: ${resource.uuid}`);
   });
 
   const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
-  dispatcher.matchP1('GET', '/events/?', dateSchema, async (_ctx, date) => {
+  dispatcher.matchP1('GET', '/events/?', dateSchema, (date) => async (_ctx) => {
     console.log(`Events for date: ${date}`);
   });
 
   // P2 routes
-  dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), async (_ctx, a, b) => {
+  dispatcher.matchP2('GET', '/add/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
     console.log(`${a} + ${b} = ${a + b}`);
   });
 
-  dispatcher.matchP2('GET', '/between/?/?', dateSchema, dateSchema, async (_ctx, from, to) => {
+  dispatcher.matchP2('GET', '/between/?/?', dateSchema, dateSchema, (from, to) => async (_ctx) => {
     console.log(`Date range: ${from} to ${to}`);
   });
 
-  dispatcher.matchP2('GET', '/multiply/?/?', z.coerce.number(), z.coerce.number(), async (_ctx, a, b) => {
+  dispatcher.matchP2('GET', '/multiply/?/?', z.coerce.number(), z.coerce.number(), (a, b) => async (_ctx) => {
     console.log(`${a} × ${b} = ${a * b}`);
   });
 
