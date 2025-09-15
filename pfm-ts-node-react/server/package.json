@@ -7,9 +7,9 @@
   "scripts": {
     "dev": "APP_ENV=dev tsx watch src/main.ts",
     "test:server": "APP_ENV=test tsx watch src/main.ts",
-    "test": "vitest --run",
+    "test": "eslint . && vitest --run",
     "test:ui": "vitest --ui",
-    "test:watch": "vitest --watch",
+    "test:watch": "eslint . && vitest --watch",
     "build": "eslint . && tsc",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

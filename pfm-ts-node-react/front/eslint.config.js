@@ -26,6 +26,7 @@ export default [
     },
     rules: {
       ...reactHooks.configs['recommended-latest'].rules,
+      'semi': ["error", "always"],
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/no-unused-vars': [

@@ -1,0 +1,3 @@
+(executables
+ (names trie trie2 trie3)
+ (libraries))

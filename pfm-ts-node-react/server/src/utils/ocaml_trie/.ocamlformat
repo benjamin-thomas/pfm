@@ -1,0 +1,7 @@
+profile=jane
+
+sequence-style=before
+if-then-else=k-r
+parens-tuple=always
+parens-tuple-patterns=always
+exp-grouping=preserve # keep begin..end blocks

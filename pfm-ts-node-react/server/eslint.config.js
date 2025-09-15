@@ -17,6 +17,7 @@ export default [
       },
     },
     rules: {
+      'semi': ["error", "always"],
       '@typescript-eslint/no-use-before-define': 'error',
       '@typescript-eslint/explicit-function-return-type': [
         'error',

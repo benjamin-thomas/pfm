@@ -1270,6 +1270,10 @@ fetchData =
         fetchTask : Task Http.Error Data
         fetchTask =
             let
+                -- NOTE: Task.mapN functions are unfortunately, sequential!
+                -- This lib could help: https://package.elm-lang.org/packages/andrewMacmurray/elm-concurrent-task/latest/
+                -- But it feels like quite a big dependency to add... not sure it's worth it.
+                -- I should probably use a dedicate Msg+update function to set up and track the "loaded" state, doing parallel fetch requests with Cmd.batch instead.
                 apply =
                     Task.map2 (\x f -> f x)
             in

@@ -2,7 +2,7 @@ import * as http from 'http';
 import { z } from 'zod';
 import { createTransactionRepoFakeWithSeedData } from './repos/TransactionRepoFake';
 import type { TransactionRepo } from './repos/transactionRepo';
-import { httpDispatchInit, isValidMethod } from './utils/httpDispatch';
+import { httpDispatch2Init } from './utils/httpDispatch2';
 import * as transactionHandlers from './handlers/transactionHandlers';
 import * as balanceHandlers from './handlers/balanceHandlers';
 import * as healthHandlers from './handlers/healthHandlers';
@@ -41,13 +41,57 @@ const sendJson = (res: http.ServerResponse, statusCode: number, data: unknown): 
   res.end(JSON.stringify(data));
 };
 
-// Create HTTP server with dependency injection
-export const createServer = (transactionRepo: TransactionRepo, config: Config): http.Server => {
+// Define context type for requests
+type RequestContext = {
+  req: http.IncomingMessage;
+  res: http.ServerResponse;
+};
 
-  // We'll register routes inside the request handler where we have req/res
+
+// Create HTTP server with dependency injection
+export const serverInit = (transactionRepo: TransactionRepo, config: Config): http.Server => {
+
+  // Build the trie, once at startup
+  const httpDispatch = httpDispatch2Init<RequestContext>({
+    onMatchBadParam: ({ res }, msg) => sendJson(res, 400, { error: msg }),
+    onMatchNotFound: ({ res }) => sendJson(res, 404, { error: 'Not found' })
+  });
+
+  {
+    httpDispatch.matchP0('GET', '/health', async (ctx) => healthHandlers.check(ctx.req, ctx.res, config));
+
+    httpDispatch.matchP1(
+      'GET', '/hello/?', z.string(),
+      async (ctx, name) => healthHandlers.hello(ctx.req, ctx.res, name),
+    );
+
+    // TODO: use currying to reduce verbosity here (the (req, res) passing)
+    httpDispatch.matchP0('GET', '/api/transactions', async ({ req, res }) => transactionHandlers.getMany(req, res, transactionRepo));
+
+    httpDispatch.matchP1(
+      'GET', '/api/transactions/?',
+      z.coerce.number(),
+      async (ctx, id) => transactionHandlers.getOne(ctx.req, ctx.res, transactionRepo, id)
+    );
+
+    httpDispatch.matchP0('POST', '/api/transactions', async (ctx) => transactionHandlers.create(ctx.req, ctx.res, transactionRepo));
+
+    httpDispatch.matchP0('GET', '/api/balances', async (ctx) => balanceHandlers.getAll(ctx.req, ctx.res));
+
+    httpDispatch.matchP0('GET', '/api/events', async (ctx) => sseHandlers.events(ctx.req, ctx.res, config));
+  }
 
   // Main request handler
-  const server = http.createServer(async (req, res) => {
+  const server = http.createServer(async (req: http.IncomingMessage, res) => {
+    if (!req.method) return sendJson(res, 400, "Bad client, go away!");
+    if (!req.url) return sendJson(res, 400, "Bad client, go away!");
+
+    const queryIndex = req.url.indexOf('?');
+    const reqPath: string = queryIndex === -1 ? req.url : req.url.substring(0, queryIndex);
+    console.log({ reqPath });
+
+    // console.log({ reqUrl: req.url, reqMethod: req.method, reqPath: new URL(req.url, req.headers.host).pathname });
+
     // Set CORS headers for all requests
     setCorsHeaders(res, config.frontendUrl);
 
@@ -59,47 +103,12 @@ export const createServer = (transactionRepo: TransactionRepo, config: Config): 
     }
 
     try {
-      // Strict validation - throw if missing or invalid
-      if (!req.url) {
-        throw new Error('URL is required');
-      }
-      if (!isValidMethod(req.method)) {
-        throw new Error(`Invalid method: ${req.method}`);
-      }
 
-      // Initialize httpDispatch and register routes for this request
-      const httpDispatch = httpDispatchInit();
-      httpDispatch.matchP0('GET', '/health', async () => healthHandlers.check(req, res, config));
-
-      httpDispatch.matchP1(
-        'GET', '/hello/?', z.string(),
-        async (name) => healthHandlers.hello(req, res, name),
-      );
-
-      httpDispatch.matchP0('GET', '/api/transactions', async () => transactionHandlers.getMany(req, res, transactionRepo));
-      httpDispatch.matchP1(
-        'GET', '/api/transactions/?',
-        z.coerce.number(),
-        async (id) => transactionHandlers.getOne(req, res, transactionRepo, id)
-      );
-      httpDispatch.matchP0('POST', '/api/transactions', async () => transactionHandlers.create(req, res, transactionRepo));
-      httpDispatch.matchP0('GET', '/api/balances', async () => balanceHandlers.getAll(req, res));
-      httpDispatch.matchP0('GET', '/api/events', async () => sseHandlers.events(req, res, config));
-
-      // Pure dispatch with just method and url
-      const matched = await httpDispatch.run({
-        method: req.method,
-        url: req.url
-      });
-
-      if (!matched) {
-        sendJson(res, 404, { error: 'Not found' });
-      }
+      // Pure dispatch with context - errors handled by callbacks
+      await httpDispatch.run({ req, res }, req.method, reqPath);
     } catch (error) {
-      console.error('Route handler error:', error);
-      const statusCode = error instanceof Error && error.name === 'ValidationError' ? 400 : 500;
-      const message = error instanceof Error ? error.message : 'Internal server error';
-      sendJson(res, statusCode, { error: message });
+      console.error('Unexpected handler error:', error);
+      sendJson(res, 500, { error: 'Internal server error' });
     }
   });
 
@@ -114,7 +123,7 @@ const main = (): void => {
   const transactionRepo = createTransactionRepoFakeWithSeedData();
 
   // Create and start server
-  const server = createServer(transactionRepo, config);
+  const server = serverInit(transactionRepo, config);
 
   server.listen(config.port, () => {
     console.log(`🚀 Server running in ${config.env} mode on http://localhost:${config.port}`);

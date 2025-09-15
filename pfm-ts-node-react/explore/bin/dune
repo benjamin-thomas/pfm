@@ -1,0 +1,7 @@
+(executable
+ (name main)
+ (libraries))
+
+(executable
+ (name trie)
+ (modules trie))
