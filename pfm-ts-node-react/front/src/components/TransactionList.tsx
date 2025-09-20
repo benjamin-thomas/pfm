@@ -1,26 +1,19 @@
-import { useEffect, useState } from 'react';
 import type { Transaction } from '@shared/types';
-import { transactionApi } from '../api/client';
 import { formatMoney, formatDate } from '@shared/types';
 import './TransactionList.css';
 
-type Status<T> = 
-  | { kind: 'loading' }
-  | { kind: 'loaded'; data: T }
-  | { kind: 'error'; error: string };
-
 interface TransactionListProps {
-  budgetId?: number;
+  transactions: Transaction[];
 }
 
 // Account names mapping (from SQL init)
 const accountNames: Record<number, string> = {
   1: 'OpeningBalance',
-  2: 'Checking account', 
+  2: 'Checking account',
   3: 'Savings account',
   4: 'Unknown_INCOME',
   5: 'Employer',
-  6: 'Unknown_EXPENSE', 
+  6: 'Unknown_EXPENSE',
   7: 'Groceries',
   8: 'Communications',
   9: 'Transport',
@@ -30,48 +23,24 @@ const accountNames: Record<number, string> = {
   13: 'Leisure',
 };
 
-const TransactionList = ({ budgetId }: TransactionListProps): React.JSX.Element => {
-  const [status, setStatus] = useState<Status<Transaction[]>>({ kind: 'loading' });
+// Pure component - no effects, just renders data
+const TransactionList = ({ transactions }: TransactionListProps): React.JSX.Element => {
+  if (transactions.length === 0) {
+    return <div className="empty">No transactions found.</div>;
+  }
 
-  useEffect(() => {
-    const loadTransactionsAsync = async (): Promise<void> => {
-      try {
-        setStatus({ kind: 'loading' });
-        const data = await transactionApi.listAsync(budgetId);
-        setStatus({ kind: 'loaded', data });
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        setStatus({ kind: 'error', error: errorMessage });
-      }
-    };
-
-    loadTransactionsAsync();
-  }, [budgetId]);
-
-  switch (status.kind) {
-    case 'loading':
-      return <div className="loading">Loading transactions...</div>;
-    
-    case 'error':
-      return <div className="error">Error: {status.error}</div>;
-    
-    case 'loaded':
-      if (status.data.length === 0) {
-        return <div className="empty">No transactions found.</div>;
-      }
-
-      return (
-        <>
-          <ul className="transaction-list__items">
-            {status.data.map((transaction) => {
+  return (
+    <>
+      <ul className="transaction-list__items">
+        {transactions.map((transaction) => {
               // Determine if this is income (positive) or expense (negative)
               const isPositive = transaction.fromAccountId === 5; // Employer = income
-              const amountClass = isPositive 
-                ? 'transaction-item__amount--positive' 
+              const amountClass = isPositive
+                ? 'transaction-item__amount--positive'
                 : 'transaction-item__amount--negative';
-              
+
               const showSuggestion = transaction.toAccountId === 6; // Unknown_EXPENSE
-              
+
               return (
                 <li key={transaction.transactionId} className="transaction-item">
                   <div className="transaction-item__row">
@@ -99,7 +68,7 @@ const TransactionList = ({ budgetId }: TransactionListProps): React.JSX.Element 
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Render suggestion if transaction goes to Unknown_EXPENSE */}
                   {showSuggestion && (
                     <div className="suggestion-container">
@@ -128,7 +97,6 @@ const TransactionList = ({ budgetId }: TransactionListProps): React.JSX.Element 
           </ul>
         </>
       );
-  }
 };
 
 export default TransactionList;

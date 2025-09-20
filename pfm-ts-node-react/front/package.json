@@ -4,11 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port 4003",
-    "dev:test": "vite --port 4004",
+    "dev": "VITE_API_URL=http://localhost:8083 vite --port 4003",
+    "dev:test": "VITE_API_URL=http://localhost:8084 vite --port 4004",
     "build": "eslint . && check-unused-css && tsc && vite build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "eslint . && tsc --noEmit",
     "preview": "vite preview",
     "clean": "rm -rf dist node_modules",
     "check-unused-css": "check-unused-css"
@@ -16,6 +16,8 @@
   "dependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-redux": "^9.2.0",
+    "redux": "^5.0.1",
     "zod": "^4.1.5"
   },
   "devDependencies": {

@@ -12,7 +12,7 @@
     "test:watch": "eslint . && vitest --watch",
     "build": "eslint . && tsc",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "eslint . && tsc --noEmit",
     "start": "node dist/main.js",
     "clean": "rm -rf dist node_modules"
   },

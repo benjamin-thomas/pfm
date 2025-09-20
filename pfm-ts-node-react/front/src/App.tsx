@@ -1,72 +1,45 @@
-import { useState, useEffect } from 'react';
 import './App.css';
 import './components/Buttons.css';
 import { BalanceCards } from './components/BalanceCards';
 import TransactionList from './components/TransactionList';
 import TransactionFilters from './components/TransactionFilters';
-import type { AccountBalanceRead } from '@shared/types';
+import { useAppStateSelector, useAppDispatch } from './hooks';
+import { themeActions } from './redux/themeUpdate';
+import * as financialEffects from './redux/financialEffects';
 
-type Status<T> =
-  | { kind: 'loading' }
-  | { kind: 'loaded'; data: T }
-  | { kind: 'error'; error: string };
+type AppProps = {
+  apiUrl: string;
+}
 
-function App() {
-  const [isDarkMode, setIsDarkMode] = useState(true);
-  const [balancesStatus, setBalancesStatus] = useState<Status<AccountBalanceRead[]>>({ kind: 'loading' });
-
-  // Apply theme on mount and when isDarkMode changes
-  useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark-theme');
-    } else {
-      document.documentElement.classList.remove('dark-theme');
-    }
-  }, [isDarkMode]);
-
-  const toggleTheme = (): void => {
-    setIsDarkMode(!isDarkMode);
-  };
-
-  useEffect(() => {
-    const fetchBalances = async (): Promise<void> => {
-      try {
-        const response = await fetch('http://localhost:8083/api/balances');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const balances: AccountBalanceRead[] = await response.json();
-        setBalancesStatus({ kind: 'loaded', data: balances });
-      } catch (error) {
-        setBalancesStatus({
-          kind: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
-    };
-
-    fetchBalances();
-  }, []);
+// Pure component - no side effects, just renders based on Redux state
+function App({ apiUrl }: AppProps) {
+  const dispatch = useAppDispatch();
+  const themeState = useAppStateSelector((state) => state.theme);
+  const sseState = useAppStateSelector((state) => state.sse);
+  const financialState = useAppStateSelector((state) => state.financial);
 
   return (
     <div className="container">
       <h1>PFM - TypeScript (Node+React)</h1>
 
       {/* SSE Connection Status */}
-      <pre>[BOGUS] Connected: TypeScript SSE established</pre>
+      <pre>SSE: {sseState.lastMessage ? JSON.stringify(sseState.lastMessage) : 'No messages yet'}</pre>
 
       {/* Dark Mode Toggle */}
       <button
         className="theme-toggle"
-        onClick={toggleTheme}
-        title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+        onClick={() => dispatch(themeActions.clickedThemeToggle)}
+        title={themeState.isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
       >
-        {isDarkMode ? "🌙" : "☀️"}
+        {themeState.isDarkMode ? "🌙" : "☀️"}
       </button>
 
       {/* Debug Test Buttons */}
       <div style={{ marginLeft: '10px', display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
-        <button style={{ fontSize: '12px', padding: '4px 8px' }}>
+        <button
+          style={{ fontSize: '12px', padding: '4px 8px' }}
+          onClick={() => financialEffects.fetchData(apiUrl, dispatch)}
+        >
           Test Refresh
         </button>
         <button style={{ fontSize: '12px', padding: '4px 8px' }}>
@@ -84,9 +57,9 @@ function App() {
       </div>
 
       <div className="section">
-        {balancesStatus.kind === 'loading' && <div>Loading balances...</div>}
-        {balancesStatus.kind === 'error' && <div>Error loading balances: {balancesStatus.error}</div>}
-        {balancesStatus.kind === 'loaded' && <BalanceCards balances={balancesStatus.data} />}
+        {financialState.data.kind === 'loading' && <div>Loading financial data...</div>}
+        {financialState.data.kind === 'error' && <div>Error loading financial data: {financialState.data.error}</div>}
+        {financialState.data.kind === 'loaded' && <BalanceCards balances={financialState.data.data.balances} />}
       </div>
 
       <div className="section">
@@ -94,7 +67,9 @@ function App() {
           <div className="transaction-list__header">
             <div className="transaction-list__header-title">
               <h3>Transactions</h3>
-              <span className="transaction-count">8 transactions</span>
+              <span className="transaction-count">
+                {financialState.data.kind === 'loaded' ? `${financialState.data.data.transactions.length} transactions` : '... transactions'}
+              </span>
             </div>
             <div className="transaction-list__header-buttons">
               <button className="button">
@@ -107,7 +82,9 @@ function App() {
           </div>
 
           <TransactionFilters />
-          <TransactionList budgetId={1} />
+          {financialState.data.kind === 'loading' && <div>Loading transactions...</div>}
+          {financialState.data.kind === 'error' && <div>Error loading transactions: {financialState.data.error}</div>}
+          {financialState.data.kind === 'loaded' && <TransactionList transactions={financialState.data.data.transactions} />}
         </div>
       </div>
     </div>

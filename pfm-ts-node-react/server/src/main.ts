@@ -7,6 +7,7 @@ import * as transactionHandlers from './handlers/transactionHandlers';
 import * as balanceHandlers from './handlers/balanceHandlers';
 import * as healthHandlers from './handlers/healthHandlers';
 import * as sseHandlers from './handlers/sseHandlers';
+import { clientManagerInit } from './services/clientManager';
 
 export interface Config {
   env: string;
@@ -64,6 +65,8 @@ type RequestContext = (req: http.IncomingMessage, res: http.ServerResponse) => P
 
 // Create HTTP server with dependency injection
 export const serverInit = (transactionRepo: TransactionRepo, config: Config): http.Server => {
+  // Create the client manager for SSE connections
+  const clientManager = clientManagerInit();
 
   // Build the trie, once at startup
   // Error callbacks return execution contexts (following the same pattern as handlers)
@@ -76,20 +79,24 @@ export const serverInit = (transactionRepo: TransactionRepo, config: Config): ht
   {
     httpDispatch.matchP0('GET', '/health', healthHandlers.check(config));
 
-    httpDispatch.matchP0('GET', '/api/events', sseHandlers.events(config));
+    httpDispatch.matchP0('GET', '/api/events', sseHandlers.events(config, clientManager));
+    httpDispatch.matchP0('GET', '/api/status', sseHandlers.status(clientManager));
 
     httpDispatch.matchP1(
       'GET', '/hello/?', z.string(),
       (name) => healthHandlers.hello(name),
     );
 
-    httpDispatch.matchP0('GET', '/api/transactions', transactionHandlers.getMany(transactionRepo));
-    httpDispatch.matchP0('POST', '/api/transactions', transactionHandlers.create(transactionRepo));
-    httpDispatch.matchP1(
-      'GET', '/api/transactions/?',
-      z.coerce.number(),
-      (id) => transactionHandlers.getOne(transactionRepo, id),
-    );
+    // Transactions
+    {
+      httpDispatch.matchP0('GET', '/api/transactions', transactionHandlers.getMany(transactionRepo));
+      httpDispatch.matchP0('POST', '/api/transactions', transactionHandlers.create(transactionRepo));
+      httpDispatch.matchP1(
+        'GET', '/api/transactions/?',
+        z.coerce.number(),
+        (id) => transactionHandlers.getOne(transactionRepo, id),
+      );
+    }
 
     httpDispatch.matchP0('GET', '/api/balances', balanceHandlers.getAll);
   }

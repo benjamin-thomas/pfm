@@ -1,20 +1,7 @@
 import type { Transaction, NewTransaction, UpdateTransaction } from '@shared/types';
 
-// Configuration based on environment
-const getApiUrl = (): string => {
-  // Detect if we're on port 4003 (dev) or 4004 (test)
-  const port = window.location.port;
-  if (port === '4003') {
-    return 'http://localhost:8083';
-  } else if (port === '4004') {
-    return 'http://localhost:8084';
-  }
-  // Default to dev
-  return 'http://localhost:8083';
-};
-
 // Helper to build full API URL
-const apiUrl = (path: string): string => `${getApiUrl()}${path}`;
+const apiUrl = (apiBaseUrl: string, path: string): string => `${apiBaseUrl}${path}`;
 
 // Helper to parse JSON response and throw on HTTP errors
 const jsonAsync = async <T>(response: Response): Promise<T> => {
@@ -39,21 +26,21 @@ const jsonAsync = async <T>(response: Response): Promise<T> => {
   return response.json();
 };
 
-// Transaction API client
-export const transactionApi = {
+// Transaction API client factory
+export const createTransactionApi = (apiBaseUrl: string) => ({
   listAsync: async (budgetId?: number): Promise<Transaction[]> => {
     const params = budgetId ? `?budgetId=${budgetId}` : '';
-    const response = await fetch(apiUrl(`/api/transactions${params}`));
+    const response = await fetch(apiUrl(apiBaseUrl, `/api/transactions${params}`));
     return jsonAsync<Transaction[]>(response);
   },
 
   getAsync: async (id: number): Promise<Transaction> => {
-    const response = await fetch(apiUrl(`/api/transactions/${id}`));
+    const response = await fetch(apiUrl(apiBaseUrl, `/api/transactions/${id}`));
     return jsonAsync<Transaction>(response);
   },
 
   createAsync: async (transaction: NewTransaction): Promise<Transaction> => {
-    const response = await fetch(apiUrl('/api/transactions'), {
+    const response = await fetch(apiUrl(apiBaseUrl, '/api/transactions'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transaction),
@@ -62,7 +49,7 @@ export const transactionApi = {
   },
 
   updateAsync: async (id: number, updates: UpdateTransaction): Promise<Transaction> => {
-    const response = await fetch(apiUrl(`/api/transactions/${id}`), {
+    const response = await fetch(apiUrl(apiBaseUrl, `/api/transactions/${id}`), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -71,17 +58,16 @@ export const transactionApi = {
   },
 
   deleteAsync: async (id: number): Promise<void> => {
-    const response = await fetch(apiUrl(`/api/transactions/${id}`), {
+    const response = await fetch(apiUrl(apiBaseUrl, `/api/transactions/${id}`), {
       method: 'DELETE',
     });
     await jsonAsync(response);
   },
-};
+});
 
-// SSE (Server-Sent Events) client
-export const createEventSource = (onMessage: (data: unknown) => void): EventSource => {
-  const apiUrl = getApiUrl();
-  const eventSource = new EventSource(`${apiUrl}/api/events`);
+// SSE (Server-Sent Events) client factory
+export const createEventSource = (apiBaseUrl: string, onMessage: (data: unknown) => void): EventSource => {
+  const eventSource = new EventSource(`${apiBaseUrl}/api/events`);
 
   eventSource.onmessage = (event) => {
     try {
