@@ -12,7 +12,7 @@ type AppProps = {
 }
 
 // Pure component - no side effects, just renders based on Redux state
-function App({ apiUrl }: AppProps) {
+const App = ({ apiUrl }: AppProps) => {
   const dispatch = useAppDispatch();
   const themeState = useAppStateSelector((state) => state.theme);
   const sseState = useAppStateSelector((state) => state.sse);
@@ -56,39 +56,68 @@ function App({ apiUrl }: AppProps) {
         </button>
       </div>
 
-      <div className="section">
-        {financialState.data.kind === 'loading' && <div>Loading financial data...</div>}
-        {financialState.data.kind === 'error' && <div>Error loading financial data: {financialState.data.error}</div>}
-        {financialState.data.kind === 'loaded' && <BalanceCards balances={financialState.data.data.balances} />}
-      </div>
+      {(() => {
+        switch (financialState.data.kind) {
+          case 'loading':
+            return (
+              <div className="section">
+                <div>Loading financial data...</div>
+              </div>
+            );
 
-      <div className="section">
-        <div className="transaction-list">
-          <div className="transaction-list__header">
-            <div className="transaction-list__header-title">
-              <h3>Transactions</h3>
-              <span className="transaction-count">
-                {financialState.data.kind === 'loaded' ? `${financialState.data.data.transactions.length} transactions` : '... transactions'}
-              </span>
-            </div>
-            <div className="transaction-list__header-buttons">
-              <button className="button">
-                💡 Apply All Suggestions
-              </button>
-              <button className="button button--primary">
-                Add Transaction
-              </button>
-            </div>
-          </div>
+          case 'error':
+            return (
+              <div className="section">
+                <div>Error loading financial data: {financialState.data.error}</div>
+              </div>
+            );
 
-          <TransactionFilters />
-          {financialState.data.kind === 'loading' && <div>Loading transactions...</div>}
-          {financialState.data.kind === 'error' && <div>Error loading transactions: {financialState.data.error}</div>}
-          {financialState.data.kind === 'loaded' && <TransactionList transactions={financialState.data.data.transactions} />}
-        </div>
-      </div>
+          case 'loaded':
+            const balances = financialState.data.balances;
+            const transactions = financialState.data.transactions;
+
+            return (
+              <>
+                <div className="section">
+                  <BalanceCards balances={balances} />
+                </div>
+
+                <div className="section">
+                  <div className="transaction-list">
+                    <div className="transaction-list__header">
+
+                      <div className="transaction-list__header-title">
+                        <h3>Transactions</h3>
+                        <span className="transaction-count">
+                          {transactions.length} transactions
+                        </span>
+                      </div>
+
+                      <div className="transaction-list__header-buttons">
+                        <button className="button">
+                          💡 Apply All Suggestions
+                        </button>
+                        <button className="button button--primary">
+                          Add Transaction
+                        </button>
+                      </div>
+
+                    </div>
+                    <TransactionFilters />
+                    <TransactionList transactions={transactions} />
+                  </div>
+                </div>
+              </>
+            );
+
+          default:
+            const _exhaustive: never = financialState.data;
+            throw new Error("Impossible");
+        }
+      })()}
+
     </div>
   );
-}
+};
 
 export default App;

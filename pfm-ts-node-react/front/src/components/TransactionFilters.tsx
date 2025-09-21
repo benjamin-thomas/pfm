@@ -12,7 +12,7 @@ const TransactionFilters = (): React.JSX.Element => {
             placeholder="Search by description"
           />
         </div>
-        
+
         <div className="transaction-search__field">
           <label>Min Amount</label>
           <input
@@ -21,23 +21,23 @@ const TransactionFilters = (): React.JSX.Element => {
             defaultValue="40.00"
           />
         </div>
-        
+
         <div className="transaction-search__field">
           <label>Max Amount</label>
           <input
-            type="number" 
+            type="number"
             className="transaction-search__input"
             defaultValue="100.00"
           />
         </div>
-        
+
         <div className="transaction-search__field--button">
           <button className="search-clear-button">
             Clear
           </button>
         </div>
       </div>
-      
+
       <div className="transaction-search__row transaction-search__row--bottom">
         <div className="transaction-search__field">
           <label>

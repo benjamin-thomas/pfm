@@ -3,7 +3,7 @@ import type { AccountBalanceRead, Transaction } from '@shared/types';
 // Shared Status type for async operations - proper ADT
 type Status<T> =
   | { kind: 'loading' }
-  | { kind: 'loaded'; data: T }
+  | { kind: 'loaded' } & T
   | { kind: 'error'; error: string };
 
 // The complete financial data that we load in one go
@@ -47,7 +47,7 @@ export const financialReducer = (
     case 'loaded':
       return {
         ...state,
-        data: { kind: 'loaded', data: action.payload }
+        data: { kind: 'loaded', ...action.payload }
       };
     case 'failed':
       return {
